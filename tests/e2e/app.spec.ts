@@ -246,11 +246,7 @@ test('family-first model selection, GGUF submission and manual LoRA classificati
 }) => {
   await connect(page);
   await page.getByRole('tab', { name: /^Flux1/ }).click();
-  await page.getByRole('button', { name: 'GGUF', exact: true }).click();
   await page.getByRole('button', { name: '모델 선택', exact: true }).click();
-  await expect(
-    page.getByRole('button', { name: 'Flux1.D/test-model.safetensors', exact: true }),
-  ).toHaveCount(0);
   await page.getByRole('button', { name: 'Flux1.D/forest-Q4.gguf', exact: true }).click();
   await page.getByRole('button', { name: '추가', exact: true }).click();
   await page.getByRole('button', { name: 'LoRA 선택', exact: true }).click();

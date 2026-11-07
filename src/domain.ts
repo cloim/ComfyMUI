@@ -65,7 +65,7 @@ export const defaults: Generation = {
   guidance: 3.5,
   model: '',
   positive:
-    'A quiet cabin nestled in a misty alpine forest, warm light glowing through the windows, towering mountains, cinematic composition, soft morning light, intricate details',
+    'A portrait of an elegant adult woman, natural soft lighting, delicate facial features, detailed skin texture, expressive eyes, gentle gaze, shallow depth of field, photorealistic, cinematic composition',
   negative: 'blurry, low quality, watermark, text',
   loras: [],
   width: 768,

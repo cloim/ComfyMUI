@@ -24,12 +24,11 @@ export default function ModelPanel() {
     notify,
   } = useStudio();
   const [classify, setClassify] = useState(false);
-  const [format, setFormat] = useState('all');
   const panelId = useId();
   const entries = useMemo(() => catalog(info, familyAssignments), [info, familyAssignments]);
   const tabs = families;
   const familyModels = entries.filter((e) => e.family === s.architecture);
-  const visible = familyModels.filter((e) => format === 'all' || e.format === format);
+  const visible = familyModels;
   const selected = selectedEntry(s, info, familyAssignments);
   const labels = Object.fromEntries(entries.map((e) => [e.id, e.name]));
   const descriptions = Object.fromEntries(entries.map((e) => [e.id, e.format]));
@@ -53,20 +52,8 @@ export default function ModelPanel() {
             vae: '',
           },
     );
-    setFormat('all');
     if (s.loras.length) notify('계열을 바꾸며 LoRA와 인코더를 해당 계열에 맞게 초기화했어요');
   }
-  function chooseFormat(value: string) {
-    setFormat(value);
-    if (selected?.family === s.architecture && (value === 'all' || selected.format === value))
-      return;
-    const list = familyModels.filter((e) => value === 'all' || e.format === value);
-    const first = list[0];
-    setSettings((prev) =>
-      first ? selectModel(prev, first, info, familyAssignments) : { ...prev, model: '' },
-    );
-  }
-  const ggufCount = entries.filter((e) => e.format === 'GGUF').length;
   return (
     <>
       <Section
@@ -88,11 +75,7 @@ export default function ModelPanel() {
           </div>
         }
       >
-        <div
-          role="tablist"
-          aria-label="모델 계열"
-          className="mb-4 grid min-w-0 grid-cols-2 gap-2 pb-2 sm:flex"
-        >
+        <div role="tablist" aria-label="모델 계열" className="mb-4 grid w-full grid-cols-4 gap-1.5">
           {tabs.map((f, i) => (
             <button
               key={f.id}
@@ -100,7 +83,7 @@ export default function ModelPanel() {
               aria-selected={s.architecture === f.id}
               aria-controls={panelId}
               tabIndex={s.architecture === f.id ? 0 : -1}
-              className={`flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-semibold ${s.architecture === f.id ? 'border-ink bg-ink text-lime' : 'border-line bg-paper text-muted'}`}
+              className={`flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-xl border px-1 text-xs font-semibold sm:gap-2 sm:px-2.5 ${s.architecture === f.id ? 'border-ink bg-ink text-lime' : 'border-line bg-paper text-muted hover:bg-stone'}`}
               onClick={() => chooseFamily(f.id)}
               onKeyDown={(e) => {
                 const delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
@@ -120,7 +103,7 @@ export default function ModelPanel() {
                 ).focus();
               }}
             >
-              {f.label}
+              <span className="truncate">{f.label}</span>
               <span className="font-mono text-[10px] opacity-80">
                 {entries.filter((e) => e.family === f.id).length}
               </span>
@@ -133,27 +116,6 @@ export default function ModelPanel() {
           aria-label={`${families.find((f) => f.id === s.architecture)?.label} 모델`}
           className="flex min-w-0 flex-col gap-4"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted">
-              {familyModels.length}개 모델 <span className="mx-1">|</span> 전체 {entries.length}개
-            </p>
-            <div className="flex gap-1">
-              {['all', '체크포인트', 'Diffusion', 'GGUF']
-                .filter(
-                  (v) => v === 'all' || familyModels.some((e) => e.format === v) || v === 'GGUF',
-                )
-                .map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => chooseFormat(v)}
-                    aria-pressed={format === v}
-                    className={`min-h-9 rounded-lg px-2 text-[11px] ${format === v ? 'bg-stone font-semibold text-ink' : 'text-muted'}`}
-                  >
-                    {v === 'all' ? '모든 형식' : v}
-                  </button>
-                ))}
-            </div>
-          </div>
           {connectionState === 'connecting' ? (
             <div
               className="h-12 animate-pulse rounded-xl bg-stone"
@@ -173,16 +135,10 @@ export default function ModelPanel() {
             />
           ) : (
             <div className="rounded-xl bg-paper p-4 text-center text-xs leading-relaxed text-muted">
-              {format === 'GGUF'
-                ? `이 계열에 등록된 GGUF 파일이 없어요${info?.UnetLoaderGGUF ? ' | GGUF 로더 설치됨' : ' | 서버의 GGUF 로더 설치를 확인해 주세요'}`
-                : '이 계열의 모델이 없어요\n다른 탭이나 계열 분류를 확인해 주세요'}
+              이 계열의 모델이 없어요
+              <br />
+              다른 탭이나 계열 분류를 확인해 주세요
             </div>
-          )}
-          {selected && (
-            <p className="text-[11px] text-muted">
-              {selected.format} <span className="mx-1">|</span>{' '}
-              {connectionState === 'preview' ? '미리보기 목록' : '서버 설치 목록'}
-            </p>
           )}
           {s.model && (!selected || selected.family !== s.architecture) && (
             <p role="status" className="text-xs text-red-700">
@@ -230,10 +186,6 @@ export default function ModelPanel() {
               </Field>
             </div>
           </details>
-          <p className="text-[11px] leading-relaxed text-muted">
-            폴더와 파일명으로 계열을 분류해요 | 분류 버튼으로 수정할 수 있어요
-            {ggufCount === 0 && info?.UnetLoaderGGUF ? ' | 현재 서버의 GGUF 파일 0개' : ''}
-          </p>
         </div>
       </Section>
       <Classification open={classify} onClose={() => setClassify(false)} />

@@ -60,7 +60,7 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
           alt={
             job?.status === 'complete' && !job.preview
               ? '생성한 이미지'
-              : '숲속 오두막과 산을 그린 샘플 일러스트'
+              : '우아한 성인 여성 인물을 담은 샘플 일러스트'
           }
           onError={() => setImageFailed(true)}
           onLoad={() => setImageFailed(false)}

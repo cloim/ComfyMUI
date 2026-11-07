@@ -158,7 +158,7 @@ function Shell() {
             )}
           </div>
         </header>
-        {(!online || storageError || pwa.waiting) && (
+        {(!online || storageError) && (
           <div
             role="status"
             className="flex flex-wrap items-center justify-center gap-2 bg-[#ece4c9] px-4 py-2 text-xs text-[#69521e]"
@@ -168,15 +168,8 @@ function Shell() {
                 <WifiOff size={14} />
                 오프라인 | 저장한 설정과 프리셋을 사용할 수 있어요
               </>
-            ) : storageError ? (
-              '기기 저장 공간을 확인해 주세요. 변경 사항은 현재 화면에 유지됩니다'
             ) : (
-              <>
-                새 버전이 준비됐어요
-                <button className="underline" onClick={pwa.update}>
-                  업데이트
-                </button>
-              </>
+              '기기 저장 공간을 확인해 주세요. 변경 사항은 현재 화면에 유지됩니다'
             )}
           </div>
         )}
