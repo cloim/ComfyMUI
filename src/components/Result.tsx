@@ -1,5 +1,15 @@
 import { useState } from 'react';
-import { Download, RotateCcw, Image, ArrowUpRight, Clock3 } from 'lucide-react';
+import {
+  Download,
+  RotateCcw,
+  Image,
+  ArrowUpRight,
+  Clock3,
+  Pin,
+  Sparkles,
+  Maximize2,
+  Share2,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { type Job } from '../domain';
 import { imageUrl } from '../api';
@@ -12,7 +22,20 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
   const [imageRetry, setImageRetry] = useState(0);
   const [cancelling, setCancelling] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  const { setSettings, notify, cancel, generate, busy, livePreviewUrl } = useStudio();
+  const {
+    setSettings,
+    notify,
+    cancel,
+    generate,
+    busy,
+    livePreviewUrl,
+    pinSeed,
+    generateVariation,
+    generateUpscale,
+    shareImage,
+    info,
+  } = useStudio();
+  const hasUpscaler = info ? Object.keys(info).some((k) => k.toLowerCase().includes('upscale')) : false;
   const active = job && ['submitting', 'queued', 'running'].includes(job.status);
   const previewImg = active && job?.status === 'running' ? (job.livePreview || livePreviewUrl) : null;
   const source =
@@ -204,13 +227,43 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
           )}
           {job.status === 'complete' && (
             <>
-              <div className="flex gap-2">
-                <Link to="/create" onClick={reuse} className="btn-secondary flex-1">
+              <div className="flex flex-wrap gap-2">
+                <Link to="/create" onClick={reuse} className="btn-secondary flex-1 min-w-[130px]">
                   <RotateCcw size={15} />
                   설정 재사용
                 </Link>
+                <button
+                  className="btn-secondary flex-1 min-w-[130px]"
+                  onClick={() => pinSeed(job.settings.seed)}
+                >
+                  <Pin size={15} />
+                  이 Seed 고정
+                </button>
+                <button
+                  className="btn-secondary flex-1 min-w-[130px]"
+                  onClick={() => generateVariation(job)}
+                >
+                  <Sparkles size={15} />
+                  변형 생성
+                </button>
+                {hasUpscaler && (
+                  <button
+                    className="btn-secondary flex-1 min-w-[130px]"
+                    onClick={() => generateUpscale(job)}
+                  >
+                    <Maximize2 size={15} />
+                    업스케일
+                  </button>
+                )}
+                <button
+                  className="btn-secondary flex-1 min-w-[130px]"
+                  onClick={() => void shareImage(job)}
+                >
+                  <Share2 size={15} />
+                  공유
+                </button>
                 <a
-                  className="btn-secondary flex-1"
+                  className="btn-secondary flex-1 min-w-[130px]"
                   href={source}
                   download={job.preview ? 'sample.svg' : job.images[0]?.filename}
                   target="_blank"
