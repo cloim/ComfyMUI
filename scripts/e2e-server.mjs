@@ -5,6 +5,16 @@ import { WebSocketServer } from 'ws';
 
 const jobs = new Map();
 const choices = (values) => [values];
+
+// 1x1 dummy PNG preview packet (4 bytes event type 1 + 4 bytes format 2 + PNG data)
+const dummyPng = Buffer.from(
+  '89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000A49444154789C63000100000500010D0A2DB40000000049454E44AE426082',
+  'hex',
+);
+const previewPacket = Buffer.alloc(8 + dummyPng.length);
+previewPacket.writeUInt32BE(1, 0); // BinaryEventTypes.PREVIEW_IMAGE = 1
+previewPacket.writeUInt32BE(2, 4); // PNG = 2
+dummyPng.copy(previewPacket, 8);
 const schema = {
   UNETLoader: {
     input: {
@@ -180,6 +190,7 @@ const mock = createServer(async (req, res) => {
             if (ws.readyState === 1) {
               ws.send(JSON.stringify({ type: 'execution_start', data: { prompt_id: id } }));
               ws.send(JSON.stringify({ type: 'progress', data: { value: 50, max: 100, prompt_id: id } }));
+              ws.send(previewPacket);
             }
           }
         }, 150);

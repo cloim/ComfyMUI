@@ -60,6 +60,7 @@ export type Job = {
   status: 'submitting' | 'queued' | 'running' | 'complete' | 'error' | 'cancelled';
   progress: number;
   images: ImageRef[];
+  livePreview?: string;
   error?: string;
 };
 export const LEGACY_DEFAULT_POSITIVES = [

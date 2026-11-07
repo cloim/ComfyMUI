@@ -12,8 +12,9 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
   const [imageRetry, setImageRetry] = useState(0);
   const [cancelling, setCancelling] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  const { setSettings, notify, cancel, generate, busy } = useStudio();
+  const { setSettings, notify, cancel, generate, busy, livePreviewUrl } = useStudio();
   const active = job && ['submitting', 'queued', 'running'].includes(job.status);
+  const previewImg = active && job?.status === 'running' ? (job.livePreview || livePreviewUrl) : null;
   const source =
     job?.status === 'complete' && job.images[0]
       ? job.preview
@@ -66,39 +67,57 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
         aria-label={!active && !imageFailed ? '이미지 크게 보기' : undefined}
       >
         <img
-          key={`${source}-${imageRetry}`}
+          key={previewImg ? 'live-preview' : `${source}-${imageRetry}`}
           src={
+            previewImg ||
             source + (imageRetry ? `${source.includes('?') ? '&' : '?'}retry=${imageRetry}` : '')
           }
           alt={
             job?.status === 'complete' && !job.preview
               ? '생성한 이미지'
-              : '우아한 성인 여성 인물을 담은 샘플 일러스트'
+              : previewImg
+                ? '실시간 생성 미리보기'
+                : '우아한 성인 여성 인물을 담은 샘플 일러스트'
           }
-          onError={() => setImageFailed(true)}
+          onError={() => {
+            if (!previewImg) setImageFailed(true);
+          }}
           onLoad={() => setImageFailed(false)}
-          className={`h-full w-full object-cover transition-all duration-700 ${active ? 'scale-105 opacity-35 blur-sm' : 'group-hover:scale-[1.02]'}`}
+          className={`h-full w-full object-cover transition-all duration-700 ${
+            previewImg
+              ? 'opacity-95'
+              : active
+                ? 'scale-105 opacity-35 blur-sm'
+                : 'group-hover:scale-[1.02]'
+          }`}
         />
-        {(!job || job.preview) && (
+        {previewImg && (
+          <span className="absolute left-4 top-4 rounded-full bg-olive px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm animate-pulse">
+            실시간 생성 중
+          </span>
+        )}
+        {(!job || job.preview) && !previewImg && (
           <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-ink shadow-sm">
             {job ? '미리보기 체험' : '샘플 일러스트'}
           </span>
         )}
         {active && (
           <div
-            className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6"
+            className={`absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 ${previewImg ? 'bg-black/30 backdrop-blur-[2px]' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90 shadow-md">
               <Spinner />
             </span>
-            <p className="text-center text-sm font-semibold">{labels[job!.status]}</p>
-            <p className="font-mono text-3xl">{job!.progress}%</p>
-            <div className="h-1.5 w-36 overflow-hidden rounded-full bg-ink/15">
-              <div
-                className="h-full rounded-full bg-olive transition-all"
-                style={{ width: `${job!.progress}%` }}
-              />
+            <div className={`flex flex-col items-center gap-2 ${previewImg ? 'rounded-2xl bg-white/85 px-6 py-3 shadow-lg backdrop-blur-md' : ''}`}>
+              <p className="text-center text-sm font-semibold">{labels[job!.status]}</p>
+              <p className="font-mono text-3xl font-bold">{job!.progress}%</p>
+              <div className="h-1.5 w-36 overflow-hidden rounded-full bg-ink/15">
+                <div
+                  className="h-full rounded-full bg-olive transition-all"
+                  style={{ width: `${job!.progress}%` }}
+                />
+              </div>
             </div>
             {(job!.status === 'queued' || job!.preview) && (
               <button

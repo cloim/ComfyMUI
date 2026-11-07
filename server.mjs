@@ -1,7 +1,7 @@
 import express from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import sharp from 'sharp';
-import { mkdirSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdirSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -47,7 +47,7 @@ async function handleThumbnail(req, res) {
   if (existsSync(cachePath)) {
     res.setHeader('Content-Type', 'image/webp');
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.sendFile(cachePath);
+    return res.end(readFileSync(cachePath));
   }
 
   try {
