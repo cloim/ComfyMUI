@@ -9,11 +9,13 @@ import {
   Sparkles,
   Maximize2,
   Share2,
+  Star,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { type Job } from '../domain';
 import { imageUrl } from '../api';
 import { useStudio } from '../studio';
+import { calculateRemainingEstimate } from '../estimate';
 import { IconButton, Spinner } from './ui';
 import { ImageViewer } from './ImageViewer';
 export function Result({ job, compact = false }: { job?: Job; compact?: boolean }) {
@@ -33,10 +35,14 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
     generateVariation,
     generateUpscale,
     shareImage,
+    toggleFavorite,
+    jobs,
+    clientQueue,
     info,
   } = useStudio();
   const hasUpscaler = info ? Object.keys(info).some((k) => k.toLowerCase().includes('upscale')) : false;
   const active = job && ['submitting', 'queued', 'running'].includes(job.status);
+  const estimate = active && job ? calculateRemainingEstimate(jobs, job, clientQueue.length) : null;
   const previewImg = active && job?.status === 'running' ? (job.livePreview || livePreviewUrl) : null;
   const source =
     job?.status === 'complete' && job.images[0]
@@ -141,6 +147,16 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
                   style={{ width: `${job!.progress}%` }}
                 />
               </div>
+              {estimate && (
+                <div className="flex flex-col items-center gap-0.5 text-xs text-ink/80 font-medium">
+                  <span>약 {estimate.remainingSeconds}초 남음</span>
+                  {estimate.queueAheadCount > 0 && (
+                    <span className="text-[11px] text-muted">
+                      대기열 앞 {estimate.queueAheadCount}개 작업
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             {(job!.status === 'queued' || job!.preview) && (
               <button
@@ -232,6 +248,13 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
                   <RotateCcw size={15} />
                   설정 재사용
                 </Link>
+                <button
+                  className={`btn-secondary flex-1 min-w-[130px] ${job.favorite ? 'text-amber-700 border-amber-300 bg-amber-50/60' : ''}`}
+                  onClick={() => toggleFavorite(job.id)}
+                >
+                  <Star size={15} className={job.favorite ? 'fill-amber-400 text-amber-500' : ''} />
+                  {job.favorite ? '즐겨찾기 됨' : '즐겨찾기'}
+                </button>
                 <button
                   className="btn-secondary flex-1 min-w-[130px]"
                   onClick={() => pinSeed(job.settings.seed)}
