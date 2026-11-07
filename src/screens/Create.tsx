@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   SlidersHorizontal,
@@ -43,6 +43,7 @@ import {
   Spinner,
 } from '../components/ui';
 import { Result } from '../components/Result';
+import { PromptHelper } from '../components/PromptHelper';
 import ModelPanel from '../components/ModelPanel';
 import {
   compatibleAssets,
@@ -56,7 +57,8 @@ import {
 } from '../models';
 
 export default function Create() {
-  const { settings: s, setSettings, info, familyAssignments, notify } = useStudio();
+  const { settings: s, setSettings, info, familyAssignments, notify, jobs } = useStudio();
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [advanced, setAdvanced] = useState(false);
   const [advancedTab, setAdvancedTab] = useState('settings');
   function openAdvanced(tab = 'settings') {
@@ -109,11 +111,18 @@ export default function Create() {
               그리고 싶은 장면
             </label>
             <textarea
+              ref={promptTextareaRef}
               id="positive"
               className="field min-h-36 resize-y leading-7"
               value={s.positive}
               onChange={(e) => patch({ positive: e.target.value })}
               placeholder="어떤 장면을 만들고 싶으세요?"
+            />
+            <PromptHelper
+              value={s.positive}
+              onChange={(val) => patch({ positive: val })}
+              jobs={jobs}
+              textareaRef={promptTextareaRef}
             />
             <div className="mt-3 flex flex-wrap gap-2">
               {['cinematic lighting', 'analog film', 'soft pastel'].map((tag) => (
