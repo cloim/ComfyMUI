@@ -63,6 +63,12 @@ export type Queue = {
 export function imageUrl(base: string, ref: ImageRef) {
   return `${base}/view?${new URLSearchParams(ref)}`;
 }
+export function thumbnailUrl(base: string, ref: ImageRef) {
+  if (base === '/comfy') {
+    return `/comfy/thumb?${new URLSearchParams(ref)}`;
+  }
+  return imageUrl(base, ref);
+}
 export function websocketUrl(base: string, clientId: string) {
   const u = new URL(`${base}/ws`, location.href);
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';

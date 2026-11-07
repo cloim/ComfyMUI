@@ -8,6 +8,48 @@ export default defineConfig({
     react(),
     tailwindcss(),
     {
+      name: 'dev-thumbnail-proxy',
+      configureServer(server) {
+        server.middlewares.use(async (req, res, next) => {
+          const url = new URL(req.url || '', 'http://localhost');
+          if (url.pathname !== '/comfy/thumb' && url.pathname !== '/comfy-thumb') {
+            return next();
+          }
+          const filename = url.searchParams.get('filename') || '';
+          const subfolder = url.searchParams.get('subfolder') || '';
+          const type = url.searchParams.get('type') || 'output';
+          if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+            res.statusCode = 400;
+            return res.end(JSON.stringify({ error: { message: '잘못된 썸네일 파라미터입니다' } }));
+          }
+          try {
+            const upstream = process.env.COMFY_URL || 'http://127.0.0.1:8188';
+            const viewUrl = new URL(`${upstream}/view`);
+            viewUrl.searchParams.set('filename', filename);
+            if (subfolder) viewUrl.searchParams.set('subfolder', subfolder);
+            if (type) viewUrl.searchParams.set('type', type);
+            const upstreamRes = await fetch(viewUrl, { signal: AbortSignal.timeout(10000) });
+            if (!upstreamRes.ok) {
+              res.statusCode = upstreamRes.status;
+              return res.end(JSON.stringify({ error: { message: '원본 이미지를 가져올 수 없습니다' } }));
+            }
+            const sharp = (await import('sharp')).default;
+            const buffer = await upstreamRes.arrayBuffer();
+            const webp = await sharp(Buffer.from(buffer))
+              .resize(320, null, { withoutEnlargement: true })
+              .webp({ quality: 80 })
+              .toBuffer();
+            res.setHeader('Content-Type', 'image/webp');
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            return res.end(webp);
+          } catch (e: any) {
+            res.statusCode = 502;
+            return res.end(JSON.stringify({ error: { message: e.message } }));
+          }
+        });
+      },
+    },
+    {
       name: 'offline-app-shell',
       writeBundle(_options, bundle) {
         const files = [

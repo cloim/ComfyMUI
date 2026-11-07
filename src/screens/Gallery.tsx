@@ -3,7 +3,7 @@ import { Images, Search, Trash2 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useStudio } from '../studio';
 import { type Job } from '../domain';
-import { imageUrl } from '../api';
+import { imageUrl, thumbnailUrl } from '../api';
 import { Modal, Empty, IconButton } from '../components/ui';
 import { Result } from '../components/Result';
 export default function Gallery() {
@@ -91,10 +91,15 @@ export default function Gallery() {
                     <img
                       loading="lazy"
                       className="h-full w-full object-cover"
-                      src={j.preview ? '/sample.svg' : imageUrl(j.base, j.images[0])}
+                      src={j.preview ? '/sample.svg' : thumbnailUrl(j.base, j.images[0])}
                       alt={j.preview ? '미리보기 샘플' : j.settings.positive.slice(0, 100)}
                       onError={(e) => {
-                        e.currentTarget.style.visibility = 'hidden';
+                        const original = imageUrl(j.base, j.images[0]);
+                        if (e.currentTarget.src !== original) {
+                          e.currentTarget.src = original;
+                        } else {
+                          e.currentTarget.style.visibility = 'hidden';
+                        }
                       }}
                     />
                   ) : (
