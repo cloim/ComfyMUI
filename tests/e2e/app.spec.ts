@@ -307,3 +307,38 @@ test('exactly four families generate directly with their native graph', async ({
     await expect(page.getByText('생성 완료', { exact: true })).toBeVisible({ timeout: 10000 });
   }
 });
+test('click image surface opens fullscreen viewer with zoom controls, pinch ready, and closes cleanly', async ({
+  page,
+}) => {
+  await page.goto('/create');
+
+  // 독립 확장 버튼 래퍼가 없는지 확인
+  const expandIconWrapper = page.locator('.absolute.right-3.top-3.rounded-xl.bg-white\\/90');
+  await expect(expandIconWrapper).toHaveCount(0);
+
+  // 이미지 영역 클릭
+  const imageSurface = page.getByRole('button', { name: '이미지 크게 보기' });
+  await expect(imageSurface).toBeVisible();
+  await imageSurface.click();
+
+  // 바텀시트가 아닌 풀스크린 다이얼로그 뷰어 열림 확인
+  const viewer = page.getByRole('dialog', { name: '이미지 전체 화면 뷰어' });
+  await expect(viewer).toBeVisible();
+  await expect(viewer).toHaveClass(/fixed inset-0/);
+
+  // 닫기 버튼 표시 확인
+  const closeBtn = viewer.getByRole('button', { name: '닫기' });
+  await expect(closeBtn).toBeVisible();
+
+  // 확대 및 배율 리셋 확인
+  const zoomInBtn = viewer.getByRole('button', { name: '확대' });
+  await zoomInBtn.click();
+  const resetChip = viewer.getByRole('button', { name: '확대 초기화' });
+  await expect(resetChip).toBeVisible();
+  await resetChip.click();
+  await expect(resetChip).toHaveCount(0);
+
+  // ESC 키로 닫기
+  await page.keyboard.press('Escape');
+  await expect(viewer).toHaveCount(0);
+});

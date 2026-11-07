@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Download, RotateCcw, Image, ArrowUpRight, Expand, Clock3 } from 'lucide-react';
+import { Download, RotateCcw, Image, ArrowUpRight, Clock3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { type Job } from '../domain';
 import { imageUrl } from '../api';
 import { useStudio } from '../studio';
-import { Modal, IconButton, Spinner } from './ui';
+import { IconButton, Spinner } from './ui';
+import { ImageViewer } from './ImageViewer';
 export function Result({ job, compact = false }: { job?: Job; compact?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
@@ -50,7 +51,19 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
         </div>
       )}
       <div
-        className={`relative overflow-hidden rounded-2xl bg-[#d9dfd3] ${compact ? 'aspect-[4/3]' : 'aspect-[3/4] max-h-[540px]'}`}
+        className={`group relative overflow-hidden rounded-2xl bg-[#d9dfd3] ${compact ? 'aspect-[4/3]' : 'aspect-[3/4] max-h-[540px]'} ${!active && !imageFailed ? 'cursor-zoom-in' : ''}`}
+        onClick={() => {
+          if (!active && !imageFailed) setExpanded(true);
+        }}
+        onKeyDown={(e) => {
+          if (!active && !imageFailed && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            setExpanded(true);
+          }
+        }}
+        role={!active && !imageFailed ? 'button' : undefined}
+        tabIndex={!active && !imageFailed ? 0 : undefined}
+        aria-label={!active && !imageFailed ? '이미지 크게 보기' : undefined}
       >
         <img
           key={`${source}-${imageRetry}`}
@@ -64,20 +77,18 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
           }
           onError={() => setImageFailed(true)}
           onLoad={() => setImageFailed(false)}
-          className={`h-full w-full object-cover transition-all duration-700 ${active ? 'scale-105 opacity-35 blur-sm' : ''}`}
+          className={`h-full w-full object-cover transition-all duration-700 ${active ? 'scale-105 opacity-35 blur-sm' : 'group-hover:scale-[1.02]'}`}
         />
         {(!job || job.preview) && (
           <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-ink shadow-sm">
             {job ? '미리보기 체험' : '샘플 일러스트'}
           </span>
         )}
-        {!active && !imageFailed && (
-          <div className="absolute right-3 top-3 rounded-xl bg-white/90">
-            <IconButton icon={Expand} label="이미지 크게 보기" onClick={() => setExpanded(true)} />
-          </div>
-        )}
         {active && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6">
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90">
               <Spinner />
             </span>
@@ -113,7 +124,10 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
           </div>
         )}
         {imageFailed && !active && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-paper p-5 text-center">
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-paper p-5 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
             <Image size={26} />
             <p className="text-sm">이미지를 불러오려면 서버 연결을 확인해 주세요</p>
             <button
@@ -213,13 +227,16 @@ export function Result({ job, compact = false }: { job?: Job; compact?: boolean 
           )}
         </div>
       )}
-      <Modal title="이미지 보기" open={expanded} onClose={() => setExpanded(false)}>
-        <img
-          src={source}
-          alt="확대한 이미지"
-          className="max-h-[70dvh] w-full rounded-xl object-contain"
-        />
-      </Modal>
+      <ImageViewer
+        src={source}
+        alt={
+          job?.status === 'complete' && !job.preview
+            ? '생성한 이미지'
+            : '우아한 성인 여성 인물을 담은 샘플 일러스트'
+        }
+        open={expanded}
+        onClose={() => setExpanded(false)}
+      />
     </div>
   );
 }
