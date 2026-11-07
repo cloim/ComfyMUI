@@ -56,6 +56,26 @@ export type Job = {
   images: ImageRef[];
   error?: string;
 };
+export const LEGACY_DEFAULT_POSITIVES = [
+  'A quiet cabin nestled in a misty alpine forest, warm light glowing through the windows, towering mountains, cinematic composition, soft morning light, intricate details',
+];
+
+export function isLegacyDefaultPrompt(prompt?: string | null): boolean {
+  if (!prompt) return false;
+  const p = prompt.trim();
+  return (
+    LEGACY_DEFAULT_POSITIVES.includes(p) ||
+    (p.includes('cabin') && (p.includes('alpine') || p.includes('forest') || p.includes('misty')))
+  );
+}
+
+export function migrateGenerationSettings(settings: Generation): Generation {
+  if (isLegacyDefaultPrompt(settings.positive)) {
+    return { ...settings, positive: defaults.positive };
+  }
+  return settings;
+}
+
 export const defaults: Generation = {
   modelLoader: 'CheckpointLoaderSimple',
   architecture: 'flux',

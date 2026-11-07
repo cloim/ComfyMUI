@@ -8,6 +8,8 @@ import {
   buildWorkflow,
   validateAgainstServer,
   options,
+  isLegacyDefaultPrompt,
+  migrateGenerationSettings,
   type Generation,
   type Preset,
   type Job,
@@ -30,8 +32,11 @@ import {
   type FamilyAssignments,
 } from './models';
 
-function usePersisted<T>(key: string, initial: T) {
-  const [value, setValue] = useState<T>(() => readStored(key, initial));
+function usePersisted<T>(key: string, initial: T, migrate?: (v: T) => T) {
+  const [value, setValue] = useState<T>(() => {
+    const raw = readStored(key, initial);
+    return migrate ? migrate(raw) : raw;
+  });
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     try {
@@ -44,7 +49,11 @@ function usePersisted<T>(key: string, initial: T) {
   return [value, setValue, failed] as const;
 }
 function useStudioState() {
-  const [settings, setSettings, saveError] = usePersisted<Generation>('cm-settings', defaults);
+  const [settings, setSettings, saveError] = usePersisted<Generation>(
+    'cm-settings',
+    defaults,
+    migrateGenerationSettings,
+  );
   const [presets, setPresets, presetError] = usePersisted<Preset[]>('cm-presets', []);
   const [familyAssignments, setFamilyAssignments, familySaveError] =
     usePersisted<FamilyAssignments>('cm-asset-families', {});
@@ -74,6 +83,11 @@ function useStudioState() {
     const t = setTimeout(() => setNotice(''), 5000);
     return () => clearTimeout(t);
   }, [notice]);
+  useEffect(() => {
+    if (isLegacyDefaultPrompt(settings.positive)) {
+      setSettings((prev) => ({ ...prev, positive: defaults.positive }));
+    }
+  }, []);
   useEffect(() => {
     const on = () => setOnline(navigator.onLine);
     window.addEventListener('online', on);

@@ -60,7 +60,7 @@ export default function ModelPanel() {
         title="모델 계열과 모델"
         icon={Box}
         action={
-          <div className="-my-2.5 -mr-2 flex items-center">
+          <div className="-my-3 -mr-2 flex items-center">
             <IconButton
               icon={Tags}
               label="모델과 LoRA 계열 분류"

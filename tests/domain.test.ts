@@ -6,6 +6,8 @@ import {
   importPresets,
   validateAgainstServer,
   parseSettings,
+  isLegacyDefaultPrompt,
+  migrateGenerationSettings,
   type ObjectInfo,
 } from '../src/domain';
 const settings = {
@@ -120,5 +122,19 @@ describe('portable presets', () => {
     expect(() =>
       importPresets(JSON.stringify({ version: 1, presets: [{ name: '', settings }] })),
     ).toThrow();
+  });
+  it('detects legacy alpine landscape prompt and migrates to adult portrait prompt', () => {
+    const legacyText =
+      'A quiet cabin nestled in a misty alpine forest, warm light glowing through the windows, towering mountains, cinematic composition, soft morning light, intricate details';
+    expect(isLegacyDefaultPrompt(legacyText)).toBe(true);
+    expect(isLegacyDefaultPrompt('A peaceful mountain cabin in a pine forest')).toBe(true);
+    expect(isLegacyDefaultPrompt('Custom prompt for my art')).toBe(false);
+
+    const migrated = migrateGenerationSettings({ ...settings, positive: legacyText });
+    expect(migrated.positive).toBe(defaults.positive);
+    expect(migrated.positive).toContain('portrait of an elegant adult woman');
+
+    const custom = migrateGenerationSettings({ ...settings, positive: 'Custom prompt' });
+    expect(custom.positive).toBe('Custom prompt');
   });
 });
