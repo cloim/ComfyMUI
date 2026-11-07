@@ -1,4 +1,10 @@
-import { comboOptions, encoderLoader, families, type ModelFamily } from './models';
+import {
+  comboOptions,
+  encoderLoader,
+  families,
+  isArtifactProneSampler,
+  type ModelFamily,
+} from './models';
 export type Workflow = Record<
   string,
   { class_type: string; inputs: Record<string, unknown>; _meta?: { title?: string } }
@@ -70,10 +76,20 @@ export function isLegacyDefaultPrompt(prompt?: string | null): boolean {
 }
 
 export function migrateGenerationSettings(settings: Generation): Generation {
-  if (isLegacyDefaultPrompt(settings.positive)) {
-    return { ...settings, positive: defaults.positive };
+  let next = settings;
+  if (isLegacyDefaultPrompt(next.positive)) {
+    next = { ...next, positive: defaults.positive };
   }
-  return settings;
+  if (isArtifactProneSampler(next.sampler)) {
+    const prof = families.find((f) => f.id === next.architecture);
+    next = {
+      ...next,
+      sampler: 'euler',
+      scheduler: 'simple',
+      steps: prof?.steps ?? (next.architecture === 'krea2' ? 8 : 24),
+    };
+  }
+  return next;
 }
 
 export const defaults: Generation = {

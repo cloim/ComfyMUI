@@ -29,6 +29,7 @@ import {
   selectModel,
   validateSelection,
   families,
+  isArtifactProneSampler,
   type FamilyAssignments,
 } from './models';
 
@@ -84,8 +85,24 @@ function useStudioState() {
     return () => clearTimeout(t);
   }, [notice]);
   useEffect(() => {
-    if (isLegacyDefaultPrompt(settings.positive)) {
-      setSettings((prev) => ({ ...prev, positive: defaults.positive }));
+    let patched = false;
+    let next = settings;
+    if (isLegacyDefaultPrompt(next.positive)) {
+      next = { ...next, positive: defaults.positive };
+      patched = true;
+    }
+    if (isArtifactProneSampler(next.sampler)) {
+      const prof = families.find((f) => f.id === next.architecture);
+      next = {
+        ...next,
+        sampler: 'euler',
+        scheduler: 'simple',
+        steps: prof?.steps ?? (next.architecture === 'krea2' ? 8 : 24),
+      };
+      patched = true;
+    }
+    if (patched) {
+      setSettings(next);
     }
   }, []);
   useEffect(() => {

@@ -137,4 +137,23 @@ describe('portable presets', () => {
     const custom = migrateGenerationSettings({ ...settings, positive: 'Custom prompt' });
     expect(custom.positive).toBe('Custom prompt');
   });
+  it('corrects artifact-prone SDE sampler back to euler for flow matching models', () => {
+    const badKrea = migrateGenerationSettings({
+      ...settings,
+      architecture: 'krea2',
+      sampler: 'dpmpp_2m_sde',
+      steps: 16,
+    });
+    expect(badKrea.sampler).toBe('euler');
+    expect(badKrea.steps).toBe(8);
+
+    const goodFlux = migrateGenerationSettings({
+      ...settings,
+      architecture: 'flux',
+      sampler: 'euler',
+      steps: 24,
+    });
+    expect(goodFlux.sampler).toBe('euler');
+    expect(goodFlux.steps).toBe(24);
+  });
 });

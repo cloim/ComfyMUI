@@ -7,6 +7,24 @@ export const families = [
   { id: 'qwen21', label: 'qwen 2.1', clipType: 'qwen_image', steps: 28, cfg: 4 },
 ] as const;
 export type ModelFamily = (typeof families)[number]['id'];
+
+export const INCOMPATIBLE_SDE_SAMPLERS = [
+  'dpmpp_2m_sde',
+  'dpmpp_2m_sde_gpu',
+  'dpmpp_3m_sde',
+  'dpmpp_3m_sde_gpu',
+  'dpmpp_sde',
+  'dpmpp_sde_gpu',
+  'dpm_fast',
+];
+
+export function isArtifactProneSampler(sampler: string): boolean {
+  if (!sampler) return false;
+  const s = sampler.toLowerCase();
+  return (
+    INCOMPATIBLE_SDE_SAMPLERS.some((bad) => s === bad || s.includes(bad)) || s.endsWith('_sde')
+  );
+}
 export type FamilyAssignments = Record<string, ModelFamily>;
 export type ModelEntry = {
   id: string;

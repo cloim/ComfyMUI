@@ -39,7 +39,7 @@ import {
 } from '../components/ui';
 import { Result } from '../components/Result';
 import ModelPanel from '../components/ModelPanel';
-import { compatibleAssets, selectedEntry } from '../models';
+import { compatibleAssets, selectedEntry, isArtifactProneSampler, families } from '../models';
 
 export default function Create() {
   const { settings: s, setSettings, info, familyAssignments, notify } = useStudio();
@@ -530,6 +530,29 @@ function Advanced({
                     </SelectControl>
                   </Field>
                 </div>
+                {isArtifactProneSampler(s.sampler) && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                    <p className="font-semibold">피부 비늘 아티팩트 주의</p>
+                    <p className="mt-1">
+                      {families.find((f) => f.id === s.architecture)?.label || '현재'} 계열은 Flow
+                      Matching 모델로, SDE 샘플러({s.sampler}) 사용 시 얼굴과 피부에 비늘 모양
+                      노이즈 파편이 발생할 수 있어요.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn-secondary mt-2 text-xs"
+                      onClick={() =>
+                        patch({
+                          sampler: 'euler',
+                          scheduler: 'simple',
+                          steps: s.architecture === 'krea2' ? 8 : 24,
+                        })
+                      }
+                    >
+                      권장 설정(euler, {s.architecture === 'krea2' ? '8' : '24'}스텝)으로 변경
+                    </button>
+                  </div>
+                )}
                 <Numeric
                   label="Denoise"
                   value={s.denoise}
