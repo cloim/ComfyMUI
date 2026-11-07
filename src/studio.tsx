@@ -13,6 +13,8 @@ import {
   type Generation,
   type Preset,
   type Job,
+  type QueueItem,
+  reorderQueue,
   type ObjectInfo,
 } from './domain';
 import {
@@ -21,6 +23,7 @@ import {
   request,
   submit,
   websocketUrl,
+  imageUrl,
   type Queue,
   type HistoryItem,
 } from './api';
@@ -60,6 +63,7 @@ function useStudioState() {
   const [familyAssignments, setFamilyAssignments, familySaveError] =
     usePersisted<FamilyAssignments>('cm-asset-families', {});
   const [jobs, setJobs, historyError] = usePersisted<Job[]>('cm-jobs', []);
+  const [clientQueue, setClientQueue, queueError] = usePersisted<QueueItem[]>('cm-client-queue', []);
   const [connection, setConnection] = usePersisted('cm-connection', {
     base: '/comfy',
     preview: true,
@@ -91,6 +95,8 @@ function useStudioState() {
   const [clientId] = useState(newId);
   const jobRef = useRef(jobs);
   jobRef.current = jobs;
+  const queueRef = useRef(clientQueue);
+  queueRef.current = clientQueue;
   function notify(message: string) {
     setNotice(message);
   }
@@ -406,12 +412,8 @@ function useStudioState() {
     }, 300);
     return () => clearInterval(timer);
   }, [setJobs]);
-  async function generate(input = settings) {
+  async function executeJob(input: Generation) {
     if (submitLock.current) return;
-    if (jobRef.current.some((j) => ['submitting', 'queued', 'running'].includes(j.status))) {
-      notify('현재 생성이 끝난 뒤 다음 장면을 만들어 주세요');
-      return;
-    }
     submitLock.current = true;
     setBusy(true);
     let tempId = '';
@@ -455,6 +457,119 @@ function useStudioState() {
       submitLock.current = false;
       setBusy(false);
     }
+  }
+
+  async function generate(input = settings) {
+    const hasActive = jobRef.current.some((j) =>
+      ['submitting', 'queued', 'running'].includes(j.status),
+    );
+    if (hasActive || submitLock.current) {
+      const snapshot = structuredClone(input);
+      if (snapshot.random && !snapshot.workflow) snapshot.seed = randomSeed();
+      const item: QueueItem = {
+        id: newId(),
+        createdAt: Date.now(),
+        settings: snapshot,
+      };
+      setClientQueue((q) => [...q, item]);
+      notify('기기 내 대기열에 추가했어요');
+      return;
+    }
+    await executeJob(input);
+  }
+
+  // Auto-process client queue when no active job is running
+  useEffect(() => {
+    const hasActive = jobs.some((j) => ['submitting', 'queued', 'running'].includes(j.status));
+    if (hasActive || submitLock.current || clientQueue.length === 0) return;
+    if (!online && !connection.preview) return;
+    if (!connection.preview && connectionState !== 'connected') return;
+
+    const nextItem = clientQueue[0];
+    setClientQueue((q) => q.slice(1));
+    void executeJob(nextItem.settings);
+  }, [jobs, clientQueue, online, connection.preview, connectionState]);
+
+  function removeFromQueue(id: string) {
+    setClientQueue((q) => q.filter((item) => item.id !== id));
+    notify('대기열 항목을 삭제했어요');
+  }
+
+  function moveQueueItem(fromIndex: number, toIndex: number) {
+    setClientQueue((q) => reorderQueue(q, fromIndex, toIndex));
+  }
+
+  function clearQueue() {
+    setClientQueue([]);
+    notify('대기열을 모두 비웠어요');
+  }
+
+  function enqueueBatch(count: number, base = settings) {
+    const validCount = Math.min(8, Math.max(2, count));
+    const items: QueueItem[] = [];
+    for (let i = 0; i < validCount; i++) {
+      const snap = structuredClone(base);
+      if (snap.random && !snap.workflow) snap.seed = randomSeed();
+      else if (!snap.workflow && i > 0) snap.seed = randomSeed();
+      items.push({ id: newId(), createdAt: Date.now() + i, settings: snap });
+    }
+    const hasActive = jobRef.current.some((j) =>
+      ['submitting', 'queued', 'running'].includes(j.status),
+    );
+    if (!hasActive && items.length > 0) {
+      const [first, ...rest] = items;
+      setClientQueue((q) => [...q, ...rest]);
+      void executeJob(first.settings);
+    } else {
+      setClientQueue((q) => [...q, ...items]);
+    }
+    notify(`Seed를 변경하여 ${validCount}회 연속 생성을 등록했어요`);
+  }
+
+  function pinSeed(seed: number) {
+    setSettings((s) => ({ ...s, seed, random: false }));
+    notify(`Seed ${seed}번으로 고정했어요`);
+  }
+
+  function generateVariation(baseJob: Job) {
+    const next = structuredClone(baseJob.settings);
+    next.seed = randomSeed();
+    next.random = true;
+    void generate(next);
+  }
+
+  function generateUpscale(baseJob: Job) {
+    const next = structuredClone(baseJob.settings);
+    next.width = Math.min(2048, Math.round((next.width * 1.5) / 64) * 64);
+    next.height = Math.min(2048, Math.round((next.height * 1.5) / 64) * 64);
+    void generate(next);
+    notify(`해상도를 ${next.width} × ${next.height}로 높여 생성을 등록했어요`);
+  }
+
+  async function shareImage(job: Job) {
+    if (!job.images[0]) return;
+    const url = job.preview ? '/sample.svg' : imageUrl(job.base, job.images[0]);
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const filename = job.images[0].filename || 'image.png';
+      const file = new File([blob], filename, { type: blob.type || 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'ComfyMUI 생성 이미지',
+          text: job.settings.positive,
+        });
+        return;
+      }
+    } catch (e: any) {
+      if (e.name === 'AbortError') return;
+    }
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = job.images[0].filename || 'image.png';
+    a.target = '_blank';
+    a.click();
   }
   async function cancel(j: Job) {
     if (j.preview) {
@@ -631,11 +746,20 @@ function useStudioState() {
     busy,
     active,
     cancel,
+    clientQueue,
+    removeFromQueue,
+    moveQueueItem,
+    clearQueue,
+    enqueueBatch,
+    pinSeed,
+    generateVariation,
+    generateUpscale,
+    shareImage,
     livePreviewUrl,
     notificationsEnabled,
     toggleNotifications,
     clearBadge,
-    storageError: saveError || presetError || historyError || familySaveError,
+    storageError: saveError || presetError || historyError || familySaveError || queueError,
   };
 }
 type Studio = ReturnType<typeof useStudioState>;

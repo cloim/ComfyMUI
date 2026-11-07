@@ -42,6 +42,21 @@ export type Generation = {
   denoise: number;
   workflow: Workflow | null;
 };
+export type QueueItem = {
+  id: string;
+  createdAt: number;
+  settings: Generation;
+};
+
+export function reorderQueue<T>(list: T[], from: number, to: number): T[] {
+  if (from < 0 || from >= list.length || to < 0 || to >= list.length || from === to) {
+    return list;
+  }
+  const copy = [...list];
+  const [item] = copy.splice(from, 1);
+  copy.splice(to, 0, item);
+  return copy;
+}
 export type Preset = {
   id: string;
   name: string;

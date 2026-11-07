@@ -168,7 +168,12 @@ const mock = createServer(async (req, res) => {
   if (req.method === 'POST') {
     let body = '';
     for await (const chunk of req) body += chunk;
-    const data = JSON.parse(body);
+    let data;
+    try {
+      data = JSON.parse(body);
+    } catch {
+      return send({ error: { message: 'Invalid JSON body' } }, 400);
+    }
     if (url.pathname === '/prompt') {
       const text = data.prompt?.['2']?.inputs?.text || data.prompt?.['2']?.inputs?.prompt || '';
       if (text.includes('reject'))
@@ -187,23 +192,22 @@ const mock = createServer(async (req, res) => {
       if (!text.includes('slow')) {
         setTimeout(() => {
           for (const ws of wsClients) {
-            if (ws.readyState === 1) {
-              ws.send(JSON.stringify({ type: 'execution_start', data: { prompt_id: id } }));
-              ws.send(JSON.stringify({ type: 'progress', data: { value: 50, max: 100, prompt_id: id } }));
-              ws.send(previewPacket);
-            }
+            safeSend(ws, JSON.stringify({ type: 'execution_start', data: { prompt_id: id } }));
+            safeSend(ws, JSON.stringify({ type: 'progress', data: { value: 50, max: 100, prompt_id: id } }));
+            safeSend(ws, previewPacket);
           }
         }, 150);
 
         if (text.includes('execution-error')) {
           setTimeout(() => {
             for (const ws of wsClients) {
-              if (ws.readyState === 1) {
-                ws.send(JSON.stringify({
+              safeSend(
+                ws,
+                JSON.stringify({
                   type: 'execution_error',
                   data: { prompt_id: id, exception_message: 'mock out of memory' },
-                }));
-              }
+                }),
+              );
             }
           }, 800);
         } else {
@@ -212,16 +216,20 @@ const mock = createServer(async (req, res) => {
             if (j && !j.cancelled) {
               j.wsCompleted = true;
               for (const ws of wsClients) {
-                if (ws.readyState === 1) {
-                  ws.send(JSON.stringify({
+                safeSend(
+                  ws,
+                  JSON.stringify({
                     type: 'executing',
                     data: { node: null, prompt_id: id },
-                  }));
-                  ws.send(JSON.stringify({
+                  }),
+                );
+                safeSend(
+                  ws,
+                  JSON.stringify({
                     type: 'executed',
                     data: { node: '7', prompt_id: id, output: {} },
-                  }));
-                }
+                  }),
+                );
               }
             }
           }, 1000);
@@ -283,8 +291,16 @@ const mock = createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ noServer: true });
 const wsClients = new Set();
+function safeSend(ws, data) {
+  if (ws && ws.readyState === 1) {
+    try {
+      ws.send(data, () => {});
+    } catch {}
+  }
+}
 wss.on('connection', (ws) => {
   wsClients.add(ws);
+  ws.on('error', () => {});
   ws.on('close', () => wsClients.delete(ws));
 });
 mock.on('upgrade', (req, socket, head) => {

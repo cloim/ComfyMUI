@@ -16,6 +16,10 @@ import {
   RotateCcw,
   LockKeyhole,
   Images,
+  ListOrdered,
+  ArrowUp,
+  ArrowDown,
+  Layers,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useStudio } from '../studio';
@@ -339,62 +343,199 @@ export function GenerateBar() {
     jobs,
     info,
     familyAssignments,
+    clientQueue,
+    removeFromQueue,
+    moveQueueItem,
+    clearQueue,
+    enqueueBatch,
   } = useStudio();
+  const [showQueue, setShowQueue] = useState(false);
+  const [showBatch, setShowBatch] = useState(false);
   const entry = selectedEntry(s, info, familyAssignments);
   const unavailable = !s.workflow && (!entry || entry.family !== s.architecture);
   const result = !active && jobs[0]?.status === 'complete' ? jobs[0] : undefined;
   return (
-    <div className="border-t border-line bg-paper/95 px-4 py-3 backdrop-blur-xl sm:px-7 lg:px-9">
-      <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-3">
-        <div className="hidden sm:block">
-          <p className="text-xs font-semibold">
-            {s.workflow ? 'API 워크플로' : `${s.width} × ${s.height} | ${s.batch}장`}
-          </p>
-          <p className="mt-1 text-[11px] text-muted">
-            {s.workflow
-              ? '가져온 노드 입력값으로 생성'
-              : s.random
-                ? '매번 새로운 Seed로 생성'
-                : '고정 Seed로 생성'}
-          </p>
-        </div>
-        <div className="flex min-w-0 flex-1 justify-end gap-2">
-          {result && (
-            <Link
-              to={`/gallery?job=${encodeURIComponent(result.id)}`}
+    <>
+      <div className="border-t border-line bg-paper/95 px-4 py-3 backdrop-blur-xl sm:px-7 lg:px-9">
+        <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-3">
+          <div className="hidden sm:block">
+            <p className="text-xs font-semibold">
+              {s.workflow ? 'API 워크플로' : `${s.width} × ${s.height} | ${s.batch}장`}
+            </p>
+            <p className="mt-1 text-[11px] text-muted">
+              {s.workflow
+                ? '가져온 노드 입력값으로 생성'
+                : s.random
+                  ? '매번 새로운 Seed로 생성'
+                  : '고정 Seed로 생성'}
+            </p>
+          </div>
+          <div className="flex min-w-0 flex-1 justify-end gap-2">
+            {clientQueue.length > 0 && (
+              <button
+                className="btn-secondary h-13 shrink-0 px-3 relative flex items-center gap-1.5"
+                onClick={() => setShowQueue(true)}
+                aria-label="기기 내 대기열 보기"
+              >
+                <ListOrdered size={16} />
+                <span className="hidden sm:inline">대기열</span>
+                <span className="rounded-full bg-olive px-1.5 py-0.2 text-[10px] font-bold text-white">
+                  {clientQueue.length}
+                </span>
+              </button>
+            )}
+            <button
               className="btn-secondary h-13 shrink-0 px-3"
+              onClick={() => setShowBatch(true)}
+              title="Seed만 바꿔 연속 생성"
+              aria-label="Seed 변경 연속 생성"
             >
-              <Images size={16} />
-              <span className="whitespace-nowrap">결과 보기</span>
-            </Link>
-          )}
-          <button
-            data-testid="generate"
-            disabled={busy || Boolean(active) || unavailable || (!online && !connection.preview)}
-            onClick={() => void generate()}
-            className="btn-primary h-13 min-w-0 flex-1 px-3 sm:max-w-[340px]"
-          >
-            <span className="flex items-center gap-2">
-              {busy || active ? <Spinner /> : <Sparkles size={18} />}
-              <span>
+              <Layers size={16} />
+              <span className="hidden sm:inline">연속</span>
+            </button>
+            {result && (
+              <Link
+                to={`/gallery?job=${encodeURIComponent(result.id)}`}
+                className="btn-secondary h-13 shrink-0 px-3"
+              >
+                <Images size={16} />
+                <span className="whitespace-nowrap">결과 보기</span>
+              </Link>
+            )}
+            <button
+              data-testid="generate"
+              disabled={busy || unavailable || (!online && !connection.preview)}
+              onClick={() => void generate()}
+              className="btn-primary h-13 min-w-0 flex-1 px-3 sm:max-w-[340px]"
+            >
+              <span className="flex items-center gap-2">
+                {busy ? <Spinner /> : <Sparkles size={18} />}
+                <span>
+                  {active
+                    ? '대기열에 추가'
+                    : connection.preview
+                      ? '미리보기 체험하기'
+                      : '이미지 생성'}
+                </span>
+              </span>
+              <span className="rounded-md bg-white/15 px-2 py-1 text-[11px] font-normal">
                 {active
                   ? `${active.status === 'queued' ? '대기 중' : '생성 중'} ${active.progress}%`
-                  : connection.preview
-                    ? '미리보기 체험하기'
-                    : '이미지 생성'}
+                  : s.workflow
+                    ? 'API'
+                    : `${s.batch}장`}
               </span>
-            </span>
-            {!active && (
-              <span
-                className={`${result ? 'hidden sm:inline' : 'inline'} rounded-md bg-white/15 px-2 py-1 text-[11px] font-normal`}
-              >
-                {s.workflow ? 'API' : `${s.batch}장`}
-              </span>
-            )}
-          </button>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      <Modal
+        title={`기기 내 대기열 (${clientQueue.length}개)`}
+        open={showQueue}
+        onClose={() => setShowQueue(false)}
+        footer={
+          <>
+            {clientQueue.length > 0 && (
+              <button
+                className="btn-secondary text-red-700"
+                onClick={() => {
+                  clearQueue();
+                  setShowQueue(false);
+                }}
+              >
+                <Trash2 size={15} />
+                대기열 비우기
+              </button>
+            )}
+            <button className="btn-primary" onClick={() => setShowQueue(false)}>
+              닫기
+            </button>
+          </>
+        }
+      >
+        {clientQueue.length === 0 ? (
+          <p className="p-6 text-center text-xs text-muted">대기 중인 작업이 없어요</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-muted">
+              앞선 생성이 완료되면 순서대로 서버에 자동 전송돼요.
+            </p>
+            <div className="flex flex-col gap-2 max-h-[380px] overflow-y-auto pr-1">
+              {clientQueue.map((item, index) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-line bg-paper p-3 text-xs"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-ink">
+                      {item.settings.workflow
+                        ? 'API 워크플로'
+                        : item.settings.positive || '(프롬프트 없음)'}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted">
+                      {item.settings.model} | Seed {item.settings.seed}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <IconButton
+                      icon={ArrowUp}
+                      disabled={index === 0}
+                      onClick={() => moveQueueItem(index, index - 1)}
+                      label="위로 이동"
+                    />
+                    <IconButton
+                      icon={ArrowDown}
+                      disabled={index === clientQueue.length - 1}
+                      onClick={() => moveQueueItem(index, index + 1)}
+                      label="아래로 이동"
+                    />
+                    <IconButton
+                      icon={Trash2}
+                      danger
+                      onClick={() => removeFromQueue(item.id)}
+                      label="대기열에서 삭제"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        title="Seed 바꿔 연속 생성"
+        open={showBatch}
+        onClose={() => setShowBatch(false)}
+        footer={
+          <button className="btn-secondary" onClick={() => setShowBatch(false)}>
+            취소
+          </button>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm leading-relaxed text-muted">
+            현재 프롬프트와 모델 설정을 유지한 채, 각기 다른 랜덤 Seed로 연속 생성 대기열에 등록해요.
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {[2, 4, 8].map((count) => (
+              <button
+                key={count}
+                className="btn-primary py-3 flex flex-col items-center gap-1"
+                onClick={() => {
+                  enqueueBatch(count);
+                  setShowBatch(false);
+                }}
+              >
+                <span className="text-base font-bold">{count}회</span>
+                <span className="text-[10px] font-normal opacity-85">연속 생성</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }
 function Advanced({
