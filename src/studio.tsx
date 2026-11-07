@@ -32,6 +32,7 @@ import {
   isArtifactProneSampler,
   type FamilyAssignments,
 } from './models';
+import { parseBinaryPreview } from './preview';
 
 function usePersisted<T>(key: string, initial: T, migrate?: (v: T) => T) {
   const [value, setValue] = useState<T>(() => {
@@ -73,6 +74,18 @@ function useStudioState() {
   const [socketState, setSocketState] = useState('폴링 대기');
   const isWsConnectedRef = useRef(false);
   const pendingHistoryRef = useRef(new Set<string>());
+  const [livePreviewUrl, setLivePreviewUrl] = useState('');
+  const activePreviewBlobRef = useRef<string | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('cm-notifications') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const unreadBadgesRef = useRef<number>(0);
+  const previousRunningJobsRef = useRef<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const submitLock = useRef(false);
   const [clientId] = useState(newId);
@@ -234,12 +247,31 @@ function useStudioState() {
     }
     function open() {
       socket = new WebSocket(websocketUrl(connection.base, clientId));
+      socket.binaryType = 'arraybuffer';
       socket.onopen = () => {
         attempts = 0;
         isWsConnectedRef.current = true;
         setSocketState('실시간 연결');
       };
       socket.onmessage = (event) => {
+        if (event.data instanceof ArrayBuffer) {
+          try {
+            const parsed = parseBinaryPreview(event.data);
+            if (parsed) {
+              const runningJob = jobRef.current.find((j) => !j.preview && j.status === 'running');
+              if (runningJob) {
+                const url = URL.createObjectURL(parsed.blob);
+                if (activePreviewBlobRef.current) URL.revokeObjectURL(activePreviewBlobRef.current);
+                activePreviewBlobRef.current = url;
+                setLivePreviewUrl(url);
+                updateJob(runningJob.id, { livePreview: url });
+              }
+            }
+          } catch {
+            /* Binary decode error ignored */
+          }
+          return;
+        }
         if (typeof event.data !== 'string') return;
         try {
           const { type, data } = JSON.parse(event.data);
@@ -262,7 +294,7 @@ function useStudioState() {
               error: String(data.exception_message || '서버에서 생성이 중단되었습니다'),
             });
         } catch {
-          /* Binary previews and unrelated events have no state effect. */
+          /* Unrelated events have no state effect. */
         }
       };
       socket.onerror = () => socket.close();
@@ -451,6 +483,125 @@ function useStudioState() {
       notify((e as Error).message);
     }
   }
+  // Wake Lock, live preview cleanup, background notification and badging
+  useEffect(() => {
+    const hasActiveJob = jobs.some((j) => ['submitting', 'running'].includes(j.status));
+    if (hasActiveJob) {
+      if ('wakeLock' in navigator && !wakeLockRef.current) {
+        navigator.wakeLock
+          .request('screen')
+          .then((wl) => {
+            wakeLockRef.current = wl;
+            wl.addEventListener('release', () => {
+              wakeLockRef.current = null;
+            });
+          })
+          .catch(() => {});
+      }
+    } else {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
+      if (activePreviewBlobRef.current) {
+        URL.revokeObjectURL(activePreviewBlobRef.current);
+        activePreviewBlobRef.current = null;
+        setLivePreviewUrl('');
+      }
+    }
+
+    for (const j of jobs) {
+      if (previousRunningJobsRef.current.has(j.id) && j.status === 'complete') {
+        if (document.visibilityState === 'hidden') {
+          if (
+            notificationsEnabled &&
+            'Notification' in window &&
+            Notification.permission === 'granted'
+          ) {
+            try {
+              new Notification('ComfyMUI 생성 완료', {
+                body: `${j.settings.positive.slice(0, 50) || '새 이미지'} 생성이 끝났습니다`,
+                icon: '/icon-192.png',
+              });
+            } catch {}
+          }
+          if ('vibrate' in navigator) {
+            try {
+              navigator.vibrate([200, 100, 200]);
+            } catch {}
+          }
+          unreadBadgesRef.current++;
+          if ('setAppBadge' in navigator) {
+            navigator.setAppBadge(unreadBadgesRef.current).catch(() => {});
+          }
+        }
+      }
+    }
+
+    previousRunningJobsRef.current = new Set(
+      jobs.filter((j) => ['submitting', 'queued', 'running'].includes(j.status)).map((j) => j.id),
+    );
+  }, [jobs, notificationsEnabled]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const running = jobRef.current.some((j) => ['submitting', 'running'].includes(j.status));
+        if (running && 'wakeLock' in navigator && !wakeLockRef.current) {
+          navigator.wakeLock
+            .request('screen')
+            .then((wl) => {
+              wakeLockRef.current = wl;
+            })
+            .catch(() => {});
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
+  async function toggleNotifications(enable?: boolean) {
+    const next = enable !== undefined ? enable : !notificationsEnabled;
+    if (next) {
+      if (!('Notification' in window)) {
+        notify('이 브라우저는 알림을 지원하지 않아요');
+        return;
+      }
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          setNotificationsEnabled(true);
+          try {
+            localStorage.setItem('cm-notifications', 'true');
+          } catch {}
+          notify('생성 완료 알림을 켰어요');
+        } else {
+          setNotificationsEnabled(false);
+          try {
+            localStorage.setItem('cm-notifications', 'false');
+          } catch {}
+          notify('브라우저 알림 권한이 허용되지 않았어요');
+        }
+      } catch {
+        setNotificationsEnabled(false);
+      }
+    } else {
+      setNotificationsEnabled(false);
+      try {
+        localStorage.setItem('cm-notifications', 'false');
+      } catch {}
+      notify('완료 알림을 껐어요');
+    }
+  }
+
+  function clearBadge() {
+    unreadBadgesRef.current = 0;
+    if ('clearAppBadge' in navigator) {
+      navigator.clearAppBadge().catch(() => {});
+    }
+  }
+
   function connect(base: string) {
     const normalized = normalizeBase(base);
     setConnection({ base: normalized, preview: false });
@@ -480,6 +631,10 @@ function useStudioState() {
     busy,
     active,
     cancel,
+    livePreviewUrl,
+    notificationsEnabled,
+    toggleNotifications,
+    clearBadge,
     storageError: saveError || presetError || historyError || familySaveError,
   };
 }

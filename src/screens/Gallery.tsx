@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Images, Search, Trash2 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useStudio } from '../studio';
@@ -7,12 +7,16 @@ import { imageUrl, thumbnailUrl } from '../api';
 import { Modal, Empty, IconButton } from '../components/ui';
 import { Result } from '../components/Result';
 export default function Gallery() {
-  const { jobs, setJobs, notify } = useStudio();
+  const { jobs, setJobs, notify, clearBadge } = useStudio();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [params] = useSearchParams();
   const [selected, setSelected] = useState<string | null>(() => params.get('job'));
   const [remove, setRemove] = useState<Job | null>(null);
+
+  useEffect(() => {
+    clearBadge();
+  }, [clearBadge]);
   const shown = jobs.filter(
     (j) =>
       (filter === 'all' ||

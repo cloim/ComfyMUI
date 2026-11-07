@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Link2, Check, Wifi, Info, Smartphone, ShieldCheck, ArrowUpRight } from 'lucide-react';
+import { Link2, Check, Wifi, Info, Smartphone, ShieldCheck, ArrowUpRight, Bell } from 'lucide-react';
 import { useStudio } from '../studio';
 import { usePwa } from '../pwa';
 import { Section, Spinner, Status, FieldError } from '../components/ui';
@@ -16,6 +16,8 @@ export default function Settings() {
     online,
     presets,
     jobs,
+    notificationsEnabled,
+    toggleNotifications,
   } = useStudio();
   const [base, setBase] = useState(connection.base);
   const [localError, setLocalError] = useState('');
@@ -162,6 +164,28 @@ export default function Settings() {
             iPhone은 Safari 공유 메뉴에서 ‘홈 화면에 추가’를 선택하세요
             <br />
             저장한 입력과 프리셋은 오프라인에서도 열 수 있어요
+          </p>
+        </div>
+      </Section>
+      <Section title="화면 유지와 완료 알림" icon={Bell}>
+        <div className="flex flex-col gap-4">
+          <p className="text-sm leading-relaxed text-muted">
+            생성 중에는 화면이 꺼지지 않도록 유지하고, 앱이 백그라운드일 때 생성이 끝나면 알림과 진동으로 알려드려요.
+          </p>
+          <div data-ui-audit-row className="flex flex-wrap items-center gap-2">
+            <button
+              className={notificationsEnabled ? 'btn-primary' : 'btn-secondary'}
+              onClick={() => toggleNotifications()}
+            >
+              <Bell size={16} />
+              {notificationsEnabled ? '완료 알림 켜짐' : '완료 알림 켜기'}
+            </button>
+            <Status>
+              {'wakeLock' in navigator ? '화면 유지 지원됨' : '화면 유지 미지원'}
+            </Status>
+          </div>
+          <p className="text-xs leading-relaxed text-muted">
+            알림 권한을 허용하면 다른 탭이나 앱을 보는 동안 생성이 끝나도 바로 알 수 있어요. 설치된 PWA에서는 읽지 않은 완료 개수도 배지로 표시돼요.
           </p>
         </div>
       </Section>
