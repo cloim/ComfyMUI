@@ -416,17 +416,8 @@ export function buildWorkflow(s: Generation): Workflow {
     };
     w['5'].inputs.positive = ['20', 0];
   } else if (s.architecture === 'krea2') {
-    w['20'] = {
-      class_type: 'ModelSamplingFlux',
-      inputs: {
-        model: [modelSource, 0],
-        max_shift: 1.15,
-        base_shift: 0.5,
-        width: s.width,
-        height: s.height,
-      },
-    };
-    w['5'].inputs.model = ['20', 0];
+    // Krea 2 Turbo is a distilled single-stream DiT model that manages its own sampling schedule.
+    // Injecting ModelSamplingFlux distorts its timesteps and produces severe droplet/scale patch artifacts.
     if (s.cfg === 1)
       w['3'] = { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['2', 0] } };
   } else if (s.architecture === 'qwen21') {

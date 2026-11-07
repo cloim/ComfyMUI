@@ -24,12 +24,15 @@ export function usePwa() {
       navigator.serviceWorker
         .register('/sw.js')
         .then((r) => {
-          if (r.waiting) setWaiting(r.waiting);
+          if (r.waiting) {
+            r.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
           r.addEventListener('updatefound', () => {
             const worker = r.installing;
             worker?.addEventListener('statechange', () => {
-              if (worker.state === 'installed' && navigator.serviceWorker.controller)
-                setWaiting(worker);
+              if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                worker.postMessage({ type: 'SKIP_WAITING' });
+              }
             });
           });
         })

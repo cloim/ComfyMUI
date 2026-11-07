@@ -197,8 +197,8 @@ describe('family-specific native graphs', () => {
         expect(w['5'].inputs.negative).toEqual(['2', 1]);
       }
       if (family === 'krea2') {
-        expect(w['20'].class_type).toBe('ModelSamplingFlux');
-        expect(w['20'].inputs.width).toBe(768);
+        expect(w['20']).toBeUndefined();
+        expect(w['5'].inputs.model).toEqual(['1', 0]);
         expect(w['3'].class_type).toBe('ConditioningZeroOut');
       }
     },
@@ -214,7 +214,7 @@ describe('family-specific native graphs', () => {
       loras: [{ name: 'Krea2/style.safetensors', model: 0.7, clip: 0 }],
     });
     expect(w['100'].class_type).toBe('LoraLoaderModelOnly');
-    expect(w['20'].inputs.model).toEqual(['100', 0]);
+    expect(w['5'].inputs.model).toEqual(['100', 0]);
     expect(w['2'].inputs.clip).toEqual(['8', 0]);
   });
   it('uses GGUF diffusion and mixed GGUF Flux text encoders with the correct LoRA outputs', () => {
