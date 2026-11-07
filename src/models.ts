@@ -25,6 +25,127 @@ export function isArtifactProneSampler(sampler: string): boolean {
     INCOMPATIBLE_SDE_SAMPLERS.some((bad) => s === bad || s.includes(bad)) || s.endsWith('_sde')
   );
 }
+
+export type QualityRecommendation = {
+  sampler: string;
+  scheduler: string;
+  steps: number;
+  cfg: number;
+  guidance?: number;
+  badge: string;
+  reason: string;
+};
+
+export const qualityProfiles: Record<ModelFamily, QualityRecommendation> = {
+  flux: {
+    sampler: 'euler',
+    scheduler: 'simple',
+    steps: 24,
+    cfg: 1.0,
+    guidance: 3.5,
+    badge: '정밀 12B Flow Matching',
+    reason:
+      'Flow Matching 아키텍처 특성상 euler 샘플러와 CFG 1.0, Guidance 3.5에서 피부 질감과 섬세한 조명 디테일이 가장 깨끗하게 표현돼요.',
+  },
+  krea2: {
+    sampler: 'euler',
+    scheduler: 'simple',
+    steps: 8,
+    cfg: 1.0,
+    badge: '8스텝 증류 가속 모델',
+    reason:
+      'Krea2는 8스텝 증류 모델로, SDE 샘플러를 피하고 euler 8스텝을 사용할 때 피부 비늘 결함 없이 가장 맑고 사실적인 인물이 완성돼요.',
+  },
+  moss: {
+    sampler: 'euler',
+    scheduler: 'simple',
+    steps: 24,
+    cfg: 4.0,
+    badge: 'MOSS Image Flow',
+    reason: '프롬프트 충실도와 부드러운 피부 톤, 사실적인 심도 표현을 위한 공식 최적 균형값이에요.',
+  },
+  qwen21: {
+    sampler: 'euler',
+    scheduler: 'simple',
+    steps: 28,
+    cfg: 4.0,
+    badge: 'Qwen VL 멀티모달 DiT',
+    reason:
+      'Qwen VL 인코더의 정밀한 묘사력을 극대화하여 미세 질감과 이목구비 선명도를 완벽하게 살려줘요.',
+  },
+};
+
+export type QualityIssue = {
+  id: string;
+  title: string;
+  message: string;
+  fix: Partial<Generation>;
+};
+
+export function checkQualityIssues(s: Generation): QualityIssue[] {
+  const issues: QualityIssue[] = [];
+  const prof = qualityProfiles[s.architecture] || qualityProfiles.flux;
+
+  if (isArtifactProneSampler(s.sampler)) {
+    issues.push({
+      id: 'sde-artifact',
+      title: '피부 비늘 아티팩트 위험',
+      message: `${families.find((f) => f.id === s.architecture)?.label || '현재'} 계열은 Flow Matching 모델로, SDE 샘플러(${s.sampler}) 사용 시 피부에 비늘 모양 노이즈 파편이 발생해요.`,
+      fix: { sampler: prof.sampler, scheduler: prof.scheduler },
+    });
+  }
+
+  if (s.architecture === 'krea2' && s.steps > 10) {
+    issues.push({
+      id: 'krea-steps',
+      title: 'Krea2 스텝 수 과다 (화질 저하)',
+      message: `Krea2는 8스텝 증류 가속 모델이에요. 스텝이 ${s.steps}스텝으로 너무 높으면 노이즈가 과도하게 누적되어 피부와 디테일이 얼룩지거나 왜곡될 수 있어요.`,
+      fix: { steps: 8 },
+    });
+  }
+
+  if (s.architecture === 'flux' && s.cfg !== 1.0) {
+    issues.push({
+      id: 'flux-cfg',
+      title: 'Flux1.d CFG 1.0 권장',
+      message: `Flux1.d 모델은 CFG 1.0 고정이 필수예요. CFG를 올리면 이미지가 타거나 채도가 깨지며, 디테일은 Guidance(3.5 권장)로 제어해야 해요.`,
+      fix: { cfg: 1.0, guidance: 3.5 },
+    });
+  }
+
+  if (['moss', 'qwen21'].includes(s.architecture) && (s.cfg < 2.5 || s.cfg > 6.0)) {
+    issues.push({
+      id: 'flow-cfg',
+      title: `${families.find((f) => f.id === s.architecture)?.label} CFG 수치 점검`,
+      message: `${families.find((f) => f.id === s.architecture)?.label} 모델은 프롬프트 반영도와 자연스러운 대비를 위해 CFG 3.5~4.5가 가장 이상적이에요. (현재: ${s.cfg})`,
+      fix: { cfg: 4.0 },
+    });
+  }
+
+  return issues;
+}
+
+export function getOptimalQualitySettings(arch: ModelFamily): Partial<Generation> {
+  const p = qualityProfiles[arch] || qualityProfiles.flux;
+  return {
+    sampler: p.sampler,
+    scheduler: p.scheduler,
+    steps: p.steps,
+    cfg: p.cfg,
+    ...(p.guidance ? { guidance: p.guidance } : {}),
+  };
+}
+
+export function isOptimalQuality(s: Generation): boolean {
+  const p = qualityProfiles[s.architecture];
+  if (!p) return false;
+  const matchSampler = s.sampler === p.sampler;
+  const matchSched = s.scheduler === p.scheduler;
+  const matchSteps = s.steps === p.steps;
+  const matchCfg = s.cfg === p.cfg;
+  const matchGuidance = s.architecture !== 'flux' || s.guidance === p.guidance;
+  return matchSampler && matchSched && matchSteps && matchCfg && matchGuidance;
+}
 export type FamilyAssignments = Record<string, ModelFamily>;
 export type ModelEntry = {
   id: string;
@@ -177,7 +298,7 @@ export function selectModel(
         : entry.family === 'krea2'
           ? vaes.find((v) => /qwen_image_vae/i.test(v)) || vaes[0] || ''
           : vaes[0] || '',
-    ...(!same
+    ...(!same || isArtifactProneSampler(s.sampler)
       ? {
           steps: profile.steps,
           cfg: profile.cfg,

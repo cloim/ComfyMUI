@@ -14,6 +14,10 @@ import {
   validateSelection,
   comboOptions,
   families,
+  qualityProfiles,
+  checkQualityIssues,
+  getOptimalQualitySettings,
+  isOptimalQuality,
 } from '../src/models';
 const info: ObjectInfo = {
   CheckpointLoaderSimple: {
@@ -244,5 +248,52 @@ describe('family-specific native graphs', () => {
       info,
     );
     expect(() => buildWorkflow({ ...q, width: 752 })).toThrow('32');
+  });
+  it('recommends optimal quality parameters and detects quality degradation issues per family', () => {
+    // 1. Profile definitions
+    expect(qualityProfiles.krea2.steps).toBe(8);
+    expect(qualityProfiles.krea2.sampler).toBe('euler');
+    expect(qualityProfiles.flux.steps).toBe(24);
+    expect(qualityProfiles.flux.cfg).toBe(1.0);
+    expect(qualityProfiles.moss.cfg).toBe(4.0);
+    expect(qualityProfiles.qwen21.steps).toBe(28);
+
+    // 2. Optimal setting getter
+    const kreaOpt = getOptimalQualitySettings('krea2');
+    expect(kreaOpt.steps).toBe(8);
+    expect(kreaOpt.sampler).toBe('euler');
+    expect(kreaOpt.cfg).toBe(1.0);
+
+    // 3. Quality issue detection
+    // Krea2 with SDE sampler and 16 steps should report 2 issues
+    const badKreaIssues = checkQualityIssues({
+      ...defaults,
+      architecture: 'krea2',
+      sampler: 'dpmpp_2m_sde',
+      steps: 16,
+    });
+    expect(badKreaIssues.some((i) => i.id === 'sde-artifact')).toBe(true);
+    expect(badKreaIssues.some((i) => i.id === 'krea-steps')).toBe(true);
+
+    // Flux with high CFG should report flux-cfg issue
+    const badFluxIssues = checkQualityIssues({
+      ...defaults,
+      architecture: 'flux',
+      cfg: 3.5,
+    });
+    expect(badFluxIssues.some((i) => i.id === 'flux-cfg')).toBe(true);
+
+    // Optimal settings should have zero issues and return true for isOptimalQuality
+    const optimalFlux = {
+      ...defaults,
+      architecture: 'flux' as const,
+      sampler: 'euler',
+      scheduler: 'simple',
+      steps: 24,
+      cfg: 1.0,
+      guidance: 3.5,
+    };
+    expect(checkQualityIssues(optimalFlux)).toHaveLength(0);
+    expect(isOptimalQuality(optimalFlux)).toBe(true);
   });
 });

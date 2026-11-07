@@ -342,3 +342,24 @@ test('click image surface opens fullscreen viewer with zoom controls, pinch read
   await page.keyboard.press('Escape');
   await expect(viewer).toHaveCount(0);
 });
+test('advanced settings shows quality recommendation card and auto-fixes quality degradation', async ({
+  page,
+}) => {
+  await page.goto('/create');
+  await page.getByRole('button', { name: '고급 설정', exact: true }).click();
+
+  // 최고 화질 공식 권장 카드 표시 확인
+  await expect(page.getByText(/최고 화질 공식 권장값/)).toBeVisible();
+
+  // CFG를 비권장 수치(3.5)로 변경하여 화질 경고 유도
+  await page.getByLabel('CFG', { exact: true }).fill('3.5');
+  await expect(page.getByText('Flux1.d CFG 1.0 권장')).toBeVisible();
+
+  // 즉시 보정 버튼 클릭
+  await page.getByRole('button', { name: '즉시 보정' }).click();
+  await expect(page.getByText('Flux1.d CFG 1.0 권장')).toHaveCount(0);
+  expect(await page.getByLabel('CFG', { exact: true }).inputValue()).toBe('1');
+
+  // 모달 닫기
+  await page.keyboard.press('Escape');
+});

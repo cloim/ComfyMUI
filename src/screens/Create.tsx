@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ArrowDownUp,
   Sparkles,
+  Check,
   FileJson,
   Upload,
   Download,
@@ -39,7 +40,16 @@ import {
 } from '../components/ui';
 import { Result } from '../components/Result';
 import ModelPanel from '../components/ModelPanel';
-import { compatibleAssets, selectedEntry, isArtifactProneSampler, families } from '../models';
+import {
+  compatibleAssets,
+  selectedEntry,
+  isArtifactProneSampler,
+  families,
+  qualityProfiles,
+  checkQualityIssues,
+  getOptimalQualitySettings,
+  isOptimalQuality,
+} from '../models';
 
 export default function Create() {
   const { settings: s, setSettings, info, familyAssignments, notify } = useStudio();
@@ -274,7 +284,7 @@ export default function Create() {
           </span>
           <span className="flex items-center gap-2 font-mono text-[11px] text-muted">
             <span className="hidden sm:inline">
-              {s.steps} steps | CFG {s.cfg}
+              {s.steps} steps | CFG {s.cfg} | {s.sampler}
             </span>
             <ChevronDown size={16} />
           </span>
@@ -450,6 +460,94 @@ function Advanced({
                   가져온 워크플로가 활성화되어 있어요 | API 워크플로 탭에서 실행값을 수정해 주세요
                 </p>
               )}
+              {(() => {
+                const prof = qualityProfiles[s.architecture] || qualityProfiles.flux;
+                const optimal = isOptimalQuality(s);
+                const issues = checkQualityIssues(s);
+                const archLabel =
+                  families.find((f) => f.id === s.architecture)?.label || s.architecture;
+                return (
+                  <div className="flex flex-col gap-3">
+                    <div className="rounded-2xl border border-olive/30 bg-lime/10 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-olive text-lime">
+                            <Sparkles size={15} />
+                          </span>
+                          <div>
+                            <p className="text-xs font-bold text-ink">
+                              {archLabel} 최고 화질 공식 권장값
+                            </p>
+                            <p className="text-[11px] text-muted">{prof.badge}</p>
+                          </div>
+                        </div>
+                        {optimal ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-olive/15 px-2.5 py-1 text-[11px] font-semibold text-olive">
+                            <Check size={12} />
+                            최고 화질 적용됨
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-primary min-h-8 px-3 py-1.5 text-[11px]"
+                            onClick={() => {
+                              patch(getOptimalQualitySettings(s.architecture));
+                              notify(`${archLabel} 최고 화질 권장 설정으로 맞추었어요`);
+                            }}
+                          >
+                            최고 화질 권장값 적용
+                          </button>
+                        )}
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-mono text-ink/90 sm:grid-cols-4">
+                        <div className="rounded-lg bg-white/80 p-2 text-center">
+                          <span className="block text-[10px] text-muted">Sampler</span>
+                          <span className="font-semibold">{prof.sampler}</span>
+                        </div>
+                        <div className="rounded-lg bg-white/80 p-2 text-center">
+                          <span className="block text-[10px] text-muted">Scheduler</span>
+                          <span className="font-semibold">{prof.scheduler}</span>
+                        </div>
+                        <div className="rounded-lg bg-white/80 p-2 text-center">
+                          <span className="block text-[10px] text-muted">Steps</span>
+                          <span className="font-semibold">{prof.steps}</span>
+                        </div>
+                        <div className="rounded-lg bg-white/80 p-2 text-center">
+                          <span className="block text-[10px] text-muted">CFG</span>
+                          <span className="font-semibold">{prof.cfg}</span>
+                        </div>
+                      </div>
+                      <p className="mt-2.5 text-[11px] leading-relaxed text-muted">
+                        💡 {prof.reason}
+                      </p>
+                    </div>
+
+                    {issues.map((issue) => (
+                      <div
+                        key={issue.id}
+                        className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs leading-relaxed text-amber-900"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-amber-950">⚠️ {issue.title}</p>
+                            <p className="mt-1 text-amber-900/90">{issue.message}</p>
+                          </div>
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-xl bg-amber-200/80 px-3 py-2 text-[11px] font-semibold text-amber-950 transition hover:bg-amber-300 active:scale-95"
+                            onClick={() => {
+                              patch(issue.fix);
+                              notify('화질 저하 요소를 안전하게 보정했어요');
+                            }}
+                          >
+                            즉시 보정
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
               <fieldset
                 disabled={Boolean(s.workflow)}
                 className="flex flex-col gap-5 disabled:opacity-40"
@@ -530,29 +628,6 @@ function Advanced({
                     </SelectControl>
                   </Field>
                 </div>
-                {isArtifactProneSampler(s.sampler) && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-                    <p className="font-semibold">피부 비늘 아티팩트 주의</p>
-                    <p className="mt-1">
-                      {families.find((f) => f.id === s.architecture)?.label || '현재'} 계열은 Flow
-                      Matching 모델로, SDE 샘플러({s.sampler}) 사용 시 얼굴과 피부에 비늘 모양
-                      노이즈 파편이 발생할 수 있어요.
-                    </p>
-                    <button
-                      type="button"
-                      className="btn-secondary mt-2 text-xs"
-                      onClick={() =>
-                        patch({
-                          sampler: 'euler',
-                          scheduler: 'simple',
-                          steps: s.architecture === 'krea2' ? 8 : 24,
-                        })
-                      }
-                    >
-                      권장 설정(euler, {s.architecture === 'krea2' ? '8' : '24'}스텝)으로 변경
-                    </button>
-                  </div>
-                )}
                 <Numeric
                   label="Denoise"
                   value={s.denoise}
