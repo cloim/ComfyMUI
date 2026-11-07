@@ -1,6 +1,8 @@
 // Isolated ComfyUI protocol fixture, used only by npm run test:e2e.
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
+import { WebSocketServer } from 'ws';
+
 const jobs = new Map();
 const choices = (values) => [values];
 const schema = {
@@ -171,6 +173,50 @@ const mock = createServer(async (req, res) => {
         return send({ error: { message: 'API contract mismatch' } }, 400);
       const id = crypto.randomUUID();
       jobs.set(id, { start: Date.now(), prompt: data.prompt, text, cancelled: false });
+
+      if (!text.includes('slow')) {
+        setTimeout(() => {
+          for (const ws of wsClients) {
+            if (ws.readyState === 1) {
+              ws.send(JSON.stringify({ type: 'execution_start', data: { prompt_id: id } }));
+              ws.send(JSON.stringify({ type: 'progress', data: { value: 50, max: 100, prompt_id: id } }));
+            }
+          }
+        }, 150);
+
+        if (text.includes('execution-error')) {
+          setTimeout(() => {
+            for (const ws of wsClients) {
+              if (ws.readyState === 1) {
+                ws.send(JSON.stringify({
+                  type: 'execution_error',
+                  data: { prompt_id: id, exception_message: 'mock out of memory' },
+                }));
+              }
+            }
+          }, 800);
+        } else {
+          setTimeout(() => {
+            const j = jobs.get(id);
+            if (j && !j.cancelled) {
+              j.wsCompleted = true;
+              for (const ws of wsClients) {
+                if (ws.readyState === 1) {
+                  ws.send(JSON.stringify({
+                    type: 'executing',
+                    data: { node: null, prompt_id: id },
+                  }));
+                  ws.send(JSON.stringify({
+                    type: 'executed',
+                    data: { node: '7', prompt_id: id, output: {} },
+                  }));
+                }
+              }
+            }
+          }, 1000);
+        }
+      }
+
       return send({ prompt_id: id, number: 1, node_errors: {} });
     }
     if (url.pathname === '/queue') {
@@ -184,7 +230,7 @@ const mock = createServer(async (req, res) => {
   if (url.pathname === '/queue')
     return send({
       queue_running: [...jobs]
-        .filter(([, j]) => !j.cancelled && !j.text.includes('slow') && Date.now() - j.start < 2200)
+        .filter(([, j]) => !j.cancelled && !j.text.includes('slow') && (Date.now() - j.start < 2200 || !j.wsCompleted))
         .map(([id]) => [1, id, {}, {}]),
       queue_pending: [...jobs]
         .filter(([, j]) => !j.cancelled && j.text.includes('slow'))
@@ -193,7 +239,7 @@ const mock = createServer(async (req, res) => {
   if (url.pathname.startsWith('/history/')) {
     const id = url.pathname.slice('/history/'.length),
       j = jobs.get(id);
-    if (!j || j.cancelled || j.text.includes('slow') || Date.now() - j.start < 2200)
+    if (!j || j.cancelled || j.text.includes('slow') || (!j.wsCompleted && Date.now() - j.start < 2200))
       return send({});
     if (j.text.includes('execution-error'))
       return send({
@@ -222,6 +268,22 @@ const mock = createServer(async (req, res) => {
     });
   }
   send({ error: 'Not found' }, 404);
+});
+
+const wss = new WebSocketServer({ noServer: true });
+const wsClients = new Set();
+wss.on('connection', (ws) => {
+  wsClients.add(ws);
+  ws.on('close', () => wsClients.delete(ws));
+});
+mock.on('upgrade', (req, socket, head) => {
+  if (req.url?.startsWith('/ws')) {
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  } else {
+    socket.destroy();
+  }
 });
 await new Promise((resolve) => mock.listen(8799, '127.0.0.1', resolve));
 process.env.COMFY_URL = 'http://127.0.0.1:8799';

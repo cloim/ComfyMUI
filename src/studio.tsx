@@ -71,6 +71,8 @@ function useStudioState() {
   const [notice, setNotice] = useState('');
   const [online, setOnline] = useState(navigator.onLine);
   const [socketState, setSocketState] = useState('폴링 대기');
+  const isWsConnectedRef = useRef(false);
+  const pendingHistoryRef = useRef(new Set<string>());
   const [busy, setBusy] = useState(false);
   const submitLock = useRef(false);
   const [clientId] = useState(newId);
@@ -193,10 +195,48 @@ function useStudioState() {
       socket: WebSocket,
       timer: ReturnType<typeof setTimeout>,
       attempts = 0;
+    async function fetchHistoryOnce(promptId: string, base: string) {
+      if (pendingHistoryRef.current.has(promptId)) return;
+      pendingHistoryRef.current.add(promptId);
+      try {
+        const h = await request<Record<string, HistoryItem>>(
+          base,
+          `/history/${encodeURIComponent(promptId)}`,
+        );
+        const item = h[promptId];
+        if (item) {
+          if (item.status?.status_str === 'error') {
+            updateJob(promptId, {
+              status: 'error',
+              error: JSON.stringify(item.status.messages || '서버 생성 오류'),
+            });
+            return;
+          }
+          const images = Object.values(item.outputs || {}).flatMap((n) => n.images || []);
+          if (item.status?.completed || images.length) {
+            updateJob(
+              promptId,
+              images.length
+                ? { status: 'complete', progress: 100, images }
+                : {
+                    status: 'error',
+                    error:
+                      '생성은 끝났지만 이미지 출력이 없습니다. SaveImage 출력을 확인해 주세요',
+                  },
+            );
+          }
+        }
+      } catch {
+        /* Poll fallback will retry */
+      } finally {
+        pendingHistoryRef.current.delete(promptId);
+      }
+    }
     function open() {
       socket = new WebSocket(websocketUrl(connection.base, clientId));
       socket.onopen = () => {
         attempts = 0;
+        isWsConnectedRef.current = true;
         setSocketState('실시간 연결');
       };
       socket.onmessage = (event) => {
@@ -213,6 +253,9 @@ function useStudioState() {
               progress: Math.min(99, Math.round((data.value / Math.max(1, data.max)) * 100)),
             });
           if (type === 'execution_start') updateJob(j.id, { status: 'running' });
+          if ((type === 'executing' && data.node === null) || type === 'executed') {
+            void fetchHistoryOnce(j.id, j.base);
+          }
           if (type === 'execution_error' || type === 'execution_interrupted')
             updateJob(j.id, {
               status: 'error',
@@ -224,6 +267,7 @@ function useStudioState() {
       };
       socket.onerror = () => socket.close();
       socket.onclose = () => {
+        isWsConnectedRef.current = false;
         setSocketState('폴링으로 확인 중');
         if (!stopped) timer = setTimeout(open, Math.min(10000, 1000 * 2 ** attempts++));
       };
@@ -231,13 +275,15 @@ function useStudioState() {
     open();
     return () => {
       stopped = true;
+      isWsConnectedRef.current = false;
       clearTimeout(timer);
       socket?.close();
     };
   }, [connection, clientId, online]);
   useEffect(() => {
     let stopped = false,
-      polling = false;
+      polling = false,
+      pollTimer: ReturnType<typeof setTimeout>;
     async function poll() {
       if (polling || !navigator.onLine) return;
       polling = true;
@@ -294,11 +340,18 @@ function useStudioState() {
         polling = false;
       }
     }
-    void poll();
-    const timer = setInterval(poll, 2500);
+    function schedulePoll() {
+      if (stopped) return;
+      const delay = isWsConnectedRef.current ? 15000 : 2500;
+      pollTimer = setTimeout(async () => {
+        await poll();
+        schedulePoll();
+      }, delay);
+    }
+    void poll().then(() => schedulePoll());
     return () => {
       stopped = true;
-      clearInterval(timer);
+      clearTimeout(pollTimer);
     };
   }, []);
   useEffect(() => {
