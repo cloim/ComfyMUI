@@ -36,13 +36,40 @@ import {
   type FamilyAssignments,
 } from './models';
 import { parseBinaryPreview } from './preview';
+import { idbGet, idbSet, migrateLocalStorageToIDB } from './storage';
 
-function usePersisted<T>(key: string, initial: T, migrate?: (v: T) => T) {
+function usePersisted<T>(
+  key: string,
+  initial: T,
+  options?: {
+    migrate?: (v: T) => T;
+    debounceMs?: number;
+    useIDB?: boolean;
+  },
+) {
   const [value, setValue] = useState<T>(() => {
     const raw = readStored(key, initial);
-    return migrate ? migrate(raw) : raw;
+    return options?.migrate ? options.migrate(raw) : raw;
   });
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (options?.useIDB) {
+      void migrateLocalStorageToIDB().then(async () => {
+        try {
+          const stored = await idbGet<T>(key);
+          if (stored !== undefined) {
+            setValue((prev) => {
+              return options?.migrate ? options.migrate(stored) : stored;
+            });
+          }
+        } catch {
+          /* ignore initial idb read error */
+        }
+      });
+    }
+  }, [key]);
+
   useEffect(() => {
     try {
       localStorage.setItem(key, JSON.stringify(value));
@@ -50,20 +77,38 @@ function usePersisted<T>(key: string, initial: T, migrate?: (v: T) => T) {
     } catch {
       setFailed(true);
     }
-  }, [key, value]);
+
+    if (options?.useIDB) {
+      if (options?.debounceMs) {
+        const timer = setTimeout(() => {
+          void idbSet(key, value).catch(() => setFailed(true));
+        }, options.debounceMs);
+        return () => clearTimeout(timer);
+      }
+      void idbSet(key, value).catch(() => setFailed(true));
+    }
+  }, [key, value, options?.debounceMs, options?.useIDB]);
+
   return [value, setValue, failed] as const;
 }
+
 function useStudioState() {
   const [settings, setSettings, saveError] = usePersisted<Generation>(
     'cm-settings',
     defaults,
-    migrateGenerationSettings,
+    { migrate: migrateGenerationSettings, debounceMs: 300, useIDB: true },
   );
-  const [presets, setPresets, presetError] = usePersisted<Preset[]>('cm-presets', []);
+  const [presets, setPresets, presetError] = usePersisted<Preset[]>('cm-presets', [], {
+    useIDB: true,
+  });
   const [familyAssignments, setFamilyAssignments, familySaveError] =
-    usePersisted<FamilyAssignments>('cm-asset-families', {});
-  const [jobs, setJobs, historyError] = usePersisted<Job[]>('cm-jobs', []);
-  const [clientQueue, setClientQueue, queueError] = usePersisted<QueueItem[]>('cm-client-queue', []);
+    usePersisted<FamilyAssignments>('cm-asset-families', {}, { useIDB: true });
+  const [jobs, setJobs, historyError] = usePersisted<Job[]>('cm-jobs', [], { useIDB: true });
+  const [clientQueue, setClientQueue, queueError] = usePersisted<QueueItem[]>(
+    'cm-client-queue',
+    [],
+    { useIDB: true },
+  );
   const [connection, setConnection] = usePersisted('cm-connection', {
     base: '/comfy',
     preview: true,
@@ -142,21 +187,34 @@ function useStudioState() {
       setConnectionState('preview');
       return;
     }
-    setInfo(null);
+    const cacheKey = 'cm-info-cache:' + connection.base;
+    let hasStale = false;
+    void idbGet<ObjectInfo>(cacheKey).then((cached) => {
+      if (!active) return;
+      if (cached && Object.keys(cached).length && Object.values(cached).some((n) => n.input)) {
+        hasStale = true;
+        setInfo(cached);
+      }
+    });
     setConnectionState('connecting');
     fetchInfo(connection.base)
       .then((data) => {
         if (!active) return;
         if (!data || !Object.keys(data).length || !Object.values(data).some((n) => n.input))
           throw new Error('ComfyUI 노드 정보를 확인해 주세요');
-        setInfo(data);
+        setInfo((prev) => {
+          if (prev && JSON.stringify(prev) === JSON.stringify(data)) return prev;
+          return data;
+        });
         setConnectionState('connected');
         setConnectionError('');
+        void idbSet(cacheKey, data);
       })
       .catch((e) => {
         if (active) {
           setConnectionState('error');
           setConnectionError(e.message);
+          if (!hasStale) setInfo(null);
         }
       });
     return () => {
@@ -438,7 +496,7 @@ function useStudioState() {
         progress: 0,
         images: [],
       };
-      setJobs((all) => [job, ...all].slice(0, 100));
+      setJobs((all) => [job, ...all].slice(0, 500));
       if (!connection.preview) {
         const response = await submit(connection.base, workflow, clientId);
         if (!response.prompt_id) throw new Error('서버의 작업 번호를 확인할 수 없습니다');

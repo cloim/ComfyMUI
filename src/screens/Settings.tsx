@@ -197,7 +197,7 @@ export default function Settings() {
             <Status>{online ? '온라인' : '오프라인'}</Status>
           </div>
           <p className="text-xs leading-relaxed text-muted">
-            프롬프트, 설정과 최근 100개 기록을 이 브라우저에 보관해요
+            프롬프트, 설정과 최근 500개 기록을 IndexedDB에 안전하게 보관해요
             <br />
             이미지 원본은 ComfyUI 서버에서 불러옵니다
             <br />
