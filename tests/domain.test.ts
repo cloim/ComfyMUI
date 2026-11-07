@@ -8,6 +8,7 @@ import {
   parseSettings,
   isLegacyDefaultPrompt,
   migrateGenerationSettings,
+  trimJobsPreservingFavorites,
   type ObjectInfo,
 } from '../src/domain';
 const settings = {
@@ -155,5 +156,25 @@ describe('portable presets', () => {
     });
     expect(goodFlux.sampler).toBe('euler');
     expect(goodFlux.steps).toBe(24);
+  });
+  it('protects favorite jobs during job trimming when limit is reached', () => {
+    const jobs = Array.from({ length: 10 }, (_, i) => ({
+      id: `job-${i}`,
+      createdAt: i * 1000,
+      base: 'http://localhost:8188',
+      preview: false,
+      status: 'complete' as const,
+      progress: 100,
+      images: [],
+      settings,
+      favorite: i === 0 || i === 2, // 가장 오래된 0번과 2번이 즐겨찾기
+    }));
+
+    // limit을 5개로 줄였을 때
+    const trimmed = trimJobsPreservingFavorites(jobs, 5);
+    expect(trimmed.length).toBe(5);
+    // 즐겨찾기 2건은 반드시 보존되어야 함
+    expect(trimmed.some((j) => j.id === 'job-0')).toBe(true);
+    expect(trimmed.some((j) => j.id === 'job-2')).toBe(true);
   });
 });

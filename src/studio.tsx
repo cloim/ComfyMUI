@@ -15,6 +15,7 @@ import {
   type Job,
   type QueueItem,
   reorderQueue,
+  trimJobsPreservingFavorites,
   type ObjectInfo,
 } from './domain';
 import {
@@ -262,7 +263,19 @@ function useStudioState() {
           (!patch.status || ['queued', 'running'].includes(patch.status))
         )
           return j;
-        return { ...j, ...patch };
+        const now = Date.now();
+        const nextStartedAt =
+          patch.status === 'running' && !j.startedAt ? now : (patch.startedAt ?? j.startedAt);
+        const nextCompletedAt =
+          patch.status === 'complete' && !j.completedAt
+            ? now
+            : (patch.completedAt ?? j.completedAt);
+        return {
+          ...j,
+          ...patch,
+          startedAt: nextStartedAt,
+          completedAt: nextCompletedAt,
+        };
       }),
     );
   }
@@ -458,12 +471,15 @@ function useStudioState() {
         all.map((j) => {
           if (!j.preview || !['running', 'queued'].includes(j.status)) return j;
           const progress = Math.min(100, Math.round((Date.now() - j.createdAt) / 45));
+          const isDone = progress === 100;
           return {
             ...j,
             progress,
-            status: progress === 100 ? 'complete' : 'running',
+            status: isDone ? 'complete' : 'running',
+            startedAt: j.startedAt || j.createdAt,
+            completedAt: isDone ? (j.completedAt || Date.now()) : undefined,
             images:
-              progress === 100 ? [{ filename: 'sample.svg', subfolder: '', type: 'output' }] : [],
+              isDone ? [{ filename: 'sample.svg', subfolder: '', type: 'output' }] : [],
           };
         }),
       );
@@ -493,10 +509,11 @@ function useStudioState() {
         base: connection.base,
         preview: connection.preview,
         status: connection.preview ? 'running' : 'submitting',
+        startedAt: connection.preview ? Date.now() : undefined,
         progress: 0,
         images: [],
       };
-      setJobs((all) => [job, ...all].slice(0, 500));
+      setJobs((all) => trimJobsPreservingFavorites([job, ...all], 500));
       if (!connection.preview) {
         const response = await submit(connection.base, workflow, clientId);
         if (!response.prompt_id) throw new Error('서버의 작업 번호를 확인할 수 없습니다');
@@ -628,6 +645,24 @@ function useStudioState() {
     a.download = job.images[0].filename || 'image.png';
     a.target = '_blank';
     a.click();
+  }
+
+  function toggleFavorite(id: string) {
+    setJobs((all) =>
+      all.map((j) => {
+        if (j.id !== id) return j;
+        const nextFav = !j.favorite;
+        notify(nextFav ? '즐겨찾기에 등록했어요' : '즐겨찾기에서 해제했어요');
+        return { ...j, favorite: nextFav };
+      }),
+    );
+  }
+
+  function deleteJobs(ids: string[]) {
+    if (ids.length === 0) return;
+    const set = new Set(ids);
+    setJobs((all) => all.filter((j) => !set.has(j.id)));
+    notify(`${ids.length}개의 기록을 삭제했어요`);
   }
   async function cancel(j: Job) {
     if (j.preview) {
@@ -813,6 +848,8 @@ function useStudioState() {
     generateVariation,
     generateUpscale,
     shareImage,
+    toggleFavorite,
+    deleteJobs,
     livePreviewUrl,
     notificationsEnabled,
     toggleNotifications,

@@ -77,7 +77,20 @@ export type Job = {
   images: ImageRef[];
   livePreview?: string;
   error?: string;
+  favorite?: boolean;
+  startedAt?: number;
+  completedAt?: number;
 };
+
+export function trimJobsPreservingFavorites(jobs: Job[], limit = 500): Job[] {
+  if (jobs.length <= limit) return jobs;
+  const favorites = jobs.filter((j) => j.favorite);
+  const nonFavorites = jobs.filter((j) => !j.favorite);
+  const allowedNonFavorites = Math.max(0, limit - favorites.length);
+  const trimmedNonFavorites = nonFavorites.slice(0, allowedNonFavorites);
+  const combined = [...favorites, ...trimmedNonFavorites];
+  return combined.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
 export const LEGACY_DEFAULT_POSITIVES = [
   'A quiet cabin nestled in a misty alpine forest, warm light glowing through the windows, towering mountains, cinematic composition, soft morning light, intricate details',
 ];
