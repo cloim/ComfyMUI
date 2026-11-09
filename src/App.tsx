@@ -26,7 +26,7 @@ const nav = [
   { path: '/loras', label: 'LoRA', icon: Layers2 },
   { path: '/gallery', label: '기록', icon: Images },
   { path: '/presets', label: '프리셋', icon: Bookmark },
-  { path: '/settings', label: '연결 설정', icon: Settings2 },
+  { path: '/settings', label: '설정', icon: Settings2 },
 ];
 export default function App() {
   return (
