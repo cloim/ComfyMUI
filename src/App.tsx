@@ -11,16 +11,19 @@ import {
   WifiOff,
   Check,
   Workflow,
+  Layers2,
 } from 'lucide-react';
 import { StudioProvider, useStudio } from './studio';
 import { IconButton } from './components/ui';
 import Create, { GenerateBar } from './screens/Create';
 import Gallery from './screens/Gallery';
 import Presets, { PresetEditor } from './screens/Presets';
+import Loras from './screens/Loras';
 import Settings from './screens/Settings';
 import { usePwa } from './pwa';
 const nav = [
   { path: '/create', label: '만들기', icon: Sparkles },
+  { path: '/loras', label: 'LoRA', icon: Layers2 },
   { path: '/gallery', label: '기록', icon: Images },
   { path: '/presets', label: '프리셋', icon: Bookmark },
   { path: '/settings', label: '연결 설정', icon: Settings2 },
@@ -176,13 +179,14 @@ function Shell() {
         <main
           id="main"
           tabIndex={-1}
-          className={`min-h-0 flex-1 outline-none ${['/gallery', '/presets'].includes(location.pathname) ? 'overflow-hidden' : 'overflow-y-auto'}`}
+          className={`min-h-0 flex-1 outline-none ${['/gallery', '/presets', '/loras'].includes(location.pathname) ? 'overflow-hidden' : 'overflow-y-auto'}`}
           data-ui-audit-scroll-root={
-            !['/gallery', '/presets'].includes(location.pathname) ? '' : undefined
+            !['/gallery', '/presets', '/loras'].includes(location.pathname) ? '' : undefined
           }
         >
           <Routes>
             <Route path="/create" element={<Create />} />
+            <Route path="/loras" element={<Loras />} />
             <Route path="/gallery" element={<Gallery />} />
             <Route path="/presets" element={<Presets />} />
             <Route path="/settings" element={<Settings />} />

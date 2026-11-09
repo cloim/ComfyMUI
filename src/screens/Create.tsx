@@ -165,13 +165,21 @@ export default function Create() {
             title="LoRA"
             icon={Layers2}
             action={
-              <button
-                className="-my-1.5 flex min-h-8 items-center gap-1 text-xs font-semibold text-olive"
-                onClick={() => setAddLora(true)}
-              >
-                <Plus size={14} />
-                추가
-              </button>
+              <div className="-my-1.5 flex items-center gap-3">
+                <Link
+                  to="/loras"
+                  className="flex min-h-8 items-center gap-1 text-xs font-medium text-muted hover:text-ink"
+                >
+                  관리
+                </Link>
+                <button
+                  className="flex min-h-8 items-center gap-1 text-xs font-semibold text-olive"
+                  onClick={() => setAddLora(true)}
+                >
+                  <Plus size={14} />
+                  추가
+                </button>
+              </div>
             }
           >
             {s.loras.length ? (
