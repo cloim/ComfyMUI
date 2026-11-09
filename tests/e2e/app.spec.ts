@@ -363,3 +363,64 @@ test('advanced settings shows quality recommendation card and auto-fixes quality
   // 모달 닫기
   await page.keyboard.press('Escape');
 });
+test('LoRA manager browses, updates metadata, applies trigger words, and downloads from CivitAI', async ({
+  page,
+}) => {
+  await connect(page);
+  await page.goto('/loras');
+
+  await expect(page.getByRole('heading', { name: 'Flux Soft Portrait LoRA' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Krea2 Editorial Style' })).toBeVisible();
+
+  // 업데이트 확인 실행
+  await page.getByRole('button', { name: '업데이트 확인' }).click();
+  await expect(page.getByText(/새 버전이 있어요/)).toBeVisible();
+
+  // 태그 필터 관리 모달 열기 및 특정 태그(#editorial) 필터링
+  await page.getByRole('button', { name: '태그 필터' }).click();
+  const tagDialog = page.getByRole('dialog', { name: '# 태그 필터 관리' });
+  await expect(tagDialog).toBeVisible();
+  await tagDialog.getByText('#editorial').click();
+  await tagDialog.getByRole('button', { name: '필터 적용 및 닫기' }).click();
+
+  // #editorial 태그 필터 적용 결과 확인
+  await expect(page.getByRole('heading', { name: 'Krea2 Editorial Style' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Flux Soft Portrait LoRA' })).toHaveCount(0);
+
+  // 상단 활성 태그 칩에서 editorial 태그 필터 해제
+  await page.getByRole('button', { name: 'editorial 태그 필터 해제' }).click();
+  await expect(page.getByRole('heading', { name: 'Flux Soft Portrait LoRA' })).toBeVisible();
+
+  // 페이징 버튼(이전/다음)이 존재하지 않는지 확인
+  await expect(page.getByRole('button', { name: '이전', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '다음', exact: true })).toHaveCount(0);
+
+  // 상세 모달 열기 및 원격 버전 조회
+  await page.getByRole('heading', { name: 'Flux Soft Portrait LoRA' }).click();
+  const detailDialog = page.getByRole('dialog');
+  await expect(detailDialog).toBeVisible();
+  await detailDialog.getByRole('button', { name: '원격 버전 조회' }).click();
+  await expect(detailDialog.getByText('v2.0 HD')).toBeVisible();
+
+  // 적용 후 생성 화면으로 이동 (트리거 워드 자동 반영)
+  await detailDialog.getByRole('button', { name: '적용 후 생성 화면으로' }).click();
+  await expect(page).toHaveURL(/\/create$/);
+  await expect(page.getByText('Flux1.D/soft.safetensors')).toBeVisible();
+  const promptVal = await page.getByLabel('그리고 싶은 장면', { exact: true }).inputValue();
+  expect(promptVal).toContain('soft studio glow');
+
+  // 다시 LoRA 화면에서 CivitAI 다운로드 수행
+  await page.goto('/loras');
+  await page.getByRole('button', { name: 'CivitAI 다운로드' }).click();
+  const dlDialog = page.getByRole('dialog');
+  await dlDialog
+    .getByLabel('CivitAI 주소 또는 ID', { exact: true })
+    .fill('https://civitai.com/models/840370?modelVersionId=990500');
+  await dlDialog.getByRole('button', { name: 'CivitAI 조회' }).click();
+  await expect(dlDialog.getByLabel('다운로드할 버전 선택')).toBeVisible();
+  await dlDialog.getByRole('button', { name: '선택 버전 다운로드' }).click();
+
+  await expect(
+    page.getByRole('heading', { name: /Flux Soft Portrait v2 \(990500\)/ }),
+  ).toBeVisible();
+});

@@ -6,6 +6,59 @@ import { WebSocketServer } from 'ws';
 const jobs = new Map();
 const choices = (values) => [values];
 
+const mockLoras = [
+  {
+    model_name: 'Flux Soft Portrait LoRA',
+    file_name: 'soft',
+    preview_url: '/api/lm/previews?path=soft.svg',
+    preview_nsfw_level: 1,
+    base_model: 'Flux.1 D',
+    folder: 'Flux1.D',
+    sha256: '1111111111111111111111111111111111111111111111111111111111111111',
+    file_path: 'E:/ComfyUI/models/loras/Flux1.D/soft.safetensors',
+    file_size: 148000000,
+    modified: 1762000000,
+    tags: ['portrait', 'lighting'],
+    from_civitai: true,
+    usage_count: 8,
+    usage_tips: '{"strength":0.75,"clipStrength":0.75}',
+    notes: '소프트 인물 조명 스타일',
+    favorite: true,
+    update_available: true,
+    civitai: {
+      id: 940211,
+      modelId: 840370,
+      name: 'v1.0',
+      trainedWords: ['soft studio glow', 'skin detail'],
+    },
+  },
+  {
+    model_name: 'Krea2 Editorial Style',
+    file_name: 'style',
+    preview_url: '/api/lm/previews?path=style.svg',
+    preview_nsfw_level: 1,
+    base_model: 'Krea2',
+    folder: 'Krea2',
+    sha256: '2222222222222222222222222222222222222222222222222222222222222222',
+    file_path: 'E:/ComfyUI/models/loras/Krea2/style.safetensors',
+    file_size: 96000000,
+    modified: 1761900000,
+    tags: ['editorial', 'fashion'],
+    from_civitai: true,
+    usage_count: 4,
+    usage_tips: '{"strength":0.85,"clipStrength":0.85}',
+    notes: '매거진 에디토리얼 톤',
+    favorite: false,
+    update_available: false,
+    civitai: {
+      id: 950100,
+      modelId: 850100,
+      name: 'v1.0',
+      trainedWords: ['editorial fashion'],
+    },
+  },
+];
+
 // 1x1 dummy PNG preview packet (4 bytes event type 1 + 4 bytes format 2 + PNG data)
 const dummyPng = Buffer.from(
   '89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000A49444154789C63000100000500010D0A2DB40000000049454E44AE426082',
@@ -161,9 +214,117 @@ const mock = createServer(async (req, res) => {
   if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host)
     return send({ error: { message: 'backend origin mismatch' } }, 403);
   if (url.pathname === '/object_info') return send(schema);
-  if (url.pathname === '/view') {
+  if (url.pathname === '/view' || url.pathname === '/api/lm/previews') {
     res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' });
     return res.end(readFileSync('public/sample.svg'));
+  }
+  if (req.method === 'GET' && url.pathname === '/api/lm/loras/list') {
+    let items = [...mockLoras];
+    const search = (url.searchParams.get('search') || '').trim().toLowerCase();
+    const folder = url.searchParams.get('folder');
+    const baseModel = url.searchParams.get('base_model');
+    const tagIncludes = url.searchParams.getAll('tag_include');
+    const tagLogic = url.searchParams.get('tag_logic') || 'any';
+    const favOnly = url.searchParams.get('favorites_only') === 'true';
+    const updOnly = url.searchParams.get('update_available_only') === 'true';
+    if (search) {
+      items = items.filter(
+        (x) =>
+          x.model_name.toLowerCase().includes(search) ||
+          x.file_name.toLowerCase().includes(search) ||
+          x.tags.some((t) => t.toLowerCase().includes(search)) ||
+          (x.civitai?.trainedWords || []).some((w) => w.toLowerCase().includes(search)),
+      );
+    }
+    if (folder) items = items.filter((x) => x.folder === folder);
+    if (baseModel) items = items.filter((x) => x.base_model === baseModel);
+    if (tagIncludes.length > 0) {
+      items = items.filter((x) =>
+        tagLogic === 'all'
+          ? tagIncludes.every((t) => x.tags.includes(t))
+          : tagIncludes.some((t) => x.tags.includes(t)),
+      );
+    }
+    if (favOnly) items = items.filter((x) => x.favorite);
+    if (updOnly) items = items.filter((x) => x.update_available);
+    return send({
+      items,
+      total: items.length,
+      page: 1,
+      page_size: 60,
+      total_pages: 1,
+    });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/lm/loras/folders') {
+    return send({ folders: ['Flux1.D', 'Krea2', 'Qwen'] });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/lm/loras/roots') {
+    return send({ success: true, roots: ['E:/ComfyUI/models/loras'] });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/lm/loras/base-models') {
+    return send({
+      success: true,
+      base_models: [
+        { name: 'Flux.1 D', count: 1 },
+        { name: 'Krea2', count: 1 },
+      ],
+    });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/lm/loras/top-tags') {
+    return send({
+      success: true,
+      tags: [
+        { tag: 'portrait', count: 1 },
+        { tag: 'editorial', count: 1 },
+      ],
+    });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/lm/loras/scan') {
+    return send({ status: 'success', message: 'LoRA scan completed' });
+  }
+  if (req.method === 'GET' && url.pathname.startsWith('/api/lm/loras/civitai/versions/')) {
+    const modelId = Number(url.pathname.split('/').pop());
+    return send([
+      {
+        id: 940211,
+        modelId,
+        name: 'v1.0',
+        baseModel: 'Flux.1 D',
+        existsLocally: true,
+        modelSizeKB: 144531,
+        trainedWords: ['soft studio glow', 'skin detail'],
+        model: { name: 'Flux Soft Portrait LoRA', type: 'LORA' },
+      },
+      {
+        id: 990500,
+        modelId,
+        name: 'v2.0 HD',
+        baseModel: 'Flux.1 D',
+        existsLocally: false,
+        modelSizeKB: 152000,
+        trainedWords: ['soft studio glow v2', 'ultra skin detail'],
+        model: { name: 'Flux Soft Portrait LoRA', type: 'LORA' },
+      },
+    ]);
+  }
+  if (req.method === 'GET' && url.pathname.startsWith('/api/lm/loras/civitai/model/version/')) {
+    const versionId = Number(url.pathname.split('/').pop());
+    return send({
+      id: versionId,
+      modelId: 840370,
+      name: 'v2.0 HD',
+      baseModel: 'Flux.1 D',
+      existsLocally: false,
+      modelSizeKB: 152000,
+      trainedWords: ['soft studio glow v2'],
+      model: { name: 'Flux Soft Portrait LoRA', type: 'LORA' },
+    });
+  }
+  if (req.method === 'GET' && url.pathname.startsWith('/api/lm/download-progress/')) {
+    return send({
+      success: true,
+      progress: { progress: 100, status: 'completed', bytes_downloaded: 152000000, total_bytes: 152000000 },
+    });
   }
   if (req.method === 'POST') {
     let body = '';
@@ -244,6 +405,97 @@ const mock = createServer(async (req, res) => {
         if (j) j.cancelled = true;
       }
       return send({});
+    }
+    if (url.pathname === '/api/lm/loras/save-metadata') {
+      const target = mockLoras.find((x) => x.file_path === data.file_path);
+      if (target) {
+        if (typeof data.favorite === 'boolean') target.favorite = data.favorite;
+        if (typeof data.model_name === 'string') target.model_name = data.model_name;
+        if (typeof data.base_model === 'string') target.base_model = data.base_model;
+        if (typeof data.usage_tips === 'string') target.usage_tips = data.usage_tips;
+        if (typeof data.notes === 'string') target.notes = data.notes;
+        if (Array.isArray(data.tags)) target.tags = [...data.tags];
+        if (data.civitai?.trainedWords) {
+          target.civitai = { ...(target.civitai || {}), trainedWords: data.civitai.trainedWords };
+        }
+      }
+      return send({ success: true });
+    }
+    if (url.pathname === '/api/lm/loras/add-tags') {
+      const target = mockLoras.find((x) => x.file_path === data.file_path);
+      if (target && Array.isArray(data.tags)) {
+        target.tags = [...new Set([...target.tags, ...data.tags])];
+      }
+      return send({ success: true, tags: target?.tags || [] });
+    }
+    if (url.pathname === '/api/lm/loras/fetch-civitai') {
+      return send({ success: true });
+    }
+    if (url.pathname === '/api/lm/loras/relink-civitai') {
+      const target = mockLoras.find((x) => x.file_path === data.file_path);
+      if (target) {
+        target.civitai = {
+          ...(target.civitai || {}),
+          modelId: Number(data.model_id),
+          id: Number(data.model_version_id || 940211),
+        };
+      }
+      return send({ success: true });
+    }
+    if (url.pathname === '/api/lm/loras/updates/refresh') {
+      return send({
+        success: true,
+        records: [{ model_type: 'lora', model_id: 840370, has_update: true, version_ids: [940211, 990500], in_library_version_ids: [940211] }],
+      });
+    }
+    if (url.pathname === '/api/lm/download-model') {
+      const vid = Number(data.model_version_id || 990500);
+      const mid = Number(data.model_id || 840370);
+      const newName = `civitai_${vid}`;
+      const newRel = `Flux1.D/${newName}.safetensors`;
+      const loraList = schema.LoraLoader.input.required.lora_name[0];
+      if (!loraList.includes(newRel)) loraList.push(newRel);
+      mockLoras.unshift({
+        model_name: `Flux Soft Portrait v2 (${vid})`,
+        file_name: newName,
+        preview_url: '/api/lm/previews?path=soft.svg',
+        preview_nsfw_level: 1,
+        base_model: 'Flux.1 D',
+        folder: 'Flux1.D',
+        sha256: String(vid).padStart(64, '0'),
+        file_path: `E:/ComfyUI/models/loras/${newRel}`,
+        file_size: 152000000,
+        modified: Math.floor(Date.now() / 1000),
+        tags: ['portrait', 'v2'],
+        from_civitai: true,
+        usage_count: 0,
+        usage_tips: '{"strength":0.8,"clipStrength":0.8}',
+        notes: 'CivitAI 다운로드 모델',
+        favorite: false,
+        update_available: false,
+        civitai: {
+          id: vid,
+          modelId: mid,
+          name: 'v2.0 HD',
+          trainedWords: ['soft studio glow v2'],
+        },
+      });
+      return send({ success: true, download_id: data.download_id || 'dl-1' });
+    }
+    if (url.pathname === '/api/lm/loras/rename') {
+      const target = mockLoras.find((x) => x.file_path === data.file_path);
+      if (target && data.new_file_name) {
+        target.file_name = data.new_file_name;
+      }
+      return send({ success: true });
+    }
+    if (url.pathname === '/api/lm/loras/move_model') {
+      return send({ success: true });
+    }
+    if (url.pathname === '/api/lm/loras/delete') {
+      const idx = mockLoras.findIndex((x) => x.file_path === data.file_path);
+      if (idx !== -1) mockLoras.splice(idx, 1);
+      return send({ success: true });
     }
   }
   if (url.pathname === '/queue')
