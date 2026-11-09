@@ -487,27 +487,21 @@ test('quick badge management modal, collapsed negative prompt, and tabbed settin
   await page
     .getByLabel('기본 포지티브 프롬프트', { exact: true })
     .fill('studio portrait, golden hour glow');
-  await page
-    .getByLabel('기본 네거티브 프롬프트', { exact: true })
-    .fill('lowres, bad anatomy');
+  await page.getByLabel('기본 네거티브 프롬프트', { exact: true }).fill('lowres, bad anatomy');
   await page.getByRole('button', { name: '기본 프롬프트 저장', exact: true }).click();
 
   // 325px 뷰포트에서 어절 분절 0건 및 가로 넘침 없음 확인
   await page.setViewportSize({ width: 325, height: 667 });
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-  ).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
   const splitWords = await page.evaluate(() => {
     const bad: string[] = [];
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       const node = walker.currentNode,
         parent = node.parentElement;
-      if (
-        !parent ||
-        parent.closest('.sr-only, script, style') ||
-        !parent.getClientRects().length
-      )
+      if (!parent || parent.closest('.sr-only, script, style') || !parent.getClientRects().length)
         continue;
       for (const match of (node.textContent || '').matchAll(/[가-힣]{2,}/g)) {
         const range = document.createRange();
@@ -525,4 +519,68 @@ test('quick badge management modal, collapsed negative prompt, and tabbed settin
   await expect(page.getByLabel('그리고 싶은 장면', { exact: true })).toHaveValue(
     'studio portrait, golden hour glow',
   );
+});
+test('Model manager browses checkpoints and diffusion models, filters, applies to generation, and downloads from CivitAI', async ({
+  page,
+}) => {
+  await connect(page);
+  await page.goto('/models');
+
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('모델');
+  await expect(page.getByRole('heading', { name: 'Flux Studio Checkpoint FP8' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Krea2 Turbo 8-Step Diffusion' })).toBeVisible();
+
+  // 업데이트 확인 실행
+  await page.getByRole('button', { name: '업데이트 확인' }).click();
+  await expect(page.getByText(/새 버전이 있어요/)).toBeVisible();
+
+  // 모델 유형 필터(디퓨전 / UNET) 적용
+  await page.getByLabel('모델 유형 필터', { exact: true }).selectOption('diffusion_model');
+  await expect(page.getByRole('heading', { name: 'Krea2 Turbo 8-Step Diffusion' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Flux Studio Checkpoint FP8' })).toHaveCount(0);
+  await page.getByLabel('모델 유형 필터', { exact: true }).selectOption('all');
+
+  // 태그 필터 모달 열기 및 #krea2 필터링
+  await page.getByRole('button', { name: '태그 필터' }).click();
+  const tagDialog = page.getByRole('dialog', { name: '# 태그 필터 관리' });
+  await expect(tagDialog).toBeVisible();
+  await tagDialog.getByText('#krea2').click();
+  await tagDialog.getByRole('button', { name: '필터 적용 및 닫기' }).click();
+  await expect(page.getByRole('heading', { name: 'Krea2 Turbo 8-Step Diffusion' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Flux Studio Checkpoint FP8' })).toHaveCount(0);
+
+  // 상단 활성 태그 칩에서 krea2 태그 필터 해제
+  await page.getByRole('button', { name: 'krea2 태그 필터 해제' }).click();
+  await expect(page.getByRole('heading', { name: 'Flux Studio Checkpoint FP8' })).toBeVisible();
+
+  // 상세 모달 열기, 원격 버전 조회 및 생성 화면으로 모델 적용
+  await page.getByRole('heading', { name: 'Krea2 Turbo 8-Step Diffusion' }).click();
+  const detailDialog = page.getByRole('dialog');
+  await expect(detailDialog).toBeVisible();
+  await detailDialog.getByRole('button', { name: '원격 버전 조회' }).click();
+  await expect(detailDialog.getByText('v3.0 Studio FP8')).toBeVisible();
+
+  await detailDialog.getByRole('button', { name: '적용 후 생성 화면으로' }).click();
+  await expect(page).toHaveURL(/\/create$/);
+  expect(
+    await page.evaluate(() => JSON.parse(localStorage.getItem('cm-settings')!).architecture),
+  ).toBe('krea2');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('cm-settings')!).model)).toBe(
+    'Krea2/krea2_turbo.safetensors',
+  );
+
+  // 다시 모델 화면으로 이동하여 CivitAI 모델 다운로드 수행
+  await page.goto('/models');
+  await page.getByRole('button', { name: 'CivitAI 다운로드' }).click();
+  const dlDialog = page.getByRole('dialog');
+  await dlDialog
+    .getByLabel('CivitAI 주소 또는 ID', { exact: true })
+    .fill('https://civitai.com/models/705606?modelVersionId=992100');
+  await dlDialog.getByRole('button', { name: 'CivitAI 조회' }).click();
+  await expect(dlDialog.getByLabel('다운로드할 버전 선택')).toBeVisible();
+  await dlDialog.getByRole('button', { name: '선택 버전 다운로드' }).click();
+
+  await expect(
+    page.getByRole('heading', { name: /Flux Studio Checkpoint v3 \(992100\)/ }),
+  ).toBeVisible();
 });

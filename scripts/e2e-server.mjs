@@ -59,6 +59,61 @@ const mockLoras = [
   },
 ];
 
+const mockCheckpoints = [
+  {
+    model_name: 'Flux Studio Checkpoint FP8',
+    file_name: 'test-model',
+    preview_url: '/api/lm/previews?path=flux-model.svg',
+    preview_nsfw_level: 1,
+    base_model: 'Flux.1 D',
+    folder: 'Flux1.D',
+    sha256: '3333333333333333333333333333333333333333333333333333333333333333',
+    hash_status: 'completed',
+    quantization: 'FP8',
+    file_path: 'E:/ComfyUI/models/checkpoints/Flux1.D/test-model.safetensors',
+    file_size: 11900000000,
+    modified: 1762100000,
+    tags: ['flux', 'photorealistic'],
+    from_civitai: true,
+    usage_count: 14,
+    notes: 'Flux 기본 실사 체크포인트',
+    sub_type: 'checkpoint',
+    favorite: true,
+    update_available: true,
+    civitai: {
+      id: 852897,
+      modelId: 705606,
+      name: 'v2.0 FP8',
+    },
+  },
+  {
+    model_name: 'Krea2 Turbo 8-Step Diffusion',
+    file_name: 'krea2_turbo',
+    preview_url: '/api/lm/previews?path=krea2-model.svg',
+    preview_nsfw_level: 1,
+    base_model: 'Krea2',
+    folder: 'Krea2',
+    sha256: '4444444444444444444444444444444444444444444444444444444444444444',
+    hash_status: 'completed',
+    quantization: 'INT8',
+    file_path: 'E:/ComfyUI/models/diffusion_models/Krea2/krea2_turbo.safetensors',
+    file_size: 12400000000,
+    modified: 1762050000,
+    tags: ['krea2', 'distilled'],
+    from_civitai: true,
+    usage_count: 9,
+    notes: 'Krea2 8스텝 고속 디퓨전 모델',
+    sub_type: 'diffusion_model',
+    favorite: false,
+    update_available: false,
+    civitai: {
+      id: 910200,
+      modelId: 810200,
+      name: 'v1.0 Turbo',
+    },
+  },
+];
+
 // 1x1 dummy PNG preview packet (4 bytes event type 1 + 4 bytes format 2 + PNG data)
 const dummyPng = Buffer.from(
   '89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000A49444154789C63000100000500010D0A2DB40000000049454E44AE426082',
@@ -320,10 +375,124 @@ const mock = createServer(async (req, res) => {
       model: { name: 'Flux Soft Portrait LoRA', type: 'LORA' },
     });
   }
+  if (req.method === 'GET' && url.pathname === '/api/lm/checkpoints/list') {
+    let items = [...mockCheckpoints];
+    const search = (url.searchParams.get('search') || '').trim().toLowerCase();
+    const folder = url.searchParams.get('folder');
+    const baseModel = url.searchParams.get('base_model');
+    const modelType = url.searchParams.get('model_type');
+    const tagIncludes = url.searchParams.getAll('tag_include');
+    const tagLogic = url.searchParams.get('tag_logic') || 'any';
+    const favOnly = url.searchParams.get('favorites_only') === 'true';
+    const updOnly = url.searchParams.get('update_available_only') === 'true';
+    if (search) {
+      items = items.filter(
+        (x) =>
+          x.model_name.toLowerCase().includes(search) ||
+          x.file_name.toLowerCase().includes(search) ||
+          (x.base_model || '').toLowerCase().includes(search) ||
+          x.tags.some((t) => t.toLowerCase().includes(search)),
+      );
+    }
+    if (folder) items = items.filter((x) => x.folder === folder);
+    if (baseModel) items = items.filter((x) => x.base_model === baseModel);
+    if (modelType) items = items.filter((x) => x.sub_type === modelType);
+    if (tagIncludes.length > 0) {
+      items = items.filter((x) =>
+        tagLogic === 'all'
+          ? tagIncludes.every((t) => x.tags.includes(t))
+          : tagIncludes.some((t) => x.tags.includes(t)),
+      );
+    }
+    if (favOnly) items = items.filter((x) => x.favorite);
+    if (updOnly) items = items.filter((x) => x.update_available);
+    return send({
+      items,
+      total: items.length,
+      page: 1,
+      page_size: 100,
+      total_pages: 1,
+    });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/lm/checkpoints/folders') {
+    return send({ folders: ['Flux1.D', 'Krea2', 'Qwen'] });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/lm/checkpoints/roots') {
+    return send({
+      success: true,
+      roots: ['E:/ComfyUI/models/checkpoints', 'E:/ComfyUI/models/diffusion_models'],
+    });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/lm/checkpoints/base-models') {
+    return send({
+      success: true,
+      base_models: [
+        { name: 'Flux.1 D', count: 1 },
+        { name: 'Krea2', count: 1 },
+      ],
+    });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/lm/checkpoints/top-tags') {
+    return send({
+      success: true,
+      tags: [
+        { tag: 'flux', count: 1 },
+        { tag: 'photorealistic', count: 1 },
+        { tag: 'krea2', count: 1 },
+        { tag: 'distilled', count: 1 },
+      ],
+    });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/lm/checkpoints/scan') {
+    return send({ status: 'success', message: 'Checkpoint scan completed' });
+  }
+  if (req.method === 'GET' && url.pathname.startsWith('/api/lm/checkpoints/civitai/versions/')) {
+    const modelId = Number(url.pathname.split('/').pop());
+    return send([
+      {
+        id: 852897,
+        modelId,
+        name: 'v2.0 FP8',
+        baseModel: 'Flux.1 D',
+        existsLocally: true,
+        modelSizeKB: 11621093,
+        model: { name: 'Flux Studio Checkpoint FP8', type: 'Checkpoint' },
+      },
+      {
+        id: 992100,
+        modelId,
+        name: 'v3.0 Studio FP8',
+        baseModel: 'Flux.1 D',
+        existsLocally: false,
+        modelSizeKB: 11840000,
+        model: { name: 'Flux Studio Checkpoint FP8', type: 'Checkpoint' },
+      },
+    ]);
+  }
+  if (
+    req.method === 'GET' &&
+    url.pathname.startsWith('/api/lm/checkpoints/civitai/model/version/')
+  ) {
+    const versionId = Number(url.pathname.split('/').pop());
+    return send({
+      id: versionId,
+      modelId: 705606,
+      name: 'v3.0 Studio FP8',
+      baseModel: 'Flux.1 D',
+      existsLocally: false,
+      modelSizeKB: 11840000,
+      model: { name: 'Flux Studio Checkpoint FP8', type: 'Checkpoint' },
+    });
+  }
   if (req.method === 'GET' && url.pathname.startsWith('/api/lm/download-progress/')) {
     return send({
       success: true,
-      progress: { progress: 100, status: 'completed', bytes_downloaded: 152000000, total_bytes: 152000000 },
+      progress: {
+        progress: 100,
+        status: 'completed',
+        bytes_downloaded: 152000000,
+        total_bytes: 152000000,
+      },
     });
   }
   if (req.method === 'POST') {
@@ -354,7 +523,10 @@ const mock = createServer(async (req, res) => {
         setTimeout(() => {
           for (const ws of wsClients) {
             safeSend(ws, JSON.stringify({ type: 'execution_start', data: { prompt_id: id } }));
-            safeSend(ws, JSON.stringify({ type: 'progress', data: { value: 50, max: 100, prompt_id: id } }));
+            safeSend(
+              ws,
+              JSON.stringify({ type: 'progress', data: { value: 50, max: 100, prompt_id: id } }),
+            );
             safeSend(ws, previewPacket);
           }
         }, 150);
@@ -445,12 +617,59 @@ const mock = createServer(async (req, res) => {
     if (url.pathname === '/api/lm/loras/updates/refresh') {
       return send({
         success: true,
-        records: [{ model_type: 'lora', model_id: 840370, has_update: true, version_ids: [940211, 990500], in_library_version_ids: [940211] }],
+        records: [
+          {
+            model_type: 'lora',
+            model_id: 840370,
+            has_update: true,
+            version_ids: [940211, 990500],
+            in_library_version_ids: [940211],
+          },
+        ],
       });
     }
     if (url.pathname === '/api/lm/download-model') {
       const vid = Number(data.model_version_id || 990500);
       const mid = Number(data.model_id || 840370);
+      const isCheckpointDl =
+        mid === 705606 ||
+        vid === 992100 ||
+        String(data.download_id || '').startsWith('cm-mdl-') ||
+        String(data.model_root || '').includes('checkpoints') ||
+        String(data.model_root || '').includes('diffusion_models');
+      if (isCheckpointDl) {
+        const newName = `civitai_model_${vid}`;
+        const newRel = `Flux1.D/${newName}.safetensors`;
+        const ckptList = schema.CheckpointLoaderSimple.input.required.ckpt_name[0];
+        if (!ckptList.includes(newRel)) ckptList.push(newRel);
+        mockCheckpoints.unshift({
+          model_name: `Flux Studio Checkpoint v3 (${vid})`,
+          file_name: newName,
+          preview_url: '/api/lm/previews?path=flux-model.svg',
+          preview_nsfw_level: 1,
+          base_model: 'Flux.1 D',
+          folder: 'Flux1.D',
+          sha256: String(vid).padStart(64, '0'),
+          hash_status: 'completed',
+          quantization: 'FP8',
+          file_path: `E:/ComfyUI/models/checkpoints/${newRel}`,
+          file_size: 11840000000,
+          modified: Math.floor(Date.now() / 1000),
+          tags: ['flux', 'v3'],
+          from_civitai: true,
+          usage_count: 0,
+          notes: 'CivitAI 다운로드 체크포인트',
+          sub_type: 'checkpoint',
+          favorite: false,
+          update_available: false,
+          civitai: {
+            id: vid,
+            modelId: mid,
+            name: 'v3.0 Studio FP8',
+          },
+        });
+        return send({ success: true, download_id: data.download_id || 'dl-mdl-1' });
+      }
       const newName = `civitai_${vid}`;
       const newRel = `Flux1.D/${newName}.safetensors`;
       const loraList = schema.LoraLoader.input.required.lora_name[0];
@@ -482,6 +701,67 @@ const mock = createServer(async (req, res) => {
       });
       return send({ success: true, download_id: data.download_id || 'dl-1' });
     }
+    if (url.pathname === '/api/lm/checkpoints/save-metadata') {
+      const target = mockCheckpoints.find((x) => x.file_path === data.file_path);
+      if (target) {
+        if (typeof data.favorite === 'boolean') target.favorite = data.favorite;
+        if (typeof data.model_name === 'string') target.model_name = data.model_name;
+        if (typeof data.base_model === 'string') target.base_model = data.base_model;
+        if (typeof data.notes === 'string') target.notes = data.notes;
+        if (Array.isArray(data.tags)) target.tags = [...data.tags];
+      }
+      return send({ success: true });
+    }
+    if (url.pathname === '/api/lm/checkpoints/add-tags') {
+      const target = mockCheckpoints.find((x) => x.file_path === data.file_path);
+      if (target && Array.isArray(data.tags)) {
+        target.tags = [...new Set([...target.tags, ...data.tags])];
+      }
+      return send({ success: true, tags: target?.tags || [] });
+    }
+    if (url.pathname === '/api/lm/checkpoints/fetch-civitai') {
+      return send({ success: true });
+    }
+    if (url.pathname === '/api/lm/checkpoints/relink-civitai') {
+      const target = mockCheckpoints.find((x) => x.file_path === data.file_path);
+      if (target) {
+        target.civitai = {
+          ...(target.civitai || {}),
+          modelId: Number(data.model_id),
+          id: Number(data.model_version_id || 852897),
+        };
+      }
+      return send({ success: true });
+    }
+    if (url.pathname === '/api/lm/checkpoints/updates/refresh') {
+      return send({
+        success: true,
+        records: [
+          {
+            model_type: 'checkpoint',
+            model_id: 705606,
+            has_update: true,
+            version_ids: [852897, 992100],
+            in_library_version_ids: [852897],
+          },
+        ],
+      });
+    }
+    if (url.pathname === '/api/lm/checkpoints/rename') {
+      const target = mockCheckpoints.find((x) => x.file_path === data.file_path);
+      if (target && data.new_file_name) {
+        target.file_name = data.new_file_name;
+      }
+      return send({ success: true });
+    }
+    if (url.pathname === '/api/lm/checkpoints/move_model') {
+      return send({ success: true });
+    }
+    if (url.pathname === '/api/lm/checkpoints/delete') {
+      const idx = mockCheckpoints.findIndex((x) => x.file_path === data.file_path);
+      if (idx !== -1) mockCheckpoints.splice(idx, 1);
+      return send({ success: true });
+    }
     if (url.pathname === '/api/lm/loras/rename') {
       const target = mockLoras.find((x) => x.file_path === data.file_path);
       if (target && data.new_file_name) {
@@ -501,7 +781,12 @@ const mock = createServer(async (req, res) => {
   if (url.pathname === '/queue')
     return send({
       queue_running: [...jobs]
-        .filter(([, j]) => !j.cancelled && !j.text.includes('slow') && (Date.now() - j.start < 2200 || !j.wsCompleted))
+        .filter(
+          ([, j]) =>
+            !j.cancelled &&
+            !j.text.includes('slow') &&
+            (Date.now() - j.start < 2200 || !j.wsCompleted),
+        )
         .map(([id]) => [1, id, {}, {}]),
       queue_pending: [...jobs]
         .filter(([, j]) => !j.cancelled && j.text.includes('slow'))
@@ -510,7 +795,12 @@ const mock = createServer(async (req, res) => {
   if (url.pathname.startsWith('/history/')) {
     const id = url.pathname.slice('/history/'.length),
       j = jobs.get(id);
-    if (!j || j.cancelled || j.text.includes('slow') || (!j.wsCompleted && Date.now() - j.start < 2200))
+    if (
+      !j ||
+      j.cancelled ||
+      j.text.includes('slow') ||
+      (!j.wsCompleted && Date.now() - j.start < 2200)
+    )
       return send({});
     if (j.text.includes('execution-error'))
       return send({
