@@ -1,4 +1,5 @@
 import { useId, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Box, RefreshCw, Tags } from 'lucide-react';
 import { useStudio } from '../studio';
 import { options } from '../domain';
@@ -61,6 +62,12 @@ export default function ModelPanel() {
         icon={Box}
         action={
           <div className="-my-3 -mr-2 flex items-center">
+            <Link
+              to="/models"
+              className="mr-1 flex min-h-8 items-center gap-1 px-2 text-xs font-medium text-muted hover:text-ink"
+            >
+              관리
+            </Link>
             <IconButton
               icon={Tags}
               label="모델과 LoRA 계열 분류"

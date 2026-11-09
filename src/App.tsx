@@ -12,6 +12,7 @@ import {
   Check,
   Workflow,
   Layers2,
+  Box,
 } from 'lucide-react';
 import { StudioProvider, useStudio } from './studio';
 import { IconButton } from './components/ui';
@@ -19,10 +20,12 @@ import Create, { GenerateBar } from './screens/Create';
 import Gallery from './screens/Gallery';
 import Presets, { PresetEditor } from './screens/Presets';
 import Loras from './screens/Loras';
+import Models from './screens/Models';
 import Settings from './screens/Settings';
 import { usePwa } from './pwa';
 const nav = [
   { path: '/create', label: '만들기', icon: Sparkles },
+  { path: '/models', label: '모델', icon: Box },
   { path: '/loras', label: 'LoRA', icon: Layers2 },
   { path: '/gallery', label: '기록', icon: Images },
   { path: '/presets', label: '프리셋', icon: Bookmark },
@@ -179,13 +182,16 @@ function Shell() {
         <main
           id="main"
           tabIndex={-1}
-          className={`min-h-0 flex-1 outline-none ${['/gallery', '/presets', '/loras'].includes(location.pathname) ? 'overflow-hidden' : 'overflow-y-auto'}`}
+          className={`min-h-0 flex-1 outline-none ${['/gallery', '/presets', '/loras', '/models'].includes(location.pathname) ? 'overflow-hidden' : 'overflow-y-auto'}`}
           data-ui-audit-scroll-root={
-            !['/gallery', '/presets', '/loras'].includes(location.pathname) ? '' : undefined
+            !['/gallery', '/presets', '/loras', '/models'].includes(location.pathname)
+              ? ''
+              : undefined
           }
         >
           <Routes>
             <Route path="/create" element={<Create />} />
+            <Route path="/models" element={<Models />} />
             <Route path="/loras" element={<Loras />} />
             <Route path="/gallery" element={<Gallery />} />
             <Route path="/presets" element={<Presets />} />
@@ -196,14 +202,14 @@ function Shell() {
         {location.pathname === '/create' && <GenerateBar />}
         <nav
           aria-label="모바일 메뉴"
-          className={`${keyboardOpen ? 'hidden' : 'flex'} shrink-0 items-stretch justify-around border-t border-line bg-white px-2 pb-[max(6px,env(safe-area-inset-bottom))] pt-1 md:hidden`}
+          className={`${keyboardOpen ? 'hidden' : 'flex'} shrink-0 items-stretch justify-around border-t border-line bg-white px-1.5 pb-[max(6px,env(safe-area-inset-bottom))] pt-1 md:hidden`}
         >
           {nav.map((n) => (
             <NavLink
               key={n.path}
               to={n.path}
               className={({ isActive }) =>
-                `flex min-h-14 min-w-14 flex-col items-center justify-center gap-1.5 rounded-xl px-3 text-[10px] font-semibold ${isActive ? 'text-olive' : 'text-muted'}`
+                `flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-1.5 text-[10px] font-semibold ${isActive ? 'text-olive' : 'text-muted'}`
               }
             >
               <n.icon size={19} />
