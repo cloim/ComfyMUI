@@ -24,10 +24,12 @@ import {
 import { Link } from 'react-router-dom';
 import { useStudio } from '../studio';
 import {
+  DEFAULT_QUICK_BADGES,
   options,
   parseWorkflow,
   downloadJson,
   buildWorkflow,
+  reorderQueue,
   type Generation,
   type Workflow,
 } from '../domain';
@@ -57,7 +59,16 @@ import {
 } from '../models';
 
 export default function Create() {
-  const { settings: s, setSettings, info, familyAssignments, notify, jobs } = useStudio();
+  const {
+    settings: s,
+    setSettings,
+    quickBadges,
+    setQuickBadges,
+    info,
+    familyAssignments,
+    notify,
+    jobs,
+  } = useStudio();
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [advanced, setAdvanced] = useState(false);
   const [advancedTab, setAdvancedTab] = useState('settings');
@@ -66,8 +77,27 @@ export default function Create() {
     setAdvanced(true);
   }
   const [addLora, setAddLora] = useState(false);
-  const [negative, setNegative] = useState(Boolean(s.negative));
+  const [badgeModalOpen, setBadgeModalOpen] = useState(false);
+  const [newBadgeText, setNewBadgeText] = useState('');
+  const [negative, setNegative] = useState(false);
   const patch = (v: Partial<Generation>) => setSettings((s) => ({ ...s, ...v }));
+  function addQuickBadge() {
+    const trimmed = newBadgeText.trim();
+    if (!trimmed) return;
+    if (quickBadges.includes(trimmed)) {
+      notify('이미 등록된 단축 배지예요');
+      return;
+    }
+    setQuickBadges((prev) => [...prev, trimmed]);
+    setNewBadgeText('');
+    notify(`'${trimmed}' 단축 배지를 추가했어요`);
+  }
+  function removeQuickBadge(target: string) {
+    setQuickBadges((prev) => prev.filter((item) => item !== target));
+  }
+  function moveQuickBadge(fromIndex: number, toIndex: number) {
+    setQuickBadges((prev) => reorderQueue(prev, fromIndex, toIndex));
+  }
   const ratios = [
     { name: '정사각', ratio: '1:1', w: 1024, h: 1024 },
     { name: '세로', ratio: '3:4', w: 768, h: 1024 },
@@ -125,9 +155,19 @@ export default function Create() {
               textareaRef={promptTextareaRef}
             />
             <div className="mt-3 flex flex-wrap gap-2">
-              {['cinematic lighting', 'analog film', 'soft pastel'].map((tag) => (
+              <button
+                type="button"
+                aria-label="단축 배지 관리"
+                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-olive/40 bg-lime/20 px-3 py-2 text-[11px] font-semibold text-olive transition hover:border-olive hover:bg-lime/35"
+                onClick={() => setBadgeModalOpen(true)}
+              >
+                <SlidersHorizontal size={12} />
+                단축 배지 관리
+              </button>
+              {quickBadges.map((tag) => (
                 <button
                   key={tag}
+                  type="button"
                   className="inline-flex min-h-11 items-center justify-center gap-1 rounded-full border border-line px-3 py-2 text-[11px] text-muted transition hover:border-olive hover:text-olive"
                   onClick={() =>
                     patch({ positive: s.positive.trim() + (s.positive.trim() ? ', ' : '') + tag })
@@ -315,6 +355,98 @@ export default function Create() {
         <PreviewPanel />
       </aside>
       <Advanced open={advanced} initialTab={advancedTab} onClose={() => setAdvanced(false)} />
+      <Modal
+        title="단축 배지 관리"
+        open={badgeModalOpen}
+        onClose={() => setBadgeModalOpen(false)}
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setQuickBadges(DEFAULT_QUICK_BADGES);
+                notify('단축 배지를 기본값으로 복원했어요');
+              }}
+            >
+              <RotateCcw size={15} />
+              기본값 복원
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => setBadgeModalOpen(false)}
+            >
+              완료
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-xs leading-relaxed text-muted">
+            프롬프트에 바로 덧붙일 단축 배지를 추가하거나 순서를 정리해 보세요
+          </p>
+          <form
+            data-ui-audit-row
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              addQuickBadge();
+            }}
+          >
+            <input
+              type="text"
+              aria-label="새 단축 배지"
+              placeholder="배지 문구 입력 (예: dramatic shadow)"
+              value={newBadgeText}
+              onChange={(e) => setNewBadgeText(e.target.value)}
+              className="field flex-1 text-xs"
+            />
+            <button type="submit" className="btn-primary min-h-12 shrink-0 px-4">
+              <Plus size={15} />
+              추가
+            </button>
+          </form>
+          {quickBadges.length === 0 ? (
+            <p className="rounded-xl bg-paper p-6 text-center text-xs text-muted">
+              등록된 단축 배지가 없어요
+            </p>
+          ) : (
+            <div className="flex max-h-[340px] flex-col gap-2 overflow-y-auto pr-1">
+              {quickBadges.map((tag, index) => (
+                <div
+                  key={tag}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-line bg-paper px-3.5 py-2.5 text-xs"
+                >
+                  <span className="min-w-0 flex-1 truncate font-medium text-ink">
+                    + {tag}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <IconButton
+                      icon={ArrowUp}
+                      disabled={index === 0}
+                      onClick={() => moveQuickBadge(index, index - 1)}
+                      label={`${tag} 위로 이동`}
+                    />
+                    <IconButton
+                      icon={ArrowDown}
+                      disabled={index === quickBadges.length - 1}
+                      onClick={() => moveQuickBadge(index, index + 1)}
+                      label={`${tag} 아래로 이동`}
+                    />
+                    <IconButton
+                      icon={Trash2}
+                      danger
+                      onClick={() => removeQuickBadge(tag)}
+                      label={`${tag} 배지 삭제`}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
       <Modal title="LoRA 추가" open={addLora} onClose={() => setAddLora(false)}>
         <div className="flex flex-col gap-4">
           <p className="text-sm text-muted">모델과 같은 계열의 LoRA를 선택해 주세요</p>

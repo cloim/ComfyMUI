@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   defaults,
+  DEFAULT_PROMPTS,
+  DEFAULT_QUICK_BADGES,
   demoInfo,
   readStored,
   newId,
@@ -10,6 +12,7 @@ import {
   options,
   isLegacyDefaultPrompt,
   migrateGenerationSettings,
+  type DefaultPrompts,
   type Generation,
   type Preset,
   type Job,
@@ -94,9 +97,23 @@ function usePersisted<T>(
 }
 
 function useStudioState() {
+  const [defaultPrompts, setDefaultPrompts, defaultPromptError] = usePersisted<DefaultPrompts>(
+    'cm-default-prompts',
+    DEFAULT_PROMPTS,
+    { useIDB: true },
+  );
+  const [quickBadges, setQuickBadges, badgeError] = usePersisted<string[]>(
+    'cm-quick-badges',
+    DEFAULT_QUICK_BADGES,
+    { useIDB: true },
+  );
   const [settings, setSettings, saveError] = usePersisted<Generation>(
     'cm-settings',
-    defaults,
+    {
+      ...defaults,
+      positive: defaultPrompts.positive,
+      negative: defaultPrompts.negative,
+    },
     { migrate: migrateGenerationSettings, debounceMs: 300, useIDB: true },
   );
   const [presets, setPresets, presetError] = usePersisted<Preset[]>('cm-presets', [], {
@@ -818,6 +835,10 @@ function useStudioState() {
   return {
     settings,
     setSettings,
+    defaultPrompts,
+    setDefaultPrompts,
+    quickBadges,
+    setQuickBadges,
     presets,
     setPresets,
     jobs,
@@ -854,7 +875,14 @@ function useStudioState() {
     notificationsEnabled,
     toggleNotifications,
     clearBadge,
-    storageError: saveError || presetError || historyError || familySaveError || queueError,
+    storageError:
+      saveError ||
+      presetError ||
+      historyError ||
+      familySaveError ||
+      queueError ||
+      defaultPromptError ||
+      badgeError,
   };
 }
 type Studio = ReturnType<typeof useStudioState>;

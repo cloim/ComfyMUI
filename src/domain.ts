@@ -121,6 +121,13 @@ export function migrateGenerationSettings(settings: Generation): Generation {
   return next;
 }
 
+export const DEFAULT_QUICK_BADGES = ['cinematic lighting', 'analog film', 'soft pastel'];
+
+export type DefaultPrompts = {
+  positive: string;
+  negative: string;
+};
+
 export const defaults: Generation = {
   modelLoader: 'CheckpointLoaderSimple',
   architecture: 'flux',
@@ -144,6 +151,11 @@ export const defaults: Generation = {
   scheduler: 'simple',
   denoise: 1,
   workflow: null,
+};
+
+export const DEFAULT_PROMPTS: DefaultPrompts = {
+  positive: defaults.positive,
+  negative: defaults.negative,
 };
 export const demoInfo: ObjectInfo = {
   CheckpointLoaderSimple: {
