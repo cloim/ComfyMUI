@@ -424,3 +424,105 @@ test('LoRA manager browses, updates metadata, applies trigger words, and downloa
     page.getByRole('heading', { name: /Flux Soft Portrait v2 \(990500\)/ }),
   ).toBeVisible();
 });
+test('quick badge management modal, collapsed negative prompt, and tabbed settings with default prompts', async ({
+  page,
+}) => {
+  await page.goto('/create');
+
+  // 1. 스니펫 드롭다운이 제거되었는지 확인
+  await expect(page.getByRole('button', { name: /스니펫/ })).toHaveCount(0);
+
+  // 2. 네거티브 프롬프트가 기본 접은 상태인지 확인
+  const negToggle = page.getByRole('button', { name: '네거티브 프롬프트', exact: true });
+  await expect(negToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#negative')).toHaveCount(0);
+  await negToggle.click();
+  await expect(negToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#negative')).toBeVisible();
+
+  // 3. 단축 배지 목록 맨 앞에 '단축 배지 관리' 배지 버튼이 있고 모달에서 관리 가능한지 확인
+  const badgeManageBtn = page.getByRole('button', { name: '단축 배지 관리', exact: true });
+  await expect(badgeManageBtn).toBeVisible();
+  const firstBadgeInContainer = badgeManageBtn.locator('..').locator('button').first();
+  await expect(firstBadgeInContainer).toHaveText(/단축 배지 관리/);
+
+  await badgeManageBtn.click();
+  const badgeDialog = page.getByRole('dialog', { name: '단축 배지 관리' });
+  await expect(badgeDialog).toBeVisible();
+
+  await badgeDialog.getByLabel('새 단축 배지', { exact: true }).fill('dramatic shadow');
+  await badgeDialog.getByRole('button', { name: '추가', exact: true }).click();
+  await expect(badgeDialog.getByText('+ dramatic shadow')).toBeVisible();
+
+  await badgeDialog.getByRole('button', { name: 'soft pastel 배지 삭제' }).click();
+  await expect(badgeDialog.getByText('+ soft pastel')).toHaveCount(0);
+
+  await badgeDialog.getByRole('button', { name: '완료', exact: true }).click();
+  await expect(badgeDialog).toHaveCount(0);
+
+  await expect(page.getByRole('button', { name: 'dramatic shadow' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'soft pastel' })).toHaveCount(0);
+
+  // 4. 내비게이션이 '설정'으로 변경되고 카테고리 탭(연결 설정, 기본 프롬프트 설정, 앱 및 알림)이 동작하는지 확인
+  await page
+    .getByRole('navigation', { name: '모바일 메뉴' })
+    .getByRole('link', { name: '설정', exact: true })
+    .click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('설정');
+
+  const connTab = page.getByRole('tab', { name: '연결 설정', exact: true });
+  const promptTab = page.getByRole('tab', { name: '기본 프롬프트 설정', exact: true });
+  const appTab = page.getByRole('tab', { name: '앱 및 알림', exact: true });
+
+  await expect(connTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('heading', { name: 'ComfyUI 연결' })).toBeVisible();
+
+  await appTab.click();
+  await expect(appTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('heading', { name: '앱 설치와 업데이트' })).toBeVisible();
+
+  // 5. 기본 프롬프트 설정 탭에서 기본 프롬프트 수정 및 저장 확인
+  await promptTab.click();
+  await expect(promptTab).toHaveAttribute('aria-selected', 'true');
+  await page
+    .getByLabel('기본 포지티브 프롬프트', { exact: true })
+    .fill('studio portrait, golden hour glow');
+  await page
+    .getByLabel('기본 네거티브 프롬프트', { exact: true })
+    .fill('lowres, bad anatomy');
+  await page.getByRole('button', { name: '기본 프롬프트 저장', exact: true }).click();
+
+  // 325px 뷰포트에서 어절 분절 0건 및 가로 넘침 없음 확인
+  await page.setViewportSize({ width: 325, height: 667 });
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+  ).toBe(true);
+  const splitWords = await page.evaluate(() => {
+    const bad: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode,
+        parent = node.parentElement;
+      if (
+        !parent ||
+        parent.closest('.sr-only, script, style') ||
+        !parent.getClientRects().length
+      )
+        continue;
+      for (const match of (node.textContent || '').matchAll(/[가-힣]{2,}/g)) {
+        const range = document.createRange();
+        range.setStart(node, match.index!);
+        range.setEnd(node, match.index! + match[0].length);
+        if (new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size > 1)
+          bad.push(match[0]);
+      }
+    }
+    return bad;
+  });
+  expect(splitWords).toEqual([]);
+
+  await page.goto('/create');
+  await expect(page.getByLabel('그리고 싶은 장면', { exact: true })).toHaveValue(
+    'studio portrait, golden hour glow',
+  );
+});
