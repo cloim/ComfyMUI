@@ -5,29 +5,58 @@ import {
   inferFamilyFromLoraItem,
   isVideoPreview,
   loraPreviewUrl,
-  parseCivitaiInput,
+  civitaiAirProblem,
+  parseCivitaiAir,
   parseUsageTips,
   resolveComfyLoraName,
   serializeUsageTips,
 } from '../src/lora-manager';
 
 describe('LoRA Manager domain helpers', () => {
-  it('parses CivitAI URLs and numeric IDs', () => {
+  it('parses CivitAI AIR codes', () => {
+    expect(parseCivitaiAir('urn:air:flux1:lora:civitai:840370@940211')).toEqual({
+      ecosystem: 'flux1',
+      type: 'lora',
+      modelId: 840370,
+      modelVersionId: 940211,
+    });
+    expect(parseCivitaiAir('  sdxl:checkpoint:civitai:101055  ')).toEqual({
+      ecosystem: 'sdxl',
+      type: 'checkpoint',
+      modelId: 101055,
+    });
+    expect(parseCivitaiAir('urn:air:sdxl:lora:civitai:328553@368189.safetensors')).toMatchObject({
+      modelVersionId: 368189,
+    });
+    expect(parseCivitaiAir('urn:air:krea2:checkpoint:civitai:2997793@3400188+3290672')).toEqual({
+      ecosystem: 'krea2',
+      type: 'checkpoint',
+      modelId: 2997793,
+      modelVersionId: 3400188,
+      fileId: 3290672,
+    });
+    expect(parseCivitaiAir('air:sdxl:checkpoint:civitai:827184@2514310')).toMatchObject({
+      modelId: 827184,
+      modelVersionId: 2514310,
+    });
+    expect(parseCivitaiAir('urn:air:sdxl:checkpoint:civitai:827184+2402203')).toBeNull();
+    expect(parseCivitaiAir('https://civitai.com/models/840370')).toBeNull();
+    expect(parseCivitaiAir('840370')).toBeNull();
+    expect(parseCivitaiAir('urn:air:sdxl:lora:huggingface:840370')).toBeNull();
+    expect(parseCivitaiAir('')).toBeNull();
+  });
+
+  it('rejects AIR codes that do not fit the target screen', () => {
+    expect(civitaiAirProblem('urn:air:flux1:lora:civitai:1@2', 'lora')).toBe('');
+    expect(civitaiAirProblem('urn:air:flux1:checkpoint:civitai:1@2', 'model')).toBe('');
+    expect(civitaiAirProblem('urn:air:flux1:checkpoint:civitai:1@2', 'lora')).toContain('LoRA');
+    expect(civitaiAirProblem('urn:air:flux1:lora:civitai:1@2', 'model')).toContain('체크포인트');
+    expect(civitaiAirProblem('urn:air:sdxl:vae:civitai:1@2', 'model')).toContain('체크포인트');
     expect(
-      parseCivitaiInput('https://civitai.com/models/840370?modelVersionId=940211'),
-    ).toEqual({
-      modelId: 840370,
-      modelVersionId: 940211,
-    });
-    expect(parseCivitaiInput('https://civitai.com/models/840370/flux-detail')).toEqual({
-      modelId: 840370,
-    });
-    expect(parseCivitaiInput('https://civitai.com/api/download/models/940211')).toEqual({
-      modelVersionId: 940211,
-    });
-    expect(parseCivitaiInput('840370', 'auto')).toEqual({ modelId: 840370 });
-    expect(parseCivitaiInput('940211', 'version')).toEqual({ modelVersionId: 940211 });
-    expect(parseCivitaiInput('')).toEqual({});
+      civitaiAirProblem('urn:air:krea2:checkpoint:civitai:2997793@3400188+3290672', 'model'),
+    ).toBe('');
+    expect(civitaiAirProblem('', 'model')).toContain('입력');
+    expect(civitaiAirProblem('840370', 'model')).toContain('형식');
   });
 
   it('parses and serializes usage_tips safely', () => {
@@ -69,10 +98,7 @@ describe('LoRA Manager domain helpers', () => {
   });
 
   it('resolves LoRA Manager item to ComfyUI LoraLoader option string', () => {
-    const comfyList = [
-      'Flux1.D\\illust\\simple_drawing.safetensors',
-      'Krea2/style.safetensors',
-    ];
+    const comfyList = ['Flux1.D\\illust\\simple_drawing.safetensors', 'Krea2/style.safetensors'];
     expect(
       resolveComfyLoraName(
         {

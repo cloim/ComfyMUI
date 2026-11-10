@@ -54,12 +54,36 @@ export type CivitaiFile = {
   downloadUrl?: string;
 };
 
+export type CivitaiImageResource = {
+  name?: string;
+  type?: string;
+  weight?: number;
+  hash?: string;
+};
+
+// Generation data CivitAI attaches to an example image. Keys follow A1111 naming.
+export type CivitaiImageMeta = {
+  prompt?: string;
+  negativePrompt?: string;
+  sampler?: string;
+  steps?: number | string;
+  cfgScale?: number | string;
+  seed?: number | string;
+  Size?: string;
+  Model?: string;
+  resources?: CivitaiImageResource[];
+  civitaiResources?: { type?: string; weight?: number; modelVersionName?: string }[];
+  [key: string]: unknown;
+};
+
 export type CivitaiImage = {
   url: string;
   nsfwLevel?: number;
   width?: number;
   height?: number;
   type?: string;
+  id?: number;
+  meta?: CivitaiImageMeta | null;
 };
 
 export type CivitaiVersion = {
@@ -148,59 +172,52 @@ export function serializeUsageTips(tips: LoraUsageTips): string {
   return JSON.stringify(payload);
 }
 
-export function parseCivitaiInput(
-  input: string,
-  mode: 'auto' | 'model' | 'version' = 'auto',
-): { modelId?: number; modelVersionId?: number } {
-  const trimmed = input.trim();
-  if (!trimmed) return {};
+export type CivitaiAir = {
+  ecosystem: string;
+  type: string;
+  modelId: number;
+  modelVersionId?: number;
+  fileId?: number;
+};
 
-  if (/^\d+$/.test(trimmed)) {
-    const num = Number(trimmed);
-    if (!Number.isSafeInteger(num) || num <= 0) return {};
-    if (mode === 'version') return { modelVersionId: num };
-    return { modelId: num };
-  }
+const LORA_AIR_TYPES = ['lora', 'lycoris', 'locon', 'dora'];
+const NON_MODEL_AIR_TYPES = ['embedding', 'vae', 'controlnet', 'upscaler'];
 
-  try {
-    const url = new URL(trimmed);
-    const versionParam = url.searchParams.get('modelVersionId');
-    const parsedVersionParam =
-      versionParam && /^\d+$/.test(versionParam) ? Number(versionParam) : undefined;
+// AIR: [urn:air: | air:]{ecosystem}:{type}:civitai:{modelId}[@{versionId}][+{fileId}][.{format}]
+export function parseCivitaiAir(input: string): CivitaiAir | null {
+  const match = input
+    .trim()
+    .match(
+      /^(?:urn:air:|air:)?([a-z0-9_-]+):([a-z0-9_-]+):civitai:(\d+)(?:@(\d+))?(?:\+(\d+))?(?:\.[a-z0-9]+)?$/i,
+    );
+  if (!match) return null;
+  const [modelId, modelVersionId, fileId] = [match[3], match[4], match[5]].map((v) =>
+    v === undefined ? undefined : Number(v),
+  );
+  const valid = (n?: number) => n === undefined || (Number.isSafeInteger(n) && n > 0);
+  if (!modelId || !valid(modelId) || !valid(modelVersionId) || !valid(fileId)) return null;
+  // A file ID only makes sense inside a specific version.
+  if (fileId && !modelVersionId) return null;
+  return {
+    ecosystem: match[1].toLowerCase(),
+    type: match[2].toLowerCase(),
+    modelId,
+    ...(modelVersionId ? { modelVersionId } : {}),
+    ...(fileId ? { fileId } : {}),
+  };
+}
 
-    const downloadMatch = url.pathname.match(/\/api\/download\/models\/(\d+)/i);
-    if (downloadMatch) {
-      return { modelVersionId: Number(downloadMatch[1]) };
-    }
-
-    const modelVersionPathMatch = url.pathname.match(/\/model-versions\/(\d+)/i);
-    if (modelVersionPathMatch) {
-      return { modelVersionId: Number(modelVersionPathMatch[1]) };
-    }
-
-    const modelMatch = url.pathname.match(/\/models\/(\d+)/i);
-    if (modelMatch) {
-      return {
-        modelId: Number(modelMatch[1]),
-        ...(parsedVersionParam ? { modelVersionId: parsedVersionParam } : {}),
-      };
-    }
-
-    if (parsedVersionParam) {
-      return { modelVersionId: parsedVersionParam };
-    }
-  } catch {
-    const modelMatch = trimmed.match(/models\/(\d+)/i);
-    const versionMatch = trimmed.match(/modelVersionId=(\d+)/i);
-    if (modelMatch || versionMatch) {
-      return {
-        ...(modelMatch ? { modelId: Number(modelMatch[1]) } : {}),
-        ...(versionMatch ? { modelVersionId: Number(versionMatch[1]) } : {}),
-      };
-    }
-  }
-
-  return {};
+// Returns a user-facing problem when the AIR cannot be used on the given screen.
+export function civitaiAirProblem(input: string, target: 'lora' | 'model'): string {
+  if (!input.trim()) return 'CivitAI AIR 코드를 입력해 주세요';
+  const air = parseCivitaiAir(input);
+  if (!air) return 'AIR 코드 형식을 확인해 주세요 (예: urn:air:flux1:lora:civitai:840370@940211)';
+  const isLora = LORA_AIR_TYPES.includes(air.type);
+  if (target === 'lora' && !isLora)
+    return `${air.type} 유형의 AIR 코드예요. LoRA AIR 코드를 입력해 주세요`;
+  if (target === 'model' && (isLora || NON_MODEL_AIR_TYPES.includes(air.type)))
+    return `${air.type} 유형의 AIR 코드예요. 모델 화면에는 체크포인트 AIR 코드를 입력해 주세요`;
+  return '';
 }
 
 export function inferFamilyFromLoraItem(
@@ -275,6 +292,109 @@ export function loraPreviewUrl(base: string, previewUrl?: string): string {
     return `${base}${previewUrl}`;
   }
   return previewUrl;
+}
+
+export type ExampleKind = 'checkpoints' | 'loras';
+
+// Full CivitAI data for one model file. The list endpoints drop example images, so the
+// detail view reads them here. A file without CivitAI data answers 404.
+export async function fetchExampleImages(
+  base: string,
+  kind: ExampleKind,
+  filePath: string,
+): Promise<CivitaiImage[]> {
+  let res: { success?: boolean; metadata?: { images?: unknown; customImages?: unknown } };
+  try {
+    res = await request(base, `/api/lm/${kind}/metadata?file_path=${encodeURIComponent(filePath)}`);
+  } catch (e) {
+    if (/404|not found/i.test(String(e))) return [];
+    throw e;
+  }
+  const list = [
+    ...(Array.isArray(res.metadata?.images) ? res.metadata.images : []),
+    ...(Array.isArray(res.metadata?.customImages) ? res.metadata.customImages : []),
+  ] as CivitaiImage[];
+  return list.filter((im) => im && typeof im.url === 'string' && im.url);
+}
+
+// The server downloads the remote image and replaces the card preview with it.
+export async function setPreviewFromUrl(
+  base: string,
+  kind: ExampleKind,
+  filePath: string,
+  image: CivitaiImage,
+): Promise<{ preview_url: string; preview_nsfw_level: number }> {
+  const res = await request<{
+    success?: boolean;
+    error?: string;
+    preview_url?: string;
+    preview_nsfw_level?: number;
+  }>(base, `/api/lm/${kind}/set-preview-from-url`, {
+    method: 'POST',
+    body: JSON.stringify({
+      model_path: filePath,
+      image_url: image.url,
+      nsfw_level: image.nsfwLevel || 0,
+    }),
+  });
+  if (!res.success || !res.preview_url) throw new Error(res.error || '기본 이미지를 바꾸지 못했어요');
+  return { preview_url: res.preview_url, preview_nsfw_level: res.preview_nsfw_level ?? 0 };
+}
+
+export const DEMO_EXAMPLE_IMAGES: CivitaiImage[] = [
+  {
+    url: '/sample.svg',
+    width: 832,
+    height: 1216,
+    nsfwLevel: 1,
+    type: 'image',
+    meta: {
+      prompt: 'portrait of an elegant adult woman, soft window light, film grain, 85mm',
+      negativePrompt: 'blurry, lowres',
+      sampler: 'euler',
+      steps: 24,
+      cfgScale: 1,
+      seed: 4123,
+      Size: '832x1216',
+      'Distilled CFG Scale': '3.5',
+      resources: [{ name: 'Flux 1.D Studio', type: 'model' }],
+    },
+  },
+  { url: '/sample.svg', width: 1216, height: 832, nsfwLevel: 1, type: 'image', meta: null },
+  { url: '/sample.svg', width: 1024, height: 1024, nsfwLevel: 8, type: 'image', meta: null },
+];
+
+// CivitAI CDN paths are /{key}/{uuid}/{options}/{name}; the options segment picks the
+// rendition. Thumbnails ask for a narrow copy, the viewer asks for the full image.
+export function civitaiMediaUrl(
+  base: string,
+  url: string,
+  size: 'thumb' | 'full',
+  video = false,
+): string {
+  if (url.startsWith('/api/lm/') || url.startsWith('/example_images_static/'))
+    return `${base}${url}`;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (!host.endsWith('.civitai.com')) return url;
+    const parts = parsed.pathname.split('/');
+    if (parts.length < 5 || !/^[a-z]+=/.test(parts[3])) return url;
+    parts[3] =
+      size === 'full'
+        ? 'optimized=true'
+        : video
+          ? 'transcode=true,width=450,optimized=true'
+          : 'width=450,optimized=true';
+    parsed.pathname = parts.join('/');
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+export function isVideoMedia(image: Pick<CivitaiImage, 'url' | 'type'>): boolean {
+  return image.type === 'video' || isVideoPreview(image.url);
 }
 
 export function isVideoPreview(url?: string): boolean {
@@ -477,10 +597,7 @@ export async function scanLoras(
   base: string,
   fullRebuild = false,
 ): Promise<{ status?: string; message?: string }> {
-  return request(
-    base,
-    `/api/lm/loras/scan?full_rebuild=${fullRebuild ? 'true' : 'false'}`,
-  );
+  return request(base, `/api/lm/loras/scan?full_rebuild=${fullRebuild ? 'true' : 'false'}`);
 }
 
 export async function saveLoraMetadata(
@@ -610,6 +727,7 @@ export async function downloadCivitaiLora(
     relative_path?: string;
     use_default_paths?: boolean;
     download_id?: string;
+    file_params?: { id: number };
   },
 ): Promise<{
   success: boolean;
@@ -617,40 +735,24 @@ export async function downloadCivitaiLora(
   result?: Record<string, unknown>;
   error?: string;
 }> {
+  // No client timeout: the server answers only when the file is finished.
   const response = await fetch(`${base}/api/lm/download-model`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(300_000),
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok || body.success === false) {
-    throw new Error(body.error || response.statusText || 'CivitAI 다운로드에 실패했습니다');
+    const message =
+      body.error?.message || body.error || response.statusText || 'CivitAI 다운로드에 실패했습니다';
+    throw Object.assign(new Error(String(message)), { status: response.status });
   }
   return body;
-}
-
-export async function fetchDownloadProgress(
-  base: string,
-  downloadId: string,
-): Promise<DownloadProgressSnapshot | null> {
-  try {
-    const res = await request<{ success: boolean; progress?: DownloadProgressSnapshot }>(
-      base,
-      `/api/lm/download-progress/${encodeURIComponent(downloadId)}`,
-    );
-    return res.progress || null;
-  } catch {
-    return null;
-  }
 }
 
 export async function cancelLoraDownload(
   base: string,
   downloadId: string,
 ): Promise<{ success: boolean }> {
-  return request(
-    base,
-    `/api/lm/cancel-download-get?download_id=${encodeURIComponent(downloadId)}`,
-  );
+  return request(base, `/api/lm/cancel-download-get?download_id=${encodeURIComponent(downloadId)}`);
 }
