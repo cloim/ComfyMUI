@@ -54,13 +54,9 @@ export function calculateRemainingEstimate(
     return durMs / 1000 / Math.max(1, complexity);
   });
 
-  const avgSecPerUnit =
-    secPerUnitList.reduce((acc, val) => acc + val, 0) / secPerUnitList.length;
+  const avgSecPerUnit = secPerUnitList.reduce((acc, val) => acc + val, 0) / secPerUnitList.length;
 
-  const totalEstimatedSeconds = Math.max(
-    2,
-    Math.round(avgSecPerUnit * targetComplexity),
-  );
+  const totalEstimatedSeconds = Math.max(2, Math.round(avgSecPerUnit * targetComplexity));
 
   // 진행률 반영: 100% 진행에 가까울수록 잔여 시간 감소
   const currentProgress = Math.min(99, Math.max(0, currentJob.progress || 0));

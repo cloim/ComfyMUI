@@ -7,16 +7,15 @@ import {
   Settings2,
   Save,
   Plus,
-  ArrowUpRight,
   WifiOff,
   Check,
-  Workflow,
   Layers2,
   Box,
 } from 'lucide-react';
 import { StudioProvider, useStudio } from './studio';
 import { IconButton } from './components/ui';
-import Create, { GenerateBar } from './screens/Create';
+import { HeaderSlotProvider } from './components/HeaderActions';
+import Create, { GenerateControls } from './screens/Create';
 import Gallery from './screens/Gallery';
 import Presets, { PresetEditor } from './screens/Presets';
 import Loras from './screens/Loras';
@@ -38,6 +37,24 @@ export default function App() {
     </StudioProvider>
   );
 }
+// Server status. Shown beside the sidebar brand; the header keeps it only on widths
+// where the sidebar is hidden but there is still room.
+function ConnectionBadge({ state, className }: { state: string; className: string }) {
+  const label =
+    state === 'connected' ? '연결됨' : state === 'preview' ? '미리보기' : '연결 확인';
+  return (
+    <Link
+      to="/settings"
+      title={state === 'preview' ? '미리보기 모드' : label}
+      className={`${className} shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-line bg-paper px-2 py-0.5 text-2xs text-muted hover:text-ink`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${state === 'connected' ? 'bg-olive' : 'bg-amber-600'}`}
+      />
+      {label}
+    </Link>
+  );
+}
 function Shell() {
   const location = useLocation();
   const page = nav.find((n) => n.path === location.pathname);
@@ -45,6 +62,7 @@ function Shell() {
   const [saveOpen, setSaveOpen] = useState(false);
   const pwa = usePwa();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     const viewport = window.visualViewport;
     const sync = () => {
@@ -68,63 +86,41 @@ function Shell() {
       >
         본문으로 이동
       </a>
-      <aside className="hidden w-[216px] shrink-0 flex-col border-r border-line bg-white px-4 py-7 md:flex xl:w-[236px]">
-        <Link
-          to="/create"
-          className="mb-11 flex items-center gap-2.5 px-3"
-          aria-label="ComfyMUI 홈"
-        >
-          <img src="/icon.svg" className="h-9 w-9" alt="" />
-          <span className="font-display text-xl font-extrabold tracking-[-1px]">
-            Comfy<span className="font-medium">MUI</span>
-          </span>
-        </Link>
-        <nav aria-label="주요 메뉴" className="flex flex-col gap-2">
+      <aside className="hidden w-[224px] shrink-0 flex-col border-r border-line bg-white px-3 py-4 md:flex xl:w-[232px]">
+        <div className="mb-5 flex items-center justify-between gap-1.5 pl-2.5">
+          <Link to="/create" className="flex min-w-0 items-center gap-1.5" aria-label="ComfyMUI 홈">
+            <img src="/icon.svg" className="h-7 w-7 shrink-0" alt="" />
+            <span className="font-display text-base font-extrabold tracking-tight">
+              Comfy<span className="font-medium">MUI</span>
+            </span>
+          </Link>
+          <ConnectionBadge state={connectionState} className="flex" />
+        </div>
+        <nav aria-label="주요 메뉴" className="flex flex-col gap-1">
           {nav.map((n) => (
             <NavLink
               key={n.path}
               to={n.path}
               className={({ isActive }) =>
-                `flex min-h-12 items-center gap-3 rounded-xl px-4 text-sm font-medium transition-colors ${isActive ? 'bg-ink text-lime' : 'text-muted hover:bg-paper'}`
+                `flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${isActive ? 'bg-ink text-lime' : 'text-muted hover:bg-paper'}`
               }
             >
-              <n.icon size={18} />
+              <n.icon size={16} />
               {n.label}
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto border-t border-line pt-5">
-          <Link to="/settings" className="flex items-start gap-3 rounded-xl p-3 hover:bg-paper">
-            <span
-              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${connectionState === 'connected' ? 'bg-olive' : 'bg-amber-600'}`}
-            />
-            <div>
-              <p className="text-xs font-semibold">
-                {connectionState === 'connected'
-                  ? 'ComfyUI 연결됨'
-                  : connectionState === 'preview'
-                    ? '미리보기 모드'
-                    : '서버 연결 확인'}
-              </p>
-              <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted">
-                연결 관리
-                <ArrowUpRight size={11} />
-              </p>
-            </div>
-          </Link>
-          <p className="mt-4 px-3 text-[10px] text-muted">상상을 위한, 가벼운 작업실</p>
-        </div>
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="z-20 flex h-[76px] shrink-0 items-center justify-between gap-3 border-b border-line bg-paper px-4 pt-[env(safe-area-inset-top)] sm:px-7 lg:px-9">
-          <div className="flex min-w-0 items-center gap-3">
+        <header className="z-20 flex h-14 shrink-0 items-center justify-between gap-2.5 border-b border-line bg-paper px-4 pt-[env(safe-area-inset-top)] sm:px-5 lg:px-6">
+          <div className="flex min-w-0 items-center gap-2.5">
             <Link to="/create" aria-label="ComfyMUI 홈" className="md:hidden">
-              <img src="/icon.svg" alt="" className="h-8 w-8" />
+              <img src="/icon.svg" alt="" className="h-7 w-7" />
             </Link>
             <h1
               data-ui-audit-context-title
               data-ui-audit-contrast
-              className="text-xl font-bold tracking-tight"
+              className="text-base font-bold tracking-tight"
             >
               {page?.label || '만들기'}
             </h1>
@@ -134,27 +130,18 @@ function Shell() {
               </Link>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <Link
-              to="/settings"
-              className="hidden items-center gap-2 rounded-full border border-line bg-white px-3 py-2 text-[11px] text-muted sm:flex"
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${connectionState === 'connected' ? 'bg-olive' : 'bg-amber-600'}`}
-              />
-              {connectionState === 'connected'
-                ? '연결됨'
-                : connectionState === 'preview'
-                  ? '미리보기 모드'
-                  : '연결 확인'}
-            </Link>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <ConnectionBadge state={connectionState} className="hidden sm:flex md:hidden" />
             {location.pathname === '/create' && (
-              <IconButton
-                icon={Save}
-                label="현재 설정을 프리셋으로 저장"
-                onClick={() => setSaveOpen(true)}
-              />
-            )}{' '}
+              <>
+                <IconButton
+                  icon={Save}
+                  label="현재 설정을 프리셋으로 저장"
+                  onClick={() => setSaveOpen(true)}
+                />
+                <GenerateControls />
+              </>
+            )}
             {location.pathname === '/presets' && (
               <IconButton
                 icon={Plus}
@@ -162,12 +149,17 @@ function Shell() {
                 onClick={() => setSaveOpen(true)}
               />
             )}
+            <div
+              ref={setHeaderSlot}
+              data-header-actions
+              className="flex items-center gap-1.5 empty:hidden"
+            />
           </div>
         </header>
         {(!online || storageError) && (
           <div
             role="status"
-            className="flex flex-wrap items-center justify-center gap-2 bg-[#ece4c9] px-4 py-2 text-xs text-[#69521e]"
+            className="flex flex-wrap items-center justify-center gap-2 bg-[#ece4c9] px-4 py-1.5 text-xs text-[#69521e]"
           >
             {!online ? (
               <>
@@ -189,30 +181,31 @@ function Shell() {
               : undefined
           }
         >
-          <Routes>
-            <Route path="/create" element={<Create />} />
-            <Route path="/models" element={<Models />} />
-            <Route path="/loras" element={<Loras />} />
-            <Route path="/gallery" element={<Gallery />} />
-            <Route path="/presets" element={<Presets />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<Navigate to="/create" replace />} />
-          </Routes>
+          <HeaderSlotProvider value={headerSlot}>
+            <Routes>
+              <Route path="/create" element={<Create />} />
+              <Route path="/models" element={<Models />} />
+              <Route path="/loras" element={<Loras />} />
+              <Route path="/gallery" element={<Gallery />} />
+              <Route path="/presets" element={<Presets />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="*" element={<Navigate to="/create" replace />} />
+            </Routes>
+          </HeaderSlotProvider>
         </main>
-        {location.pathname === '/create' && <GenerateBar />}
         <nav
           aria-label="모바일 메뉴"
-          className={`${keyboardOpen ? 'hidden' : 'flex'} shrink-0 items-stretch justify-around border-t border-line bg-white px-1.5 pb-[max(6px,env(safe-area-inset-bottom))] pt-1 md:hidden`}
+          className={`${keyboardOpen ? 'hidden' : 'flex'} shrink-0 items-stretch justify-around border-t border-line bg-white px-1.5 pb-[max(4px,env(safe-area-inset-bottom))] pt-1 md:hidden`}
         >
           {nav.map((n) => (
             <NavLink
               key={n.path}
               to={n.path}
               className={({ isActive }) =>
-                `flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-1.5 text-[10px] font-semibold ${isActive ? 'text-olive' : 'text-muted'}`
+                `flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1 py-1 text-2xs font-semibold ${isActive ? 'text-olive' : 'text-muted'}`
               }
             >
-              <n.icon size={19} />
+              <n.icon size={17} />
               {n.label}
             </NavLink>
           ))}
@@ -222,9 +215,9 @@ function Shell() {
         <div
           data-ui-audit-overlay
           role="status"
-          className="fixed left-1/2 top-[90px] z-[2000] flex w-max max-w-[calc(100%-32px)] -translate-x-1/2 items-start gap-2 rounded-2xl bg-ink px-5 py-3.5 text-xs leading-relaxed text-white shadow-xl"
+          className="fixed left-1/2 top-[68px] z-[2000] flex w-max max-w-[calc(100%-32px)] -translate-x-1/2 items-start gap-2 rounded-xl bg-ink px-4 py-2.5 text-xs leading-relaxed text-white shadow-xl"
         >
-          <Check size={15} className="mt-0.5 shrink-0" />
+          <Check size={14} className="mt-0.5 shrink-0" />
           <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">{notice}</span>
         </div>
       )}

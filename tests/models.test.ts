@@ -18,6 +18,8 @@ import {
   checkQualityIssues,
   getOptimalQualitySettings,
   isOptimalQuality,
+  sortModelEntries,
+  applyModelReorder,
 } from '../src/models';
 const info: ObjectInfo = {
   CheckpointLoaderSimple: {
@@ -295,5 +297,50 @@ describe('family-specific native graphs', () => {
     };
     expect(checkQualityIssues(optimalFlux)).toHaveLength(0);
     expect(isOptimalQuality(optimalFlux)).toBe(true);
+  });
+  it('reorders model entries per family while preserving other family orders', () => {
+    const all = catalog(info);
+    const fluxIds = all.filter((e) => e.family === 'flux').map((e) => e.id);
+    expect(fluxIds.length).toBeGreaterThanOrEqual(3);
+    const reversed = [...fluxIds].reverse();
+    const order = applyModelReorder([], fluxIds, reversed);
+    const sorted = sortModelEntries(all, order).filter((e) => e.family === 'flux');
+    expect(sorted.map((e) => e.id)).toEqual(reversed);
+  });
+});
+
+describe('diffusion-only files stored under checkpoints', () => {
+  const moody = 'Krea2\Moody-Krea-Mix-v8_00001__clean-int8_convrot.safetensors';
+  const ckptInfo: ObjectInfo = {
+    CheckpointLoaderSimple: {
+      input: { required: { ckpt_name: [[moody, 'Flux1.D\realDream_flux1V1.safetensors']] } },
+    },
+  };
+
+  it('lists non-Flux checkpoints-folder models in their family', () => {
+    expect(catalog(ckptInfo)).toContainEqual(
+      expect.objectContaining({ name: moody, loader: 'CheckpointLoaderSimple', family: 'krea2' }),
+    );
+  });
+
+  it('loads the MODEL through CheckpointLoaderSimple and keeps separate encoder and VAE loaders', () => {
+    const w = buildWorkflow({
+      ...defaults,
+      architecture: 'krea2',
+      modelLoader: 'CheckpointLoaderSimple',
+      model: moody,
+      clip1: 'qwen3_vl_4b.safetensors',
+      clip2: '',
+      vae: 'qwen_image_vae.safetensors',
+      steps: 8,
+      cfg: 1,
+    });
+    expect(w['1']).toEqual({ class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: moody } });
+    expect(w['5'].inputs.model).toEqual(['1', 0]);
+    expect(w['8'].inputs).toEqual({ clip_name: 'qwen3_vl_4b.safetensors', type: 'krea2' });
+    expect(w['9']).toEqual({
+      class_type: 'VAELoader',
+      inputs: { vae_name: 'qwen_image_vae.safetensors' },
+    });
   });
 });

@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Box,
   SlidersHorizontal,
@@ -7,7 +8,7 @@ import {
   Trash2,
   WandSparkles,
   ChevronDown,
-  ArrowDownUp,
+  ArrowLeftRight,
   Sparkles,
   Check,
   FileJson,
@@ -15,22 +16,20 @@ import {
   Download,
   RotateCcw,
   LockKeyhole,
-  Images,
   ListOrdered,
   ArrowUp,
   ArrowDown,
-  Layers,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { useStudio } from '../studio';
 import {
-  DEFAULT_QUICK_BADGES,
+  hasPromptAttribute,
+  togglePromptAttribute,
   options,
   parseWorkflow,
   downloadJson,
   buildWorkflow,
-  reorderQueue,
   type Generation,
+  type PromptAssembleElement,
   type Workflow,
 } from '../domain';
 import {
@@ -43,6 +42,7 @@ import {
   SelectControl,
   IconButton,
   Spinner,
+  modifiedField,
 } from '../components/ui';
 import { Result } from '../components/Result';
 import { PromptHelper } from '../components/PromptHelper';
@@ -53,17 +53,15 @@ import {
   isArtifactProneSampler,
   families,
   qualityProfiles,
-  checkQualityIssues,
-  getOptimalQualitySettings,
-  isOptimalQuality,
 } from '../models';
 
 export default function Create() {
   const {
     settings: s,
     setSettings,
-    quickBadges,
-    setQuickBadges,
+    promptAssemble,
+    selectedAssembleId,
+    setSelectedAssembleId,
     info,
     familyAssignments,
     notify,
@@ -77,73 +75,66 @@ export default function Create() {
     setAdvanced(true);
   }
   const [addLora, setAddLora] = useState(false);
-  const [badgeModalOpen, setBadgeModalOpen] = useState(false);
-  const [newBadgeText, setNewBadgeText] = useState('');
   const [negative, setNegative] = useState(false);
   const patch = (v: Partial<Generation>) => setSettings((s) => ({ ...s, ...v }));
-  function addQuickBadge() {
-    const trimmed = newBadgeText.trim();
-    if (!trimmed) return;
-    if (quickBadges.includes(trimmed)) {
-      notify('이미 등록된 단축 배지예요');
-      return;
-    }
-    setQuickBadges((prev) => [...prev, trimmed]);
-    setNewBadgeText('');
-    notify(`'${trimmed}' 단축 배지를 추가했어요`);
-  }
-  function removeQuickBadge(target: string) {
-    setQuickBadges((prev) => prev.filter((item) => item !== target));
-  }
-  function moveQuickBadge(fromIndex: number, toIndex: number) {
-    setQuickBadges((prev) => reorderQueue(prev, fromIndex, toIndex));
-  }
+  // The batch size control was removed; multiple images come from the 연속 queue instead.
+  useEffect(() => {
+    if (s.batch !== 1) patch({ batch: 1 });
+  }, [s.batch]);
   const ratios = [
     { name: '정사각', ratio: '1:1', w: 1024, h: 1024 },
     { name: '세로', ratio: '3:4', w: 768, h: 1024 },
     { name: '가로', ratio: '4:3', w: 1024, h: 768 },
     { name: '와이드', ratio: '16:9', w: 1024, h: 576 },
   ];
+  const currentRatio = ratios.find((r) => r.w === s.width && r.h === s.height);
+  const ratioValue = currentRatio ? `${currentRatio.w}x${currentRatio.h}` : 'custom';
   const loras = compatibleAssets(info, 'lora', s.architecture, familyAssignments);
   return (
-    <div className="mx-auto flex w-full max-w-[1240px] flex-col gap-6 px-4 py-6 sm:px-7 lg:flex-row lg:gap-8 lg:px-9 lg:py-8">
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
-        <span className="hidden self-end text-xs text-muted sm:block">
-          모든 설정은 자동 저장돼요
-        </span>
+    <div className="mx-auto flex w-full max-w-[1240px] flex-col gap-4 px-4 py-4 sm:px-5 lg:flex-row lg:gap-5 lg:px-6 lg:py-5">
+      <div className="flex min-w-0 flex-1 flex-col gap-3.5">
         {s.workflow && (
           <div className="panel border-olive/30 bg-lime/15">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <FileJson size={18} />
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              <FileJson size={16} />
               가져온 워크플로 사용 중
             </div>
-            <p className="mt-2 text-xs leading-relaxed text-muted">
+            <p className="mt-1.5 text-xs leading-relaxed text-muted">
               {Object.keys(s.workflow).length}개 노드의 입력을 그대로 실행해요
               <br />
               아래 기본 설정 대신 고급 설정의 노드 입력을 수정해 주세요
             </p>
-            <button className="btn-secondary mt-4" onClick={() => openAdvanced('workflow')}>
+            <button className="btn-secondary mt-3" onClick={() => openAdvanced('workflow')}>
               워크플로 편집
             </button>
           </div>
         )}
         <fieldset
           disabled={Boolean(s.workflow)}
-          className="flex min-w-0 flex-col gap-4 disabled:opacity-45"
+          className="flex min-w-0 flex-col gap-3.5 disabled:opacity-45"
         >
           <ModelPanel />
           <Section
             title="프롬프트"
             icon={WandSparkles}
-            action={<span className="font-mono text-[11px] text-muted">{s.positive.length}자</span>}
+            action={<span className="font-mono text-2xs text-muted">{s.positive.length}자</span>}
           >
+            <PromptAssembleBar
+              elements={promptAssemble}
+              selectedId={selectedAssembleId}
+              onSelectId={setSelectedAssembleId}
+              positive={s.positive}
+              onToggleAttribute={(attr) =>
+                patch({ positive: togglePromptAttribute(s.positive, attr) })
+              }
+            />
             <label htmlFor="positive" className="sr-only">
               그리고 싶은 장면
             </label>
             <textarea
               ref={promptTextareaRef}
               id="positive"
-              className="field min-h-36 resize-y leading-7"
+              className="field min-h-24 resize-y leading-relaxed"
               value={s.positive}
               onChange={(e) => patch({ positive: e.target.value })}
               placeholder="어떤 장면을 만들고 싶으세요?"
@@ -154,34 +145,10 @@ export default function Create() {
               jobs={jobs}
               textareaRef={promptTextareaRef}
             />
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                aria-label="단축 배지 관리"
-                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border border-olive/40 bg-lime/20 px-3 py-2 text-[11px] font-semibold text-olive transition hover:border-olive hover:bg-lime/35"
-                onClick={() => setBadgeModalOpen(true)}
-              >
-                <SlidersHorizontal size={12} />
-                단축 배지 관리
-              </button>
-              {quickBadges.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  className="inline-flex min-h-11 items-center justify-center gap-1 rounded-full border border-line px-3 py-2 text-[11px] text-muted transition hover:border-olive hover:text-olive"
-                  onClick={() =>
-                    patch({ positive: s.positive.trim() + (s.positive.trim() ? ', ' : '') + tag })
-                  }
-                >
-                  <Plus size={11} />
-                  {tag}
-                </button>
-              ))}
-            </div>
             <button
               onClick={() => setNegative(!negative)}
               aria-expanded={negative}
-              className="mt-5 flex min-h-11 w-full items-center justify-between gap-2 text-xs font-semibold text-muted"
+              className="mt-3 flex min-h-8 w-full items-center justify-between gap-2 text-xs font-semibold text-muted"
             >
               네거티브 프롬프트
               <ChevronDown size={15} className={negative ? 'rotate-180' : ''} />
@@ -193,7 +160,7 @@ export default function Create() {
                 </label>
                 <textarea
                   id="negative"
-                  className="field mt-2 min-h-20 resize-y text-xs leading-6"
+                  className="field mt-1.5 min-h-16 resize-y text-xs leading-relaxed"
                   value={s.negative}
                   onChange={(e) => patch({ negative: e.target.value })}
                   placeholder="이미지에서 제외할 요소"
@@ -205,15 +172,9 @@ export default function Create() {
             title="LoRA"
             icon={Layers2}
             action={
-              <div className="-my-1.5 flex items-center gap-3">
-                <Link
-                  to="/loras"
-                  className="flex min-h-8 items-center gap-1 text-xs font-medium text-muted hover:text-ink"
-                >
-                  관리
-                </Link>
+              <div className="-my-1 flex items-center gap-2">
                 <button
-                  className="flex min-h-8 items-center gap-1 text-xs font-semibold text-olive"
+                  className="flex min-h-7 items-center gap-1 text-xs font-semibold text-olive"
                   onClick={() => setAddLora(true)}
                 >
                   <Plus size={14} />
@@ -223,26 +184,26 @@ export default function Create() {
             }
           >
             {s.loras.length ? (
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2.5">
                 {s.loras.map((l, i) => (
-                  <div key={i} className="rounded-xl bg-paper p-4">
-                    <div className="mb-3 flex items-center justify-between gap-2">
+                  <div key={i} className="rounded-lg bg-paper p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
                       <p className="min-w-0 truncate text-xs font-semibold">{l.name}</p>
                       <IconButton
                         icon={Trash2}
                         danger
-                        className="-my-2.5 -mr-2"
+                        className="-my-1.5 -mr-1"
                         label={`LoRA ${i + 1} 제거`}
                         onClick={() => patch({ loras: s.loras.filter((_, idx) => idx !== i) })}
                       />
                     </div>
                     {!loras.includes(l.name) && (
-                      <p role="status" className="mb-3 text-xs text-red-700">
+                      <p role="status" className="mb-2 text-xs text-red-700">
                         현재 계열과 다른 LoRA예요 | 제거하거나 계열 분류를 확인해 주세요
                       </p>
                     )}
                     <div
-                      className={`grid gap-5 ${s.architecture === 'flux' ? 'grid-cols-2' : 'grid-cols-1'}`}
+                      className={`grid gap-3 ${s.architecture === 'flux' ? 'grid-cols-2' : 'grid-cols-1'}`}
                     >
                       <Slider
                         label={`LoRA ${i + 1} 모델 강도`}
@@ -270,15 +231,15 @@ export default function Create() {
               </div>
             ) : (
               <button
-                className="flex min-h-16 w-full items-center gap-4 rounded-xl border border-dashed border-line p-4 text-left"
+                className="flex min-h-12 w-full items-center gap-3 rounded-lg border border-dashed border-line p-3 text-left"
                 onClick={() => setAddLora(true)}
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone">
-                  <Plus size={18} className="text-muted" />
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-stone">
+                  <Plus size={16} className="text-muted" />
                 </span>
                 <span>
                   <span className="block text-xs font-medium">원하는 스타일을 더해 보세요</span>
-                  <span className="mt-1 block text-[11px] text-muted">
+                  <span className="mt-0.5 block text-2xs text-muted">
                     여러 LoRA와 강도를 자유롭게 조합해요
                   </span>
                 </span>
@@ -286,68 +247,72 @@ export default function Create() {
             )}
           </Section>
           <Section title="이미지 설정" icon={SlidersHorizontal}>
-            <div className="grid grid-cols-4 gap-2">
-              {ratios.map((r) => (
-                <button
-                  key={r.name}
-                  onClick={() => patch({ width: r.w, height: r.h })}
-                  aria-pressed={s.width === r.w && s.height === r.h}
-                  className={`flex min-h-[88px] min-w-0 flex-col items-center justify-center gap-2 rounded-xl border transition ${s.width === r.w && s.height === r.h ? 'border-olive bg-lime/25 text-olive' : 'border-line text-muted hover:bg-paper'}`}
-                >
-                  <span
-                    className="block rounded-[3px] border-[1.5px] border-current"
-                    style={{
-                      width: r.w / r.h > 1 ? 23 : 18,
-                      height: r.w / r.h > 1 ? (23 * r.h) / r.w : (18 * r.h) / r.w,
-                    }}
-                  />
-                  <span className="text-[11px] font-semibold">{r.name}</span>
-                  <span className="font-mono text-[10px]">{r.ratio}</span>
-                </button>
-              ))}
-            </div>
-            <div data-ui-audit-row className="mt-5 grid grid-cols-2 items-end gap-3">
-              <Field label="해상도">
-                <button
-                  className="field flex items-center justify-between text-sm"
-                  onClick={() => openAdvanced()}
-                >
-                  <span className="font-mono text-xs">
-                    {s.width} × {s.height}
-                  </span>
-                  <SlidersHorizontal size={14} className="text-muted" />
-                </button>
-              </Field>
-              <Field label="생성 수">
+            <div className="grid grid-cols-1 items-end gap-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+              <Field label="비율">
                 <SelectControl
-                  aria-label="생성 수"
-                  value={s.batch}
-                  onChange={(e) => patch({ batch: Number(e.target.value) })}
+                  aria-label="비율"
+                  value={ratioValue}
+                  onChange={(e) => {
+                    const found = ratios.find((r) => `${r.w}x${r.h}` === e.target.value);
+                    if (found) patch({ width: found.w, height: found.h });
+                  }}
                 >
-                  {[1, 2, 3, 4, 6, 8].map((n) => (
-                    <option key={n} value={n}>
-                      {n}장
+                  {ratios.map((r) => (
+                    <option key={r.ratio} value={`${r.w}x${r.h}`}>
+                      {r.name} ({r.ratio})
                     </option>
                   ))}
+                  {!currentRatio && (
+                    <option value="custom" disabled>
+                      직접 설정
+                    </option>
+                  )}
                 </SelectControl>
               </Field>
+              <div
+                data-ui-audit-row
+                className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-1.5"
+              >
+                <Numeric
+                  label="너비"
+                  value={s.width}
+                  onChange={(width) => patch({ width })}
+                  min={64}
+                  max={4096}
+                  step={8}
+                />
+                <IconButton
+                  icon={ArrowLeftRight}
+                  label="가로와 세로 바꾸기"
+                  className="h-9 w-9"
+                  onClick={() => patch({ width: s.height, height: s.width })}
+                />
+                <Numeric
+                  label="높이"
+                  value={s.height}
+                  onChange={(height) => patch({ height })}
+                  min={64}
+                  max={4096}
+                  step={8}
+                />
+              </div>
             </div>
           </Section>
         </fieldset>
         <button
           aria-label="고급 설정"
           onClick={() => openAdvanced()}
-          className="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-line bg-white px-5 py-4 text-left"
+          className="flex min-h-11 items-center justify-between gap-2.5 rounded-xl border border-line bg-white px-3.5 py-2.5 sm:px-4 text-left"
         >
-          <span className="flex items-center gap-3 text-sm font-semibold">
-            <SlidersHorizontal size={17} className="text-muted" />
+          <span className="flex items-center gap-2 text-sm font-bold">
+            <SlidersHorizontal size={15} className="text-muted" />
             고급 설정
           </span>
-          <span className="flex items-center gap-2 font-mono text-[11px] text-muted">
+          <span className="flex items-center gap-2 font-mono text-2xs text-muted">
             <span className="hidden sm:inline">
               {s.steps} steps | CFG {s.cfg} | {s.sampler}
             </span>
-            <ChevronDown size={16} />
+            <ChevronDown size={15} />
           </span>
         </button>
       </div>
@@ -355,101 +320,9 @@ export default function Create() {
         <PreviewPanel />
       </aside>
       <Advanced open={advanced} initialTab={advancedTab} onClose={() => setAdvanced(false)} />
-      <Modal
-        title="단축 배지 관리"
-        open={badgeModalOpen}
-        onClose={() => setBadgeModalOpen(false)}
-        footer={
-          <>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => {
-                setQuickBadges(DEFAULT_QUICK_BADGES);
-                notify('단축 배지를 기본값으로 복원했어요');
-              }}
-            >
-              <RotateCcw size={15} />
-              기본값 복원
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => setBadgeModalOpen(false)}
-            >
-              완료
-            </button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <p className="text-xs leading-relaxed text-muted">
-            프롬프트에 바로 덧붙일 단축 배지를 추가하거나 순서를 정리해 보세요
-          </p>
-          <form
-            data-ui-audit-row
-            className="flex items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              addQuickBadge();
-            }}
-          >
-            <input
-              type="text"
-              aria-label="새 단축 배지"
-              placeholder="배지 문구 입력 (예: dramatic shadow)"
-              value={newBadgeText}
-              onChange={(e) => setNewBadgeText(e.target.value)}
-              className="field flex-1 text-xs"
-            />
-            <button type="submit" className="btn-primary min-h-12 shrink-0 px-4">
-              <Plus size={15} />
-              추가
-            </button>
-          </form>
-          {quickBadges.length === 0 ? (
-            <p className="rounded-xl bg-paper p-6 text-center text-xs text-muted">
-              등록된 단축 배지가 없어요
-            </p>
-          ) : (
-            <div className="flex max-h-[340px] flex-col gap-2 overflow-y-auto pr-1">
-              {quickBadges.map((tag, index) => (
-                <div
-                  key={tag}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-line bg-paper px-3.5 py-2.5 text-xs"
-                >
-                  <span className="min-w-0 flex-1 truncate font-medium text-ink">
-                    + {tag}
-                  </span>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <IconButton
-                      icon={ArrowUp}
-                      disabled={index === 0}
-                      onClick={() => moveQuickBadge(index, index - 1)}
-                      label={`${tag} 위로 이동`}
-                    />
-                    <IconButton
-                      icon={ArrowDown}
-                      disabled={index === quickBadges.length - 1}
-                      onClick={() => moveQuickBadge(index, index + 1)}
-                      label={`${tag} 아래로 이동`}
-                    />
-                    <IconButton
-                      icon={Trash2}
-                      danger
-                      onClick={() => removeQuickBadge(tag)}
-                      label={`${tag} 배지 삭제`}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Modal>
       <Modal title="LoRA 추가" open={addLora} onClose={() => setAddLora(false)}>
-        <div className="flex flex-col gap-4">
-          <p className="text-sm text-muted">모델과 같은 계열의 LoRA를 선택해 주세요</p>
+        <div className="flex flex-col gap-3">
+          <p className="text-xs text-muted">모델과 같은 계열의 LoRA를 선택해 주세요</p>
           <Picker
             label="LoRA"
             value=""
@@ -473,15 +346,181 @@ export default function Create() {
     </div>
   );
 }
-function PreviewPanel() {
-  const { jobs } = useStudio();
+function PromptAssembleBar({
+  elements,
+  selectedId,
+  onSelectId,
+  positive,
+  onToggleAttribute,
+}: {
+  elements: PromptAssembleElement[];
+  selectedId: string;
+  onSelectId: (id: string) => void;
+  positive: string;
+  onToggleAttribute: (attr: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuStyle, setMenuStyle] = useState<{ left: number; top: number; width: number }>({
+    left: 16,
+    top: 16,
+    width: 200,
+  });
+
+  const currentElement = elements.find((el) => el.id === selectedId) || elements[0];
+  const activeAttrs = currentElement
+    ? currentElement.attributes.filter((attr) => hasPromptAttribute(positive, attr))
+    : [];
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const syncPosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.max(180, Math.min(rect.width, window.innerWidth - 24));
+      const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.left));
+      const estimatedHeight = Math.min(240, (currentElement?.attributes.length || 1) * 34 + 12);
+      const top =
+        rect.bottom + estimatedHeight + 12 > window.innerHeight && rect.top > estimatedHeight + 12
+          ? rect.top - estimatedHeight - 6
+          : rect.bottom + 6;
+      setMenuStyle({ left, top, width });
+    };
+    syncPosition();
+    window.addEventListener('resize', syncPosition);
+    window.addEventListener('scroll', syncPosition, true);
+    return () => {
+      window.removeEventListener('resize', syncPosition);
+      window.removeEventListener('scroll', syncPosition, true);
+    };
+  }, [open, currentElement]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
   return (
-    <div className="rounded-2xl border border-line bg-white p-5">
-      <Result key={jobs[0]?.id || 'sample'} job={jobs[0]} />
+    <div className="mb-2.5 flex flex-col gap-1.5">
+      <div data-ui-audit-row className="grid grid-cols-2 items-center gap-2">
+        <SelectControl
+          aria-label="프롬프트 요소"
+          value={currentElement?.id || ''}
+          disabled={!elements.length}
+          onChange={(e) => {
+            onSelectId(e.target.value);
+            setOpen(false);
+          }}
+        >
+          {elements.length ? (
+            elements.map((el) => (
+              <option key={el.id} value={el.id}>
+                {el.name}
+              </option>
+            ))
+          ) : (
+            <option value="">요소 없음</option>
+          )}
+        </SelectControl>
+        <div className="relative min-w-0">
+          <button
+            ref={triggerRef}
+            type="button"
+            aria-label="프롬프트 속성"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            disabled={!currentElement || currentElement.attributes.length === 0}
+            onClick={() => setOpen((v) => !v)}
+            className="field flex items-center justify-between gap-2 pr-8 text-left disabled:opacity-50"
+          >
+            <span className="min-w-0 truncate">
+              {activeAttrs.length > 0 ? activeAttrs.join(', ') : '속성 선택'}
+            </span>
+            {activeAttrs.length > 0 && (
+              <span className="shrink-0 rounded-full bg-olive/15 px-1.5 py-0.5 text-2xs font-bold text-olive">
+                {activeAttrs.length}
+              </span>
+            )}
+          </button>
+          <ChevronDown
+            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted"
+            size={15}
+            aria-hidden="true"
+          />
+        </div>
+      </div>
+      {open &&
+        currentElement &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="listbox"
+            aria-multiselectable="true"
+            aria-label={`${currentElement.name} 속성 목록`}
+            data-ui-audit-overlay
+            style={menuStyle}
+            className="fixed z-[2100] flex max-h-60 flex-col gap-0.5 overflow-y-auto rounded-lg border border-line bg-white p-1 shadow-xl"
+          >
+            {currentElement.attributes.map((attr) => {
+              const active = hasPromptAttribute(positive, attr);
+              return (
+                <button
+                  key={attr}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => onToggleAttribute(attr)}
+                  className={`flex min-h-8 w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition ${
+                    active ? 'bg-lime/25 font-semibold text-olive' : 'text-ink hover:bg-paper'
+                  }`}
+                >
+                  <span className="min-w-0 truncate">{attr}</span>
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                      active ? 'border-olive bg-olive text-white' : 'border-line bg-white'
+                    }`}
+                  >
+                    {active && <Check size={11} />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
-export function GenerateBar() {
+function PreviewPanel() {
+  const { jobs } = useStudio();
+  const lastComplete = jobs.find((j) => j.status === 'complete' && j.images.length > 0);
+  return (
+    <div className="rounded-xl border border-line bg-white p-3.5 sm:p-4">
+      <Result key={jobs[0]?.id || 'sample'} job={jobs[0]} fallback={lastComplete} />
+    </div>
+  );
+}
+const RUN_LIMIT = 20;
+const clampRuns = (n: number) =>
+  Number.isFinite(n) ? Math.min(RUN_LIMIT, Math.max(1, Math.round(n))) : 1;
+// Image count and generate button, shown in the top bar of the create screen.
+export function GenerateControls() {
   const {
     settings: s,
     generate,
@@ -499,67 +538,68 @@ export function GenerateBar() {
     enqueueBatch,
   } = useStudio();
   const [showQueue, setShowQueue] = useState(false);
-  const [showBatch, setShowBatch] = useState(false);
+  // How many times to run. 1 is a single generation; more queue runs with new Seeds.
+  const [countText, setCountText] = useState('1');
+  const count = clampRuns(Number(countText));
   const entry = selectedEntry(s, info, familyAssignments);
   const unavailable = !s.workflow && (!entry || entry.family !== s.architecture);
-  const result = !active && jobs[0]?.status === 'complete' ? jobs[0] : undefined;
+  const disabled = busy || unavailable || (!online && !connection.preview);
+  function run() {
+    if (disabled) return;
+    if (count > 1) enqueueBatch(count);
+    else void generate();
+  }
   return (
     <>
-      <div className="border-t border-line bg-paper/95 px-4 py-3 backdrop-blur-xl sm:px-7 lg:px-9">
-        <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-3">
-          <div className="hidden sm:block">
-            <p className="text-xs font-semibold">
-              {s.workflow ? 'API 워크플로' : `${s.width} × ${s.height} | ${s.batch}장`}
-            </p>
-            <p className="mt-1 text-[11px] text-muted">
-              {s.workflow
-                ? '가져온 노드 입력값으로 생성'
-                : s.random
-                  ? '매번 새로운 Seed로 생성'
-                  : '고정 Seed로 생성'}
-            </p>
-          </div>
-          <div className="flex min-w-0 flex-1 justify-end gap-2">
+      <div className="flex min-w-0 items-center gap-1.5">
             {clientQueue.length > 0 && (
               <button
-                className="btn-secondary h-13 shrink-0 px-3 relative flex items-center gap-1.5"
+                className="btn-secondary relative flex shrink-0 items-center gap-1.5 px-2.5"
                 onClick={() => setShowQueue(true)}
                 aria-label="기기 내 대기열 보기"
               >
-                <ListOrdered size={16} />
+                <ListOrdered size={15} />
                 <span className="hidden sm:inline">대기열</span>
-                <span className="rounded-full bg-olive px-1.5 py-0.2 text-[10px] font-bold text-white">
+                <span className="rounded-full bg-olive px-1.5 py-0.5 text-2xs font-bold text-white">
                   {clientQueue.length}
                 </span>
               </button>
             )}
-            <button
-              className="btn-secondary h-13 shrink-0 px-3"
-              onClick={() => setShowBatch(true)}
-              title="Seed만 바꿔 연속 생성"
-              aria-label="Seed 변경 연속 생성"
+            <label
+              className="relative w-[60px] shrink-0 sm:w-[68px]"
+              title={`장 수 | 2장 이상이면 Seed를 바꿔 ${RUN_LIMIT}장까지 이어서 생성`}
             >
-              <Layers size={16} />
-              <span className="hidden sm:inline">연속</span>
-            </button>
-            {result && (
-              <Link
-                to={`/gallery?job=${encodeURIComponent(result.id)}`}
-                className="btn-secondary h-13 shrink-0 px-3"
-              >
-                <Images size={16} />
-                <span className="whitespace-nowrap">결과 보기</span>
-              </Link>
-            )}
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={RUN_LIMIT}
+                step={1}
+                aria-label="장 수"
+                value={countText}
+                onChange={(e) => setCountText(e.target.value)}
+                onBlur={() => setCountText(String(count))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') run();
+                }}
+                className="field pr-6 text-center font-mono [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-2xs text-muted">
+                장
+              </span>
+            </label>
             <button
               data-testid="generate"
-              disabled={busy || unavailable || (!online && !connection.preview)}
-              onClick={() => void generate()}
-              className="btn-primary h-13 min-w-0 flex-1 px-3 sm:max-w-[340px]"
+              disabled={disabled}
+              onClick={run}
+              className="btn-primary shrink-0 whitespace-nowrap px-3"
             >
-              <span className="flex items-center gap-2">
-                {busy ? <Spinner /> : <Sparkles size={18} />}
-                <span>
+              <span className="flex items-center gap-1.5">
+                {busy ? <Spinner /> : <Sparkles size={15} />}
+                <span className="sm:hidden">
+                  {active ? '추가' : connection.preview ? '체험' : '생성'}
+                </span>
+                <span className="hidden sm:inline">
                   {active
                     ? '대기열에 추가'
                     : connection.preview
@@ -567,16 +607,14 @@ export function GenerateBar() {
                       : '이미지 생성'}
                 </span>
               </span>
-              <span className="rounded-md bg-white/15 px-2 py-1 text-[11px] font-normal">
+              <span className="hidden rounded bg-white/15 px-1.5 py-0.5 text-2xs font-normal sm:inline">
                 {active
                   ? `${active.status === 'queued' ? '대기 중' : '생성 중'} ${active.progress}%`
                   : s.workflow
                     ? 'API'
-                    : `${s.batch}장`}
+                    : `${count}장`}
               </span>
             </button>
-          </div>
-        </div>
       </div>
 
       <Modal
@@ -593,7 +631,7 @@ export function GenerateBar() {
                   setShowQueue(false);
                 }}
               >
-                <Trash2 size={15} />
+                <Trash2 size={14} />
                 대기열 비우기
               </button>
             )}
@@ -604,17 +642,17 @@ export function GenerateBar() {
         }
       >
         {clientQueue.length === 0 ? (
-          <p className="p-6 text-center text-xs text-muted">대기 중인 작업이 없어요</p>
+          <p className="p-4 text-center text-xs text-muted">대기 중인 작업이 없어요</p>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2.5">
             <p className="text-xs text-muted">
               앞선 생성이 완료되면 순서대로 서버에 자동 전송돼요.
             </p>
-            <div className="flex flex-col gap-2 max-h-[380px] overflow-y-auto pr-1">
+            <div className="flex max-h-[360px] flex-col gap-1.5 overflow-y-auto pr-1">
               {clientQueue.map((item, index) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-line bg-paper p-3 text-xs"
+                  className="flex items-center justify-between gap-2.5 rounded-lg border border-line bg-paper p-2.5 text-xs"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold text-ink">
@@ -622,11 +660,11 @@ export function GenerateBar() {
                         ? 'API 워크플로'
                         : item.settings.positive || '(프롬프트 없음)'}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-muted">
+                    <p className="mt-0.5 text-2xs text-muted">
                       {item.settings.model} | Seed {item.settings.seed}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex shrink-0 items-center gap-0.5">
                     <IconButton
                       icon={ArrowUp}
                       disabled={index === 0}
@@ -653,37 +691,6 @@ export function GenerateBar() {
         )}
       </Modal>
 
-      <Modal
-        title="Seed 바꿔 연속 생성"
-        open={showBatch}
-        onClose={() => setShowBatch(false)}
-        footer={
-          <button className="btn-secondary" onClick={() => setShowBatch(false)}>
-            취소
-          </button>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <p className="text-sm leading-relaxed text-muted">
-            현재 프롬프트와 모델 설정을 유지한 채, 각기 다른 랜덤 Seed로 연속 생성 대기열에 등록해요.
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {[2, 4, 8].map((count) => (
-              <button
-                key={count}
-                className="btn-primary py-3 flex flex-col items-center gap-1"
-                onClick={() => {
-                  enqueueBatch(count);
-                  setShowBatch(false);
-                }}
-              >
-                <span className="text-base font-bold">{count}회</span>
-                <span className="text-[10px] font-normal opacity-85">연속 생성</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </Modal>
     </>
   );
 }
@@ -698,6 +705,8 @@ function Advanced({
 }) {
   const { settings: s, setSettings, info, notify } = useStudio();
   const patch = (v: Partial<Generation>) => setSettings((s) => ({ ...s, ...v }));
+  const prof = qualityProfiles[s.architecture] || qualityProfiles.flux;
+  const archLabel = families.find((f) => f.id === s.architecture)?.label || s.architecture;
   const [tab, setTab] = useState('settings');
   useEffect(() => {
     if (open) setTab(initialTab);
@@ -727,16 +736,16 @@ function Advanced({
           </button>
         }
       >
-        <div className="flex flex-col gap-5">
-          <div className="flex gap-2 rounded-xl bg-stone p-1">
+        <div className="flex flex-col gap-3.5">
+          <div className="flex gap-1.5 rounded-lg bg-stone p-1">
             <button
-              className={`flex-1 rounded-lg p-2.5 text-xs font-semibold ${tab === 'settings' ? 'bg-white shadow-sm' : ''}`}
+              className={`flex-1 rounded-md px-2.5 py-1.5 text-xs font-semibold ${tab === 'settings' ? 'bg-white shadow-sm' : ''}`}
               onClick={() => setTab('settings')}
             >
               생성 설정
             </button>
             <button
-              className={`flex-1 rounded-lg p-2.5 text-xs font-semibold ${tab === 'workflow' ? 'bg-white shadow-sm' : ''}`}
+              className={`flex-1 rounded-md px-2.5 py-1.5 text-xs font-semibold ${tab === 'workflow' ? 'bg-white shadow-sm' : ''}`}
               onClick={() => setTab('workflow')}
             >
               API 워크플로
@@ -745,135 +754,37 @@ function Advanced({
           {tab === 'settings' ? (
             <>
               {s.workflow && (
-                <p className="rounded-xl bg-stone p-3 text-xs leading-relaxed text-muted">
-                  <LockKeyhole size={14} className="mr-2 inline" />
+                <p className="rounded-lg bg-stone p-2.5 text-xs leading-relaxed text-muted">
+                  <LockKeyhole size={14} className="mr-1.5 inline" />
                   가져온 워크플로가 활성화되어 있어요 | API 워크플로 탭에서 실행값을 수정해 주세요
                 </p>
               )}
-              {(() => {
-                const prof = qualityProfiles[s.architecture] || qualityProfiles.flux;
-                const optimal = isOptimalQuality(s);
-                const issues = checkQualityIssues(s);
-                const archLabel =
-                  families.find((f) => f.id === s.architecture)?.label || s.architecture;
-                return (
-                  <div className="flex flex-col gap-3">
-                    <div className="rounded-2xl border border-olive/30 bg-lime/10 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-olive text-lime">
-                            <Sparkles size={15} />
-                          </span>
-                          <div>
-                            <p className="text-xs font-bold text-ink">
-                              {archLabel} 최고 화질 공식 권장값
-                            </p>
-                            <p className="text-[11px] text-muted">{prof.badge}</p>
-                          </div>
-                        </div>
-                        {optimal ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-olive/15 px-2.5 py-1 text-[11px] font-semibold text-olive">
-                            <Check size={12} />
-                            최고 화질 적용됨
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn-primary min-h-8 px-3 py-1.5 text-[11px]"
-                            onClick={() => {
-                              patch(getOptimalQualitySettings(s.architecture));
-                              notify(`${archLabel} 최고 화질 권장 설정으로 맞추었어요`);
-                            }}
-                          >
-                            최고 화질 권장값 적용
-                          </button>
-                        )}
-                      </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-mono text-ink/90 sm:grid-cols-4">
-                        <div className="rounded-lg bg-white/80 p-2 text-center">
-                          <span className="block text-[10px] text-muted">Sampler</span>
-                          <span className="font-semibold">{prof.sampler}</span>
-                        </div>
-                        <div className="rounded-lg bg-white/80 p-2 text-center">
-                          <span className="block text-[10px] text-muted">Scheduler</span>
-                          <span className="font-semibold">{prof.scheduler}</span>
-                        </div>
-                        <div className="rounded-lg bg-white/80 p-2 text-center">
-                          <span className="block text-[10px] text-muted">Steps</span>
-                          <span className="font-semibold">{prof.steps}</span>
-                        </div>
-                        <div className="rounded-lg bg-white/80 p-2 text-center">
-                          <span className="block text-[10px] text-muted">CFG</span>
-                          <span className="font-semibold">{prof.cfg}</span>
-                        </div>
-                      </div>
-                      <p className="mt-2.5 text-[11px] leading-relaxed text-muted">
-                        💡 {prof.reason}
-                      </p>
-                    </div>
-
-                    {issues.map((issue) => (
-                      <div
-                        key={issue.id}
-                        className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs leading-relaxed text-amber-900"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-bold text-amber-950">⚠️ {issue.title}</p>
-                            <p className="mt-1 text-amber-900/90">{issue.message}</p>
-                          </div>
-                          <button
-                            type="button"
-                            className="shrink-0 rounded-xl bg-amber-200/80 px-3 py-2 text-[11px] font-semibold text-amber-950 transition hover:bg-amber-300 active:scale-95"
-                            onClick={() => {
-                              patch(issue.fix);
-                              notify('화질 저하 요소를 안전하게 보정했어요');
-                            }}
-                          >
-                            즉시 보정
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
               <fieldset
                 disabled={Boolean(s.workflow)}
-                className="flex flex-col gap-5 disabled:opacity-40"
+                className="flex flex-col gap-3.5 disabled:opacity-40"
               >
-                <div className="grid grid-cols-2 gap-3">
-                  <Numeric
-                    label="너비"
-                    value={s.width}
-                    onChange={(width) => patch({ width })}
-                    min={64}
-                    max={4096}
-                    step={8}
-                  />
-                  <Numeric
-                    label="높이"
-                    value={s.height}
-                    onChange={(height) => patch({ height })}
-                    min={64}
-                    max={4096}
-                    step={8}
-                  />
-                </div>
-                <button
-                  className="btn-secondary self-start"
-                  onClick={() => patch({ width: s.height, height: s.width })}
-                >
-                  <ArrowDownUp size={15} />
-                  가로와 세로 바꾸기
-                </button>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2.5">
                   <Numeric
                     label="Steps"
                     value={s.steps}
                     onChange={(steps) => patch({ steps })}
                     min={1}
                     max={150}
+                    help={
+                      <>
+                        이미지의 노이즈를 걷어내는 반복 횟수예요. 높일수록 디테일이 늘지만 생성
+                        시간도 비례해서 길어져요.
+                        {s.architecture === 'krea2' &&
+                          ' 증류 모델이라 스텝을 높이면 오히려 얼룩이 생길 수 있어요.'}
+                        <br />
+                        <b>{archLabel} 권장</b> {prof.steps}
+                      </>
+                    }
+                    recommend={{
+                      modified: s.steps !== prof.steps,
+                      value: String(prof.steps),
+                      onReset: () => patch({ steps: prof.steps }),
+                    }}
                   />
                   <Numeric
                     label="CFG"
@@ -882,6 +793,21 @@ function Advanced({
                     min={0}
                     max={30}
                     step={0.1}
+                    help={
+                      <>
+                        프롬프트를 얼마나 강하게 따를지 정해요. 너무 높으면 색이 타거나 대비가
+                        과해져요.
+                        {s.architecture === 'flux' &&
+                          ' Flux1.d는 1.0으로 두고 디테일은 Flux Guidance로 조절해요.'}
+                        <br />
+                        <b>{archLabel} 권장</b> {prof.cfg}
+                      </>
+                    }
+                    recommend={{
+                      modified: s.cfg !== prof.cfg,
+                      value: String(prof.cfg),
+                      onReset: () => patch({ cfg: prof.cfg }),
+                    }}
                   />
                 </div>
                 {s.architecture === 'flux' && (
@@ -892,13 +818,47 @@ function Advanced({
                     min={0}
                     max={100}
                     step={0.1}
+                    help={
+                      <>
+                        Flux 전용 가이던스로, CFG 대신 프롬프트 반영 강도를 조절해요. 높이면 대비와
+                        채도가 강해지고 낮추면 부드럽고 자연스러워져요.
+                        <br />
+                        <b>{archLabel} 권장</b> {prof.guidance}
+                      </>
+                    }
+                    recommend={
+                      prof.guidance === undefined
+                        ? undefined
+                        : {
+                            modified: s.guidance !== prof.guidance,
+                            value: String(prof.guidance),
+                            onReset: () => patch({ guidance: prof.guidance }),
+                          }
+                    }
                   />
                 )}
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Sampler">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <Field
+                    label="Sampler"
+                    help={
+                      <>
+                        노이즈를 걷어내는 계산 방식이에요. 같은 Seed라도 Sampler에 따라 질감과
+                        선명도가 달라져요. SDE 계열은 Flow Matching 모델에서 피부에 비늘 모양
+                        노이즈를 만들 수 있어요.
+                        <br />
+                        <b>{archLabel} 권장</b> {prof.sampler}
+                      </>
+                    }
+                    recommend={{
+                      modified: s.sampler !== prof.sampler,
+                      value: prof.sampler,
+                      onReset: () => patch({ sampler: prof.sampler }),
+                    }}
+                  >
                     <SelectControl
                       aria-label="Sampler"
                       value={s.sampler}
+                      className={s.sampler !== prof.sampler ? modifiedField : ''}
                       onChange={(e) => patch({ sampler: e.target.value })}
                     >
                       {options(info, 'KSampler', 'sampler_name').map((v) => (
@@ -906,10 +866,26 @@ function Advanced({
                       ))}
                     </SelectControl>
                   </Field>
-                  <Field label="Scheduler">
+                  <Field
+                    label="Scheduler"
+                    help={
+                      <>
+                        스텝마다 노이즈를 얼마나 줄일지 정하는 곡선이에요. 초반 구도와 후반 디테일에
+                        쓰는 비중이 달라져요.
+                        <br />
+                        <b>{archLabel} 권장</b> {prof.scheduler}
+                      </>
+                    }
+                    recommend={{
+                      modified: s.scheduler !== prof.scheduler,
+                      value: prof.scheduler,
+                      onReset: () => patch({ scheduler: prof.scheduler }),
+                    }}
+                  >
                     <SelectControl
                       aria-label="Scheduler"
                       value={s.scheduler}
+                      className={s.scheduler !== prof.scheduler ? modifiedField : ''}
                       onChange={(e) => patch({ scheduler: e.target.value })}
                     >
                       {options(info, 'KSampler', 'scheduler').map((v) => (
@@ -925,13 +901,19 @@ function Advanced({
                   min={0}
                   max={1}
                   step={0.05}
+                  help={
+                    <>
+                      시작 노이즈를 얼마나 지울지 정해요. 빈 화면에서 새로 그리는 이 화면에서는
+                      1.0을 유지하고, 낮추면 덜 그려진 흐릿한 이미지가 나와요.
+                    </>
+                  }
                 />
-                <div className="border-t border-line pt-5">
-                  <label className="mb-4 flex min-h-8 items-center justify-between gap-3 text-sm font-medium">
+                <div className="border-t border-line pt-3.5">
+                  <label className="mb-3 flex min-h-7 items-center justify-between gap-2.5 text-xs font-medium">
                     매번 새로운 Seed
                     <input
                       type="checkbox"
-                      className="h-5 w-5 accent-olive"
+                      className="h-4 w-4 accent-olive"
                       checked={s.random}
                       onChange={(e) => patch({ random: e.target.checked })}
                     />
@@ -942,8 +924,14 @@ function Advanced({
                     onChange={(seed) => patch({ seed })}
                     min={0}
                     max={Number.MAX_SAFE_INTEGER}
+                    help={
+                      <>
+                        시작 노이즈를 만드는 번호예요. 같은 Seed와 같은 설정이면 같은 이미지가
+                        나와서, 마음에 든 결과를 다시 만들거나 일부 설정만 바꿔 비교할 때 써요.
+                      </>
+                    }
                   />
-                  <p className="mt-2 text-xs text-muted">
+                  <p className="mt-1.5 text-2xs text-muted">
                     새로운 Seed를 켜면 생성 시 무작위 값으로 바뀌어요
                   </p>
                 </div>
@@ -958,7 +946,7 @@ function Advanced({
               </p>
               <div className="flex flex-wrap gap-2">
                 <label className="btn-secondary cursor-pointer">
-                  <Upload size={15} />
+                  <Upload size={14} />
                   JSON 가져오기
                   <input
                     aria-label="워크플로 JSON 가져오기"
@@ -981,7 +969,7 @@ function Advanced({
                     }
                   }}
                 >
-                  <Download size={15} />
+                  <Download size={14} />
                   내보내기
                 </button>
               </div>
@@ -992,12 +980,12 @@ function Advanced({
                     onChange={(workflow) => patch({ workflow })}
                   />
                   <button className="btn-secondary self-start" onClick={() => setRestore(true)}>
-                    <RotateCcw size={15} />
+                    <RotateCcw size={14} />
                     기본 생성으로 돌아가기
                   </button>
                 </>
               ) : (
-                <p className="rounded-xl bg-stone p-6 text-center text-xs leading-relaxed text-muted">
+                <p className="rounded-lg bg-stone p-4 text-center text-xs leading-relaxed text-muted">
                   워크플로를 가져오면 노드별 텍스트, 숫자와 선택값을 여기서 수정할 수 있어요
                 </p>
               )}
@@ -1026,7 +1014,7 @@ function Advanced({
           </>
         }
       >
-        <p className="text-sm leading-relaxed text-muted">
+        <p className="text-xs leading-relaxed text-muted">
           현재 가져온 워크플로를 해제하고 기본 화면의 설정을 사용할게요
           <br />
           보관하려면 먼저 JSON으로 내보내 주세요
@@ -1049,13 +1037,13 @@ function WorkflowInputs({
     onChange(w);
   }
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2.5">
       {Object.entries(workflow).map(([id, node]) => (
-        <details key={id} className="rounded-xl border border-line p-4">
+        <details key={id} className="rounded-lg border border-line p-3">
           <summary className="cursor-pointer text-xs font-semibold [overflow-wrap:anywhere]">
             {id} | {node._meta?.title || node.class_type}
           </summary>
-          <div className="mt-4 flex flex-col gap-4">
+          <div className="mt-3 flex flex-col gap-3">
             {Object.entries(node.inputs).map(([key, v]) => {
               const spec =
                 info?.[node.class_type]?.input.required?.[key] ||
@@ -1079,7 +1067,7 @@ function WorkflowInputs({
                     <input
                       aria-label={label}
                       type="checkbox"
-                      className="h-5 w-5 accent-olive"
+                      className="h-4 w-4 accent-olive"
                       checked={v}
                       onChange={(e) => edit(id, key, e.target.checked)}
                     />
@@ -1097,7 +1085,7 @@ function WorkflowInputs({
                   ) : typeof v === 'string' ? (
                     <textarea
                       aria-label={label}
-                      className="field min-h-20 resize-y text-xs"
+                      className="field min-h-16 resize-y text-xs"
                       value={v}
                       onChange={(e) => edit(id, key, e.target.value)}
                     />

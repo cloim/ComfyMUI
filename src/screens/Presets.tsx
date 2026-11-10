@@ -49,10 +49,13 @@ export default function Presets() {
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-none flex-col gap-4 px-4 py-5 sm:px-7 lg:px-9">
+      <div className="flex flex-none flex-col gap-3 px-4 py-4 sm:px-5 lg:px-6">
         <div data-ui-audit-row className="flex flex-wrap items-center justify-between gap-3">
           <label className="relative min-w-0 flex-1 sm:max-w-80">
-            <Search size={17} className="absolute left-3 top-3.5 text-muted" />
+            <Search
+              size={15}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+            />
             <input
               aria-label="프리셋 검색"
               className="field pl-10"
@@ -63,7 +66,7 @@ export default function Presets() {
           </label>
           <div className="flex gap-2">
             <label
-              className={`btn-secondary h-12 cursor-pointer ${importing ? 'pointer-events-none opacity-50' : ''}`}
+              className={`btn-secondary cursor-pointer ${importing ? 'pointer-events-none opacity-50' : ''}`}
             >
               {importing ? <Spinner /> : <Upload size={16} />}
               <span className="hidden sm:inline">가져오기</span>
@@ -81,7 +84,7 @@ export default function Presets() {
             </label>
             <IconButton
               icon={Download}
-              className="!h-12 !w-12"
+              className="!h-9 !w-9"
               label="전체 프리셋 내보내기"
               disabled={!presets.length}
               onClick={() => downloadJson('comfymui-presets.json', { version: 1, presets })}
@@ -92,7 +95,7 @@ export default function Presets() {
       </div>
       <div
         data-ui-audit-scroll-root
-        className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 sm:px-7 lg:px-9"
+        className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 sm:px-5 lg:px-6"
       >
         {shown.length ? (
           <div
@@ -104,7 +107,7 @@ export default function Presets() {
                 key={p.id}
                 data-ui-audit-card
                 data-ui-audit-card-type="preset-card"
-                className="flex h-full min-w-0 flex-col justify-between rounded-2xl border border-line bg-white p-5"
+                className="flex h-full min-w-0 flex-col justify-between rounded-xl border border-line bg-white p-4"
               >
                 <button className="text-left" onClick={() => setSelected(p)}>
                   <span
@@ -112,7 +115,7 @@ export default function Presets() {
                   >
                     <Bookmark size={24} />
                   </span>
-                  <h2 className="text-base font-semibold [overflow-wrap:anywhere]">{p.name}</h2>
+                  <h2 className="text-sm font-semibold [overflow-wrap:anywhere]">{p.name}</h2>
                   <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-muted">
                     {p.description || '나만의 생성 설정'}
                   </p>
@@ -133,7 +136,7 @@ export default function Presets() {
                   className="mt-4 flex items-center justify-between border-t border-line pt-3"
                 >
                   <Link
-                    className="flex min-h-11 items-center gap-1 text-xs font-semibold text-olive"
+                    className="flex min-h-9 items-center gap-1 text-xs font-semibold text-olive"
                     to="/create"
                     onClick={() => {
                       setSettings(structuredClone(p.settings));
@@ -231,8 +234,8 @@ export default function Presets() {
       >
         {selected && (
           <div className="flex flex-col gap-4">
-            <h3 className="text-xl font-semibold [overflow-wrap:anywhere]">{selected.name}</h3>
-            <p className="text-sm text-muted">{selected.description}</p>
+            <h3 className="text-base font-semibold [overflow-wrap:anywhere]">{selected.name}</h3>
+            <p className="text-xs leading-relaxed text-muted">{selected.description}</p>
             <Snapshot preset={selected} />
             <p className="text-xs leading-relaxed text-muted">
               설정을 바꾸려면 적용한 뒤 생성 화면에서 수정하고
@@ -264,7 +267,7 @@ export default function Presets() {
           </>
         }
       >
-        <p className="text-sm text-muted">
+        <p className="text-xs leading-relaxed text-muted">
           <strong>{remove?.name}</strong> 프리셋을 기기에서 삭제합니다
           <br />
           보관하려면 먼저 내보내 주세요
@@ -368,7 +371,7 @@ export function PresetEditor({
               aria-label={`${['그린', '샌드', '로즈'][i]} 프리셋 색상`}
               aria-pressed={c === color}
               onClick={() => setColor(c)}
-              className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 ${c === color ? 'border-ink' : 'border-transparent'} ${presetColors[c as keyof typeof presetColors]}`}
+              className={`flex h-9 w-9 items-center justify-center rounded-lg border-2 ${c === color ? 'border-ink' : 'border-transparent'} ${presetColors[c as keyof typeof presetColors]}`}
             >
               <Bookmark size={18} />
             </button>

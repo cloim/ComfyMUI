@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   defaults,
+  DEFAULT_PROMPT_ASSEMBLE,
+  hasPromptAttribute,
+  togglePromptAttribute,
+  parseAttributeList,
   buildWorkflow,
   parseWorkflow,
   importPresets,
@@ -9,6 +13,9 @@ import {
   isLegacyDefaultPrompt,
   migrateGenerationSettings,
   trimJobsPreservingFavorites,
+  upscaleSettings,
+  upscaleSize,
+  baseSettings,
   type ObjectInfo,
 } from '../src/domain';
 const settings = {
@@ -71,6 +78,39 @@ describe('generation graph', () => {
     expect(copied).toEqual(w);
     copied['2'].inputs.text = 'edit';
     expect(w['2'].inputs.text).toBe(defaults.positive);
+  });
+});
+describe('upscale graph', () => {
+  const source = { filename: 'ComfyMUI_00001_.png', subfolder: 'day', type: 'output' };
+  it('upscales the output image with the model and resizes to the exact target', () => {
+    const s = upscaleSettings({ ...settings, batch: 4 }, source, '4x-UltraSharp.pth', 2, 0);
+    expect([s.width, s.height, s.batch, s.random]).toEqual([1536, 2048, 1, false]);
+    const w = buildWorkflow(s);
+    expect(w['50'].inputs.image).toBe('day/ComfyMUI_00001_.png [output]');
+    expect(w['52'].inputs).toEqual({ upscale_model: ['51', 0], image: ['50', 0] });
+    expect(w['53'].inputs).toMatchObject({ width: 1536, height: 2048, upscale_method: 'lanczos' });
+    expect(w['7'].inputs.images).toEqual(['53', 0]);
+    expect(Object.keys(w).sort()).toEqual(['50', '51', '52', '53', '7']);
+  });
+  it('re-samples the upscaled image at the refine strength with the original model', () => {
+    const w = buildWorkflow(upscaleSettings(settings, source, '4x-UltraSharp.pth', 1.5, 0.35));
+    expect(w['4']).toBeUndefined();
+    expect(w['54'].inputs).toEqual({ pixels: ['53', 0], vae: ['9', 0] });
+    expect(w['5'].inputs).toMatchObject({ latent_image: ['54', 0], denoise: 0.35 });
+    expect(w['5'].inputs.positive).toEqual(['20', 0]);
+  });
+  it('restores the source size when reused, caps the target and skips the image list check', () => {
+    const s = upscaleSettings(settings, source, 'x.pth', 2, 0);
+    expect(baseSettings(s)).toMatchObject({ width: 768, height: 1024, upscale: null });
+    expect(upscaleSize(3000, 1024, 2)).toEqual({ width: 4096, height: 2048 });
+    const info: ObjectInfo = {
+      LoadImage: { input: { required: { image: [['other.png']] } } },
+      UpscaleModelLoader: { input: { required: { model_name: [['x.pth']] } } },
+      ImageUpscaleWithModel: { input: { required: {} } },
+      ImageScale: { input: { required: {} } },
+      SaveImage: { input: { required: {} } },
+    };
+    expect(() => validateAgainstServer(buildWorkflow(s), info)).not.toThrow();
   });
 });
 describe('API workflows and server schema', () => {
@@ -176,5 +216,48 @@ describe('portable presets', () => {
     // 즐겨찾기 2건은 반드시 보존되어야 함
     expect(trimmed.some((j) => j.id === 'job-0')).toBe(true);
     expect(trimmed.some((j) => j.id === 'job-2')).toBe(true);
+  });
+  it('defines default prompt assemble elements and toggles multiple attributes cleanly', () => {
+    expect(DEFAULT_PROMPT_ASSEMBLE.map((e) => e.name)).toEqual(['앵글', '구성', '구도']);
+    expect(DEFAULT_PROMPT_ASSEMBLE[0].attributes).toEqual([
+      'eye-level',
+      'low',
+      'high',
+      'bird-eye',
+      "worm's-eye",
+    ]);
+    expect(DEFAULT_PROMPT_ASSEMBLE[1].attributes).toEqual([
+      'extreme close-up',
+      'choker',
+      'close-up',
+      'portrait',
+      'bust',
+      'waist-up',
+      'half body',
+      'cowboy',
+      'knee',
+      'full shot',
+    ]);
+    expect(DEFAULT_PROMPT_ASSEMBLE[2].attributes).toEqual([
+      'dutch',
+      'over-the-shoulder',
+      'POV',
+      'center composition',
+      'frame-in-frame',
+    ]);
+
+    let p = 'A portrait of a woman';
+    p = togglePromptAttribute(p, 'eye-level');
+    p = togglePromptAttribute(p, 'low');
+    expect(hasPromptAttribute(p, 'eye-level')).toBe(true);
+    expect(hasPromptAttribute(p, 'low')).toBe(true);
+    expect(p).toBe('A portrait of a woman, eye-level, low');
+
+    p = togglePromptAttribute(p, 'eye-level');
+    expect(hasPromptAttribute(p, 'eye-level')).toBe(false);
+    expect(hasPromptAttribute(p, 'low')).toBe(true);
+    expect(p).toBe('A portrait of a woman, low');
+
+    expect(parseAttributeList('a, b / c, A')).toEqual(['a', 'b', 'c']);
   });
 });

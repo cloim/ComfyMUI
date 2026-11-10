@@ -379,7 +379,7 @@ export function ImageViewer({ src, alt = '확대된 이미지', open, onClose }:
         className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4"
         style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
       >
-        <span className="rounded-full bg-black/60 px-3.5 py-1.5 text-[11px] font-medium text-white/80 backdrop-blur-md">
+        <span className="rounded-full bg-black/60 px-3.5 py-1.5 text-2xs font-medium text-white/80 backdrop-blur-md">
           {scale > 1
             ? '드래그하여 이동 | 두 손가락 핀치로 축소'
             : '두 손가락 핀치 또는 더블 탭으로 확대'}

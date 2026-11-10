@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import {
   defaults,
   DEFAULT_PROMPTS,
-  DEFAULT_QUICK_BADGES,
+  DEFAULT_PROMPT_ASSEMBLE,
   demoInfo,
   readStored,
   newId,
@@ -12,7 +12,10 @@ import {
   options,
   isLegacyDefaultPrompt,
   migrateGenerationSettings,
+  baseSettings,
+  upscaleSettings,
   type DefaultPrompts,
+  type PromptAssembleElement,
   type Generation,
   type Preset,
   type Job,
@@ -40,97 +43,202 @@ import {
   type FamilyAssignments,
 } from './models';
 import { parseBinaryPreview } from './preview';
-import { idbGet, idbSet, migrateLocalStorageToIDB } from './storage';
+import { useDownloadTracker } from './downloads';
+import { deleteOutputFiles, outputKey } from './outputs';
+import {
+  fetchGallery,
+  galleryJob,
+  galleryKey,
+  GALLERY_BASE,
+  isGalleryJob,
+  type GalleryIndex,
+} from './gallery';
+import {
+  idbGet,
+  idbSet,
+  migrateLocalStorageToIDB,
+  fetchServerState,
+  flushServerWrites,
+  queueServerWrite,
+  unsentKeys,
+} from './storage';
+
+// Shared keys are stored in the app server's database and mirrored in localStorage.
+type SharedHandler = {
+  applyServer: (value: unknown) => void;
+  localValue: () => { value: unknown; changed: boolean };
+};
+const sharedRegistry = new Map<string, SharedHandler>();
 
 function usePersisted<T>(
   key: string,
   initial: T,
   options?: {
     migrate?: (v: T) => T;
-    debounceMs?: number;
+    // Large device-only data (history, queue) also goes to IndexedDB.
     useIDB?: boolean;
+    // Shared across devices through the server database.
+    shared?: boolean;
   },
 ) {
-  const [value, setValue] = useState<T>(() => {
+  const initialRef = useRef(initial);
+  const [value, setRawValue] = useState<T>(() => {
     const raw = readStored(key, initial);
-    return options?.migrate ? options.migrate(raw) : raw;
+    const migrated = options?.migrate ? options.migrate(raw) : raw;
+    try {
+      if (localStorage.getItem(key) === null) {
+        localStorage.setItem(key, JSON.stringify(migrated));
+      }
+    } catch {
+      /* ignore */
+    }
+    return migrated;
   });
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    if (options?.useIDB) {
-      void migrateLocalStorageToIDB().then(async () => {
-        try {
-          const stored = await idbGet<T>(key);
-          if (stored !== undefined) {
-            setValue((prev) => {
-              return options?.migrate ? options.migrate(stored) : stored;
-            });
-          }
-        } catch {
-          /* ignore initial idb read error */
-        }
-      });
-    }
-  }, [key]);
-
-  useEffect(() => {
+  const store = (next: T) => {
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(key, JSON.stringify(next));
       setFailed(false);
     } catch {
       setFailed(true);
     }
-
     if (options?.useIDB) {
-      if (options?.debounceMs) {
-        const timer = setTimeout(() => {
-          void idbSet(key, value).catch(() => setFailed(true));
-        }, options.debounceMs);
-        return () => clearTimeout(timer);
-      }
-      void idbSet(key, value).catch(() => setFailed(true));
+      void idbSet(key, next).catch(() => setFailed(true));
     }
-  }, [key, value, options?.debounceMs, options?.useIDB]);
+  };
 
-  return [value, setValue, failed] as const;
+  // Saves on this device only; used for automatic corrections that every device repeats.
+  const setSilentValue = (updater: T | ((prev: T) => T)) => {
+    setRawValue((prev) => {
+      const next = typeof updater === 'function' ? (updater as (p: T) => T)(prev) : updater;
+      if (JSON.stringify(next) === JSON.stringify(prev)) return prev;
+      store(next);
+      return next;
+    });
+  };
+
+  const setValue = (updater: T | ((prev: T) => T)) => {
+    setRawValue((prev) => {
+      const next = typeof updater === 'function' ? (updater as (p: T) => T)(prev) : updater;
+      store(next);
+      if (options?.shared) queueServerWrite(key, next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!options?.shared) return;
+    sharedRegistry.set(key, {
+      applyServer: (raw: unknown) => {
+        const next = options?.migrate ? options.migrate(raw as T) : (raw as T);
+        setRawValue((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+        try {
+          localStorage.setItem(key, JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
+      },
+      localValue: () => {
+        let raw: string | null = null;
+        try {
+          raw = localStorage.getItem(key);
+        } catch {
+          /* ignore */
+        }
+        return {
+          value: readStored(key, initialRef.current),
+          changed: raw !== null && raw !== JSON.stringify(initialRef.current),
+        };
+      },
+    });
+    return () => {
+      sharedRegistry.delete(key);
+    };
+  }, [key, options?.shared]);
+
+  // IndexedDB holds the full copy when localStorage runs out of room.
+  useEffect(() => {
+    if (!options?.useIDB) return;
+    void migrateLocalStorageToIDB().then(async () => {
+      try {
+        const stored = await idbGet<T>(key);
+        if (stored === undefined) return;
+        const next = options?.migrate ? options.migrate(stored) : stored;
+        setRawValue((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+      } catch {
+        /* ignore initial idb read error */
+      }
+    });
+  }, [key]);
+
+  return [value, setValue, failed, setSilentValue] as const;
 }
 
 function useStudioState() {
   const [defaultPrompts, setDefaultPrompts, defaultPromptError] = usePersisted<DefaultPrompts>(
     'cm-default-prompts',
     DEFAULT_PROMPTS,
-    { useIDB: true },
+    { shared: true },
   );
-  const [quickBadges, setQuickBadges, badgeError] = usePersisted<string[]>(
-    'cm-quick-badges',
-    DEFAULT_QUICK_BADGES,
-    { useIDB: true },
+  const [promptAssemble, setPromptAssemble, assembleError] = usePersisted<PromptAssembleElement[]>(
+    'cm-prompt-assemble',
+    DEFAULT_PROMPT_ASSEMBLE,
+    { shared: true },
   );
-  const [settings, setSettings, saveError] = usePersisted<Generation>(
+  const [selectedAssembleId, setSelectedAssembleId] = usePersisted<string>(
+    'cm-prompt-assemble-selected',
+    DEFAULT_PROMPT_ASSEMBLE[0]?.id || '',
+    { shared: true },
+  );
+  const [modelOrder, setModelOrder, modelOrderError] = usePersisted<string[]>(
+    'cm-model-order',
+    [],
+    { shared: true },
+  );
+  const [settings, setSettings, saveError, setSilentSettings] = usePersisted<Generation>(
     'cm-settings',
     {
       ...defaults,
       positive: defaultPrompts.positive,
       negative: defaultPrompts.negative,
     },
-    { migrate: migrateGenerationSettings, debounceMs: 300, useIDB: true },
+    { migrate: migrateGenerationSettings, shared: true },
   );
   const [presets, setPresets, presetError] = usePersisted<Preset[]>('cm-presets', [], {
-    useIDB: true,
+    shared: true,
   });
   const [familyAssignments, setFamilyAssignments, familySaveError] =
-    usePersisted<FamilyAssignments>('cm-asset-families', {}, { useIDB: true });
-  const [jobs, setJobs, historyError] = usePersisted<Job[]>('cm-jobs', [], { useIDB: true });
+    usePersisted<FamilyAssignments>('cm-asset-families', {}, { shared: true });
+  // Which CivitAI example became each model's card preview, keyed by hash or path.
+  // LoRA Manager keeps only the file, so this record is synced across devices.
+  const [exampleDefaults, setExampleDefaults] = usePersisted<Record<string, string>>(
+    'cm-example-defaults',
+    {},
+    { shared: true },
+  );
+  const [jobs, setJobs, historyError, setSilentJobs] = usePersisted<Job[]>('cm-jobs', [], {
+    useIDB: true,
+  });
   const [clientQueue, setClientQueue, queueError] = usePersisted<QueueItem[]>(
     'cm-client-queue',
     [],
     { useIDB: true },
   );
-  const [connection, setConnection] = usePersisted('cm-connection', {
-    base: '/comfy',
-    preview: true,
-  });
+  const [connection, setConnection] = usePersisted(
+    'cm-connection',
+    {
+      base: '/comfy',
+      preview: true,
+    },
+    { shared: true },
+  );
+  const [remoteHydrated, setRemoteHydrated] = useState(false);
+  // The ComfyUI output folder is the history. null means it is not available
+  // (preview mode or a direct ComfyUI address) and local records are shown instead.
+  const [gallery, setGallery] = useState<GalleryIndex | null>(null);
+  // Bumped when a model or LoRA download lands so library screens reload.
+  const [libraryRevision, setLibraryRevision] = useState(0);
   const [info, setInfo] = useState<ObjectInfo | null>(connection.preview ? demoInfo : null);
   const [connectionState, setConnectionState] = useState<
     'preview' | 'connecting' | 'connected' | 'error'
@@ -163,6 +271,46 @@ function useStudioState() {
   function notify(message: string) {
     setNotice(message);
   }
+  // The server database is the source of truth. On load and whenever the app comes back
+  // into view, its values replace the local copy, except keys this device has not sent yet.
+  useEffect(() => {
+    let active = true;
+    async function pull() {
+      const server = await fetchServerState();
+      if (!active) return;
+      if (server) {
+        const unsent = unsentKeys();
+        for (const [key, handler] of sharedRegistry.entries()) {
+          if (!unsent.has(key) && key in server) {
+            handler.applyServer(server[key]);
+            continue;
+          }
+          const local = handler.localValue();
+          if (unsent.has(key) || local.changed) queueServerWrite(key, local.value);
+        }
+        void flushServerWrites();
+      }
+      setRemoteHydrated(true);
+    }
+    void pull();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void pull();
+      else void flushServerWrites(true);
+    };
+    const onFocus = () => void pull();
+    const onPageHide = () => void flushServerWrites(true);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, []);
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(''), 5000);
@@ -186,7 +334,7 @@ function useStudioState() {
       patched = true;
     }
     if (patched) {
-      setSettings(next);
+      setSilentSettings(next);
     }
   }, []);
   useEffect(() => {
@@ -205,6 +353,7 @@ function useStudioState() {
       setConnectionState('preview');
       return;
     }
+    setInfo((prev) => (prev === demoInfo ? null : prev));
     const cacheKey = 'cm-info-cache:' + connection.base;
     let hasStale = false;
     void idbGet<ObjectInfo>(cacheKey).then((cached) => {
@@ -240,10 +389,11 @@ function useStudioState() {
     };
   }, [connection, online]);
   useEffect(() => {
-    if (!info) return;
-    setSettings((s) => {
+    if (!info || !remoteHydrated) return;
+    if (!connection.preview && info === demoInfo) return;
+    setSilentSettings((s) => {
       if (s.workflow) return s;
-      const list = catalog(info, familyAssignments);
+      const list = catalog(info, familyAssignments, modelOrder);
       const current = list.find(
         (e) =>
           e.name === s.model &&
@@ -255,10 +405,17 @@ function useStudioState() {
       const aligned = selectModel(s, entry, info, familyAssignments);
       return JSON.stringify(aligned) === JSON.stringify(s) ? s : aligned;
     });
-  }, [info, setSettings, familyAssignments, settings.architecture]);
+  }, [
+    info,
+    connection.preview,
+    familyAssignments,
+    modelOrder,
+    settings.architecture,
+    remoteHydrated,
+  ]);
   useEffect(() => {
     // A reload during HTTP submission cannot safely resubmit the same job.
-    setJobs((all) =>
+    setSilentJobs((all) =>
       all.map((j) =>
         j.status === 'submitting'
           ? {
@@ -269,7 +426,7 @@ function useStudioState() {
           : j,
       ),
     );
-  }, [setJobs]);
+  }, []);
   function updateJob(id: string, patch: Partial<Job>) {
     setJobs((all) =>
       all.map((j) => {
@@ -319,7 +476,10 @@ function useStudioState() {
             });
             return;
           }
-          const images = Object.values(item.outputs || {}).flatMap((n) => n.images || []);
+          const finishedAt = Date.now();
+          const images = Object.values(item.outputs || {})
+            .flatMap((n) => n.images || [])
+            .map((image) => ({ ...image, v: finishedAt }));
           if (item.status?.completed || images.length) {
             updateJob(
               promptId,
@@ -327,8 +487,7 @@ function useStudioState() {
                 ? { status: 'complete', progress: 100, images }
                 : {
                     status: 'error',
-                    error:
-                      '생성은 끝났지만 이미지 출력이 없습니다. SaveImage 출력을 확인해 주세요',
+                    error: '생성은 끝났지만 이미지 출력이 없습니다. SaveImage 출력을 확인해 주세요',
                   },
             );
           }
@@ -432,7 +591,10 @@ function useStudioState() {
                 });
                 continue;
               }
-              const images = Object.values(item.outputs || {}).flatMap((n) => n.images || []);
+              const finishedAt = Date.now();
+              const images = Object.values(item.outputs || {})
+                .flatMap((n) => n.images || [])
+                .map((image) => ({ ...image, v: finishedAt }));
               if (item.status?.completed || images.length)
                 updateJob(
                   j.id,
@@ -494,9 +656,8 @@ function useStudioState() {
             progress,
             status: isDone ? 'complete' : 'running',
             startedAt: j.startedAt || j.createdAt,
-            completedAt: isDone ? (j.completedAt || Date.now()) : undefined,
-            images:
-              isDone ? [{ filename: 'sample.svg', subfolder: '', type: 'output' }] : [],
+            completedAt: isDone ? j.completedAt || Date.now() : undefined,
+            images: isDone ? [{ filename: 'sample.svg', subfolder: '', type: 'output' }] : [],
           };
         }),
       );
@@ -513,11 +674,14 @@ function useStudioState() {
       if (!connection.preview && connectionState !== 'connected')
         throw new Error('연결 설정에서 서버를 확인해 주세요');
       const snapshot = structuredClone(input);
-      if (!connection.preview) validateSelection(snapshot, info!, familyAssignments);
+      // A plain upscale only reads the image, so the original model may be gone.
+      const usesModel = !snapshot.upscale || snapshot.upscale.refine > 0;
+      if (!connection.preview && usesModel) validateSelection(snapshot, info!, familyAssignments);
       if (snapshot.random && !snapshot.workflow) snapshot.seed = randomSeed();
       const workflow = buildWorkflow(snapshot);
       if (!connection.preview) validateAgainstServer(workflow, info!);
-      setSettings(snapshot);
+      // An upscale is a one-off job and leaves the create form as it is.
+      if (!snapshot.upscale) setSettings(snapshot);
       tempId = newId();
       const job: Job = {
         id: tempId,
@@ -532,7 +696,9 @@ function useStudioState() {
       };
       setJobs((all) => trimJobsPreservingFavorites([job, ...all], 500));
       if (!connection.preview) {
-        const response = await submit(connection.base, workflow, clientId);
+        const response = await submit(connection.base, workflow, clientId, {
+          comfymui: { ...snapshot, workflow: null },
+        });
         if (!response.prompt_id) throw new Error('서버의 작업 번호를 확인할 수 없습니다');
         updateJob(tempId, { id: response.prompt_id, status: 'queued' });
       }
@@ -597,7 +763,7 @@ function useStudioState() {
   }
 
   function enqueueBatch(count: number, base = settings) {
-    const validCount = Math.min(8, Math.max(2, count));
+    const validCount = Math.min(20, Math.max(1, Math.round(count)));
     const items: QueueItem[] = [];
     for (let i = 0; i < validCount; i++) {
       const snap = structuredClone(base);
@@ -624,18 +790,18 @@ function useStudioState() {
   }
 
   function generateVariation(baseJob: Job) {
-    const next = structuredClone(baseJob.settings);
+    const next = baseSettings(structuredClone(baseJob.settings));
     next.seed = randomSeed();
     next.random = true;
     void generate(next);
   }
 
-  function generateUpscale(baseJob: Job) {
-    const next = structuredClone(baseJob.settings);
-    next.width = Math.min(2048, Math.round((next.width * 1.5) / 64) * 64);
-    next.height = Math.min(2048, Math.round((next.height * 1.5) / 64) * 64);
+  function generateUpscale(baseJob: Job, model: string, scale: number, refine: number) {
+    const source = baseJob.images[0];
+    if (!source) return;
+    const next = upscaleSettings(structuredClone(baseJob.settings), source, model, scale, refine);
     void generate(next);
-    notify(`해상도를 ${next.width} × ${next.height}로 높여 생성을 등록했어요`);
+    notify(`${next.width} × ${next.height}로 업스케일을 등록했어요`);
   }
 
   async function shareImage(job: Job) {
@@ -675,11 +841,69 @@ function useStudioState() {
     );
   }
 
-  function deleteJobs(ids: string[]) {
-    if (ids.length === 0) return;
-    const set = new Set(ids);
-    setJobs((all) => all.filter((j) => !set.has(j.id)));
-    notify(`${ids.length}개의 기록을 삭제했어요`);
+  const { downloads, startDownload, cancelDownload } = useDownloadTracker({
+    notify,
+    onFinished: (_download, outcome) => {
+      if (outcome === 'completed' || outcome === 'unknown') {
+        setConnection((c) => ({ ...c }));
+        setLibraryRevision((n) => n + 1);
+      }
+    },
+  });
+
+  async function refreshGallery() {
+    if (connection.preview) {
+      setGallery(null);
+      return;
+    }
+    const next = await fetchGallery();
+    if (next) setGallery(next.available ? next : null);
+  }
+
+  // Gallery items are files: deleting one deletes the file. Local records (preview mode,
+  // direct connections, failed jobs) are only removed from this device.
+  async function deleteJobs(ids: string[]): Promise<boolean> {
+    if (ids.length === 0) return true;
+    const fileIds = new Set(ids.filter((id) => id.startsWith('file:')));
+    const localIds = new Set(ids.filter((id) => !id.startsWith('file:')));
+    let failed = 0;
+    let deletedFiles = 0;
+    if (fileIds.size > 0) {
+      const files = (gallery?.files || []).filter((f) => fileIds.has(galleryJob(f, '').id));
+      try {
+        const result = await deleteOutputFiles(
+          files.map((f) => ({ filename: f.filename, subfolder: f.subfolder, type: 'output' })),
+        );
+        failed = result.failed.length;
+        const removed = new Set([...result.deleted, ...result.missing]);
+        deletedFiles = result.deleted.length;
+        setGallery((prev) =>
+          prev ? { ...prev, files: prev.files.filter((f) => !removed.has(galleryKey(f))) } : prev,
+        );
+        // Forget local records of those files so the create screen stops showing them.
+        setJobs((all) =>
+          all.filter(
+            (j) =>
+              j.preview ||
+              j.base !== GALLERY_BASE ||
+              !j.images.some((image) => removed.has(outputKey(image))),
+          ),
+        );
+      } catch (e) {
+        notify((e as Error).message);
+        return false;
+      }
+    }
+    if (localIds.size > 0) setJobs((all) => all.filter((j) => !localIds.has(j.id)));
+    const done = ids.length - failed;
+    notify(
+      failed > 0
+        ? `${done}개를 삭제했어요\n${failed}개 파일은 지우지 못했어요`
+        : deletedFiles > 0
+          ? `이미지 ${done}개를 삭제했어요`
+          : `${done}개 기록을 삭제했어요`,
+    );
+    return failed === 0;
   }
   async function cancel(j: Job) {
     if (j.preview) {
@@ -786,6 +1010,18 @@ function useStudioState() {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
+  const completedJobCount = jobs.filter((j) => j.status === 'complete').length;
+  useEffect(() => {
+    void refreshGallery();
+  }, [connection.preview, connection.base, completedJobCount]);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshGallery();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [connection.preview]);
+
   async function toggleNotifications(enable?: boolean) {
     const next = enable !== undefined ? enable : !notificationsEnabled;
     if (next) {
@@ -837,8 +1073,14 @@ function useStudioState() {
     setSettings,
     defaultPrompts,
     setDefaultPrompts,
-    quickBadges,
-    setQuickBadges,
+    promptAssemble,
+    setPromptAssemble,
+    selectedAssembleId,
+    setSelectedAssembleId,
+    modelOrder,
+    setModelOrder,
+    exampleDefaults,
+    setExampleDefaults,
     presets,
     setPresets,
     jobs,
@@ -871,6 +1113,14 @@ function useStudioState() {
     shareImage,
     toggleFavorite,
     deleteJobs,
+    gallery,
+    refreshGallery,
+    galleryJob,
+    isGalleryJob,
+    downloads,
+    startDownload,
+    cancelDownload,
+    libraryRevision,
     livePreviewUrl,
     notificationsEnabled,
     toggleNotifications,
@@ -882,7 +1132,8 @@ function useStudioState() {
       familySaveError ||
       queueError ||
       defaultPromptError ||
-      badgeError,
+      assembleError ||
+      modelOrderError,
   };
 }
 type Studio = ReturnType<typeof useStudioState>;

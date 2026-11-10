@@ -41,7 +41,61 @@ export type Generation = {
   scheduler: string;
   denoise: number;
   workflow: Workflow | null;
+  upscale?: UpscaleSpec | null;
 };
+// Upscales an existing output image with an upscale model, then optionally re-samples it
+// at low denoise with the original model and prompt to restore fine detail.
+export type UpscaleSpec = {
+  source: ImageRef;
+  model: string;
+  sourceWidth: number;
+  sourceHeight: number;
+  refine: number;
+};
+export const UPSCALE_SCALES = [1.5, 2, 3, 4];
+export const UPSCALE_REFINES = [
+  { value: 0, label: '끄기', hint: '확대만 해서 가장 빠르고 원본과 똑같아요' },
+  { value: 0.2, label: '약하게', hint: '원본을 거의 유지하며 질감만 살짝 다듬어요' },
+  { value: 0.35, label: '보통', hint: '피부와 머리카락 같은 미세 디테일을 새로 그려요' },
+  { value: 0.5, label: '강하게', hint: '디테일이 많이 늘지만 원본과 조금 달라질 수 있어요' },
+];
+export function upscaleSize(width: number, height: number, scale: number) {
+  const fit = (v: number) => Math.min(4096, Math.max(64, Math.round((v * scale) / 32) * 32));
+  return { width: fit(width), height: fit(height) };
+}
+export function upscaleSettings(
+  base: Generation,
+  source: ImageRef,
+  model: string,
+  scale: number,
+  refine: number,
+): Generation {
+  const plain = baseSettings(base);
+  return {
+    ...plain,
+    ...upscaleSize(plain.width, plain.height, scale),
+    batch: 1,
+    random: false,
+    workflow: null,
+    upscale: {
+      source: { filename: source.filename, subfolder: source.subfolder, type: source.type },
+      model,
+      sourceWidth: plain.width,
+      sourceHeight: plain.height,
+      refine,
+    },
+  };
+}
+// Settings of a regular generation: an upscale job reverts to its source size.
+export function baseSettings(s: Generation): Generation {
+  if (!s.upscale) return { ...s, upscale: null };
+  return { ...s, width: s.upscale.sourceWidth, height: s.upscale.sourceHeight, upscale: null };
+}
+// LoadImage resolves "path [output]" from ComfyUI's output folder without uploading.
+export function annotatedImage(ref: ImageRef) {
+  const path = ref.subfolder ? `${ref.subfolder}/${ref.filename}` : ref.filename;
+  return `${path} [${ref.type || 'output'}]`;
+}
 export type QueueItem = {
   id: string;
   createdAt: number;
@@ -65,7 +119,9 @@ export type Preset = {
   updatedAt: number;
   settings: Generation;
 };
-export type ImageRef = { filename: string; subfolder: string; type: string };
+// v is a content version (file modified time or completion time). ComfyUI reuses file
+// names after deletions, so URLs carry it to keep caches from showing an older image.
+export type ImageRef = { filename: string; subfolder: string; type: string; v?: number };
 export type Job = {
   id: string;
   createdAt: number;
@@ -121,7 +177,81 @@ export function migrateGenerationSettings(settings: Generation): Generation {
   return next;
 }
 
-export const DEFAULT_QUICK_BADGES = ['cinematic lighting', 'analog film', 'soft pastel'];
+
+export type PromptAssembleElement = {
+  id: string;
+  name: string;
+  attributes: string[];
+};
+
+export const DEFAULT_PROMPT_ASSEMBLE: PromptAssembleElement[] = [
+  {
+    id: 'angle',
+    name: '앵글',
+    attributes: ['eye-level', 'low', 'high', 'bird-eye', "worm's-eye"],
+  },
+  {
+    id: 'framing',
+    name: '구성',
+    attributes: [
+      'extreme close-up',
+      'choker',
+      'close-up',
+      'portrait',
+      'bust',
+      'waist-up',
+      'half body',
+      'cowboy',
+      'knee',
+      'full shot',
+    ],
+  },
+  {
+    id: 'composition',
+    name: '구도',
+    attributes: ['dutch', 'over-the-shoulder', 'POV', 'center composition', 'frame-in-frame'],
+  },
+];
+
+export function hasPromptAttribute(prompt: string, attribute: string): boolean {
+  const target = attribute.trim().toLowerCase();
+  if (!target) return false;
+  return prompt
+    .split(',')
+    .map((part) => part.trim().toLowerCase())
+    .some((part) => part === target);
+}
+
+export function togglePromptAttribute(prompt: string, attribute: string): string {
+  const trimmedAttr = attribute.trim();
+  if (!trimmedAttr) return prompt;
+  const target = trimmedAttr.toLowerCase();
+  const tokens = prompt
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const exists = tokens.some((part) => part.toLowerCase() === target);
+  if (exists) {
+    return tokens.filter((part) => part.toLowerCase() !== target).join(', ');
+  }
+  const base = prompt.trim().replace(/,+\s*$/, '');
+  return base ? `${base}, ${trimmedAttr}` : trimmedAttr;
+}
+
+export function parseAttributeList(raw: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const part of raw.split(/[,/\n]/)) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(trimmed);
+    }
+  }
+  return result;
+}
 
 export type DefaultPrompts = {
   positive: string;
@@ -328,6 +458,8 @@ export function validateAgainstServer(w: Workflow, info: ObjectInfo) {
         errors.push(`${id}: ${key} 입력이 필요합니다`);
     for (const [key, value] of Object.entries(node.inputs)) {
       if (Array.isArray(value)) continue;
+      // Annotated output paths are checked by LoadImage itself, not by the input list.
+      if (node.class_type === 'LoadImage' && key === 'image') continue;
       const spec = schema.input.required?.[key] || schema.input.optional?.[key];
       if (!spec) continue;
       const choices = Array.isArray(spec[0])
@@ -357,7 +489,9 @@ export function buildWorkflow(s: Generation): Workflow {
   if (!profile) throw new Error('지원하는 네 계열에서 모델을 선택해 주세요');
   const loader = s.modelLoader || 'CheckpointLoaderSimple';
   let modelNode: Workflow[string];
-  if (loader === 'CheckpointLoaderSimple' && s.architecture === 'flux')
+  // Only the MODEL output is used, so diffusion-only files in the checkpoints folder
+  // work for every family; text encoders and VAE always come from their own loaders.
+  if (loader === 'CheckpointLoaderSimple')
     modelNode = { class_type: loader, inputs: { ckpt_name: s.model } };
   else if (loader === 'UNETLoader')
     modelNode = { class_type: loader, inputs: { unet_name: s.model, weight_dtype: 'default' } };
@@ -475,7 +609,42 @@ export function buildWorkflow(s: Generation): Workflow {
     w['5'].inputs.negative = ['2', 1];
     delete w['3'];
   }
-  return w;
+  return s.upscale ? withUpscale(w, s, s.upscale) : w;
+}
+function withUpscale(w: Workflow, s: Generation, up: UpscaleSpec): Workflow {
+  if (!up.model) throw new Error('업스케일 모델을 선택해 주세요');
+  if (!Number.isFinite(up.refine) || up.refine < 0 || up.refine > 1)
+    throw new Error('디테일 보정 강도를 확인해 주세요');
+  const scaled: Workflow = {
+    '50': { class_type: 'LoadImage', inputs: { image: annotatedImage(up.source) } },
+    '51': { class_type: 'UpscaleModelLoader', inputs: { model_name: up.model } },
+    '52': {
+      class_type: 'ImageUpscaleWithModel',
+      inputs: { upscale_model: ['51', 0], image: ['50', 0] },
+    },
+    // Upscale models have a fixed factor (often 4x), so resize to the exact target size.
+    '53': {
+      class_type: 'ImageScale',
+      inputs: {
+        image: ['52', 0],
+        upscale_method: 'lanczos',
+        width: s.width,
+        height: s.height,
+        crop: 'disabled',
+      },
+    },
+  };
+  if (up.refine <= 0)
+    return {
+      ...scaled,
+      '7': { class_type: 'SaveImage', inputs: { images: ['53', 0], filename_prefix: 'ComfyMUI' } },
+    };
+  const refined: Workflow = { ...w, ...scaled };
+  delete refined['4'];
+  refined['54'] = { class_type: 'VAEEncode', inputs: { pixels: ['53', 0], vae: ['9', 0] } };
+  refined['5'].inputs.latent_image = ['54', 0];
+  refined['5'].inputs.denoise = up.refine;
+  return refined;
 }
 export function parseSettings(value: unknown): Generation {
   if (!value || typeof value !== 'object') throw new Error('설정 형식을 확인해 주세요');

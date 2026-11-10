@@ -43,16 +43,13 @@ export function CompareViewer({ leftJob, rightJob, onClose }: CompareViewerProps
   }, [onClose]);
 
   // Pointer drag logic
-  const handlePointerMove = useCallback(
-    (clientX: number) => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const percent = Math.min(100, Math.max(0, (x / rect.width) * 100));
-      setSliderPos(percent);
-    },
-    [],
-  );
+  const handlePointerMove = useCallback((clientX: number) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const percent = Math.min(100, Math.max(0, (x / rect.width) * 100));
+    setSliderPos(percent);
+  }, []);
 
   const onMouseDown = () => setIsDragging(true);
   const onTouchStart = () => setIsDragging(true);
@@ -128,12 +125,9 @@ export function CompareViewer({ leftJob, rightJob, onClose }: CompareViewerProps
     {
       key: 'loras',
       label: 'LoRA',
-      leftVal:
-        leftJob.settings.loras.map((l) => `${l.name}(${l.model})`).join(', ') || '없음',
-      rightVal:
-        rightJob.settings.loras.map((l) => `${l.name}(${l.model})`).join(', ') || '없음',
-      isDiff:
-        JSON.stringify(leftJob.settings.loras) !== JSON.stringify(rightJob.settings.loras),
+      leftVal: leftJob.settings.loras.map((l) => `${l.name}(${l.model})`).join(', ') || '없음',
+      rightVal: rightJob.settings.loras.map((l) => `${l.name}(${l.model})`).join(', ') || '없음',
+      isDiff: JSON.stringify(leftJob.settings.loras) !== JSON.stringify(rightJob.settings.loras),
     },
     {
       key: 'prompt',
@@ -241,7 +235,7 @@ export function CompareViewer({ leftJob, rightJob, onClose }: CompareViewerProps
                   className="flex flex-col gap-1 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs"
                 >
                   <span className="font-semibold text-amber-300">{diff.label}</span>
-                  <div className="flex items-center justify-between text-[11px] gap-2">
+                  <div className="flex items-center justify-between text-2xs gap-2">
                     <span className="truncate text-white/80" title={diff.leftVal}>
                       A: {diff.leftVal}
                     </span>

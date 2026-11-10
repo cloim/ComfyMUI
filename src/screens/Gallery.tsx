@@ -1,33 +1,60 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Images,
   Search,
   Trash2,
-  Star,
-  CheckSquare,
-  Square,
+  Check,
+  X,
   ArrowLeftRight,
   Download,
-  Filter,
-  X,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useStudio } from '../studio';
 import { type Job } from '../domain';
 import { imageUrl, thumbnailUrl } from '../api';
-import { Modal, Empty, IconButton } from '../components/ui';
+import { Modal, Empty, IconButton, SelectControl, Spinner } from '../components/ui';
 import { Result } from '../components/Result';
 import { CompareViewer } from '../components/CompareViewer';
 
+const modelName = (path: string) =>
+  path
+    .split(/[\\/]/)
+    .pop()
+    ?.replace(/\.(safetensors|gguf|ckpt|pt|pth|bin)$/i, '') || '';
+
 export default function Gallery() {
-  const { jobs, setJobs, notify, clearBadge, toggleFavorite, deleteJobs } = useStudio();
+  const {
+    jobs: localJobs,
+    notify,
+    clearBadge,
+    deleteJobs,
+    gallery,
+    refreshGallery,
+    galleryJob,
+    defaultPrompts,
+  } = useStudio();
+  // History is the ComfyUI output folder. Generations still running are shown first.
+  // Without the folder (preview mode, direct ComfyUI address) the local records are used.
+  const jobs = useMemo(() => {
+    if (!gallery) return localJobs;
+    // A running job whose image is already in the folder is shown only once, as the file.
+    const written = (j: Job) =>
+      gallery.files.some(
+        (f) =>
+          f.settings?.seed === j.settings.seed &&
+          f.settings?.positive === j.settings.positive &&
+          f.mtime >= j.createdAt - 60_000,
+      );
+    const active = localJobs.filter(
+      (j) => ['submitting', 'queued', 'running'].includes(j.status) && !written(j),
+    );
+    return [...active, ...gallery.files.map((f) => galleryJob(f, defaultPrompts.negative))];
+  }, [gallery, localJobs, galleryJob, defaultPrompts.negative]);
+  const [deleting, setDeleting] = useState(false);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [familyFilter, setFamilyFilter] = useState('all');
   const [loraFilter, setLoraFilter] = useState('all');
 
-  const [isSelecting, setIsSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [comparingPair, setComparingPair] = useState<[Job, Job] | null>(null);
   const [batchRemoveConfirm, setBatchRemoveConfirm] = useState(false);
@@ -42,17 +69,16 @@ export default function Gallery() {
     clearBadge();
   }, [clearBadge]);
 
+  useEffect(() => {
+    void refreshGallery();
+  }, []);
+
   const shown = jobs.filter((j) => {
     const matchSearch = `${j.settings.positive} ${j.settings.model}`
       .toLowerCase()
       .includes(search.toLowerCase());
     if (!matchSearch) return false;
 
-    if (filter === 'real' && j.preview) return false;
-    if (filter === 'complete' && j.status !== 'complete') return false;
-    if (filter === 'error' && j.status !== 'error') return false;
-
-    if (favoriteOnly && !j.favorite) return false;
     if (familyFilter !== 'all' && j.settings.architecture !== familyFilter) return false;
     if (loraFilter === 'with_lora' && (!j.settings.loras || j.settings.loras.length === 0))
       return false;
@@ -63,6 +89,7 @@ export default function Gallery() {
   });
 
   const detail = jobs.find((j) => j.id === selected);
+  const isSelecting = selectedIds.size > 0;
 
   const labels = {
     submitting: '전송 중',
@@ -92,7 +119,6 @@ export default function Gallery() {
 
   const handleTouchStart = (jobId: string) => {
     longPressTimerRef.current = setTimeout(() => {
-      setIsSelecting(true);
       toggleSelectJob(jobId);
     }, 500);
   };
@@ -126,133 +152,75 @@ export default function Gallery() {
     }
   };
 
-  const executeBatchDelete = () => {
-    deleteJobs(Array.from(selectedIds));
+  const executeBatchDelete = async () => {
+    setDeleting(true);
+    const ok = await deleteJobs(Array.from(selectedIds));
+    setDeleting(false);
+    if (!ok) return;
     setSelectedIds(new Set());
-    setIsSelecting(false);
     setBatchRemoveConfirm(false);
+  };
+
+  const executeSingleDelete = async () => {
+    if (!remove) return;
+    setDeleting(true);
+    const ok = await deleteJobs([remove.id]);
+    setDeleting(false);
+    if (ok) setRemove(null);
   };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Top Filter and Controls */}
-      <div className="flex flex-none flex-col gap-3 px-4 py-4 sm:px-7 lg:px-9">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs text-muted">
-            기록 {shown.length}개 {jobs.length !== shown.length ? `(전체 ${jobs.length}개)` : ''}
-          </span>
-          <div className="flex items-center gap-2">
-            {isSelecting ? (
-              <>
-                <button
-                  onClick={handleSelectAll}
-                  className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-ink hover:bg-stone"
-                >
-                  {selectedIds.size === shown.length ? '선택 해제' : '전체 선택'}
-                </button>
-                <button
-                  onClick={() => {
-                    setIsSelecting(false);
-                    setSelectedIds(new Set());
-                  }}
-                  className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-muted hover:bg-stone"
-                >
-                  취소
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => setIsSelecting(true)}
-                className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-ink hover:bg-stone"
-              >
-                다중 선택
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Search Input */}
-        <label className="relative w-full sm:max-w-96">
-          <Search size={17} className="absolute left-3 top-3.5 text-muted" />
-          <input
-            className="field pl-10"
-            aria-label="기록 검색"
-            placeholder="프롬프트와 모델로 검색"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </label>
-
-        {/* Tab Filters (All, Favorites, Status) */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setFavoriteOnly((v) => !v)}
-            aria-pressed={favoriteOnly}
-            className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium transition ${
-              favoriteOnly
-                ? 'bg-amber-500 text-white shadow-sm'
-                : 'bg-white text-muted hover:bg-stone border border-border'
-            }`}
-          >
-            <Star size={13} className={favoriteOnly ? 'fill-white' : ''} />
-            즐겨찾기
-          </button>
-
-          {[
-            ['all', '전체 상태'],
-            ['real', '실제 생성'],
-            ['complete', '완료'],
-            ['error', '오류'],
-          ].map(([v, l]) => (
-            <button
-              key={v}
-              onClick={() => setFilter(v)}
-              aria-pressed={filter === v}
-              className={`rounded-full px-3.5 py-2 text-xs font-medium transition ${
-                filter === v ? 'bg-ink text-white' : 'bg-white text-muted hover:bg-stone border border-border'
-              }`}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
-
-        {/* Architecture & LoRA Filters */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted">모델:</span>
-            <select
+      {/* Search and filters, with the count at the end of the row */}
+      <div className="flex flex-none flex-wrap items-center gap-2 px-4 py-4 sm:px-5 lg:px-6">
+        <div data-ui-audit-row className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1">
+          <label className="relative min-w-0 flex-1 sm:max-w-96">
+            <Search
+              size={15}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+            />
+            <input
+              className="field pl-10"
+              aria-label="기록 검색"
+              placeholder="검색"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <div className="w-28 shrink-0 sm:w-40">
+            <SelectControl
+              aria-label="모델 계열 필터"
               value={familyFilter}
               onChange={(e) => setFamilyFilter(e.target.value)}
-              className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs font-medium text-ink"
             >
-              <option value="all">전체 모델 계열</option>
+              <option value="all">전체 계열</option>
               <option value="flux">Flux 계열</option>
               <option value="krea2">Krea2 계열</option>
               <option value="moss">MOSS 계열</option>
               <option value="qwen21">Qwen2.5 계열</option>
-            </select>
+            </SelectControl>
           </div>
-
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted">LoRA:</span>
-            <select
+          <div className="w-28 shrink-0 sm:w-36">
+            <SelectControl
+              aria-label="LoRA 필터"
               value={loraFilter}
               onChange={(e) => setLoraFilter(e.target.value)}
-              className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs font-medium text-ink"
             >
-              <option value="all">전체</option>
-              <option value="with_lora">LoRA 적용됨</option>
+              <option value="all">LoRA 전체</option>
+              <option value="with_lora">LoRA 적용</option>
               <option value="without_lora">LoRA 없음</option>
-            </select>
+            </SelectControl>
           </div>
         </div>
+        <span className="ml-auto shrink-0 font-mono text-2xs text-muted">
+          표시 {shown.length} / {jobs.length}개
+        </span>
       </div>
 
       {/* Grid Content */}
       <div
         data-ui-audit-scroll-root
-        className="min-h-0 flex-1 overflow-y-auto px-4 pb-20 sm:px-7 lg:px-9"
+        className="min-h-0 flex-1 overflow-y-auto px-4 pb-20 sm:px-5 lg:px-6"
       >
         {shown.length ? (
           <div
@@ -272,36 +240,23 @@ export default function Gallery() {
                   onTouchStart={() => handleTouchStart(j.id)}
                   onTouchEnd={handleTouchEnd}
                 >
-                  {/* Select Checkbox (when in selection mode) */}
-                  {isSelecting && (
-                    <button
-                      type="button"
-                      onClick={() => toggleSelectJob(j.id)}
-                      className="absolute left-2.5 top-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur-sm"
-                    >
-                      {isChecked ? (
-                        <CheckSquare size={17} className="text-olive fill-olive" />
-                      ) : (
-                        <Square size={17} />
-                      )}
-                    </button>
-                  )}
-
-                  {/* Favorite Badge / Star button */}
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(j.id);
-                    }}
-                    aria-label={j.favorite ? '즐겨찾기 해제' : '즐겨찾기 등록'}
-                    className={`absolute right-2.5 top-2.5 z-10 flex h-7 w-7 items-center justify-center rounded-lg backdrop-blur-sm transition ${
-                      j.favorite
-                        ? 'bg-amber-500/90 text-white'
-                        : 'bg-black/40 text-white/70 hover:bg-black/60 hover:text-white'
-                    }`}
+                    role="checkbox"
+                    aria-checked={isChecked}
+                    aria-label="이미지 선택"
+                    onClick={() => toggleSelectJob(j.id)}
+                    className="absolute left-1.5 top-1.5 z-10 flex h-9 w-9 items-center justify-center"
                   >
-                    <Star size={14} className={j.favorite ? 'fill-white' : ''} />
+                    <span
+                      className={`flex h-[22px] w-[22px] items-center justify-center rounded-md border-2 shadow-sm transition ${
+                        isChecked
+                          ? 'border-olive bg-olive text-white'
+                          : 'border-white bg-black/25 text-transparent hover:bg-black/40'
+                      }`}
+                    >
+                      <Check size={14} strokeWidth={3} aria-hidden="true" />
+                    </span>
                   </button>
 
                   <button
@@ -340,7 +295,7 @@ export default function Gallery() {
                       </div>
                     )}
                     {j.preview && (
-                      <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-medium">
+                      <span className="absolute right-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-2xs font-medium">
                         미리보기
                       </span>
                     )}
@@ -349,15 +304,19 @@ export default function Gallery() {
                   <div data-ui-audit-row className="flex items-center justify-between gap-1 p-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-semibold">{labels[j.status]}</p>
+                        <p className="min-w-0 truncate text-xs font-semibold">
+                          {j.status === 'complete'
+                            ? modelName(j.settings.model) || labels.complete
+                            : labels[j.status]}
+                        </p>
                         {j.settings.loras && j.settings.loras.length > 0 && (
-                          <span className="rounded bg-sand px-1.5 py-0.5 text-[9px] font-medium text-ink">
+                          <span className="rounded bg-stone px-1.5 py-0.5 text-2xs font-medium text-ink">
                             LoRA {j.settings.loras.length}
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 truncate text-[10px] text-muted">
-                        {new Date(j.createdAt).toLocaleDateString('ko-KR')} ·{' '}
+                      <p className="mt-1 truncate text-2xs text-muted">
+                        {new Date(j.createdAt).toLocaleDateString('ko-KR')} |{' '}
                         {j.settings.architecture}
                       </p>
                     </div>
@@ -382,7 +341,7 @@ export default function Gallery() {
             title={jobs.length ? '조건에 맞는 기록을 찾아보세요' : '첫 번째 장면을 만들어 보세요'}
             description={
               jobs.length
-                ? '검색어 또는 상태·모델 필터를 바꾸면 다른 기록을 볼 수 있어요'
+                ? '검색어나 모델과 LoRA 필터를 바꾸면 다른 이미지를 볼 수 있어요'
                 : '생성한 이미지와 설정을 이곳에서 다시 만날 수 있어요'
             }
           >
@@ -394,38 +353,52 @@ export default function Gallery() {
       </div>
 
       {/* Floating Bottom Action Bar for Multi-Selection */}
-      {isSelecting && selectedIds.size > 0 && (
-        <div className="fixed bottom-4 inset-x-4 max-w-md mx-auto z-40 flex items-center justify-between gap-2 rounded-2xl border border-border bg-white/95 p-3 shadow-xl backdrop-blur-md">
-          <span className="text-xs font-bold text-ink pl-1">
-            {selectedIds.size}개 선택됨
-          </span>
+      {isSelecting && (
+        <div className="fixed inset-x-4 bottom-20 z-40 mx-auto flex max-w-md items-center justify-between gap-2 rounded-2xl border border-line bg-white/95 py-2 pl-1.5 pr-2 shadow-xl backdrop-blur-md md:bottom-4">
+          <div className="flex min-w-0 items-center gap-1">
+            <IconButton icon={X} label="선택 해제" onClick={() => setSelectedIds(new Set())} />
+            <span className="whitespace-nowrap text-xs font-bold text-ink">
+              {selectedIds.size}개 선택
+            </span>
+            {selectedIds.size < shown.length && (
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="whitespace-nowrap rounded-lg px-2 py-1.5 text-xs font-semibold text-olive hover:bg-paper"
+              >
+                전체 선택
+              </button>
+            )}
+          </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {selectedIds.size === 2 && (
               <button
                 type="button"
                 onClick={handleCompareSelected}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-olive px-3 py-2 text-xs font-bold text-white shadow-sm hover:opacity-90"
+                className="inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-xl bg-olive px-3 text-xs font-bold text-white shadow-sm hover:opacity-90"
               >
-                <ArrowLeftRight size={14} />
-                비교하기
+                <ArrowLeftRight size={14} aria-hidden="true" />
+                비교
               </button>
             )}
             <button
               type="button"
               onClick={handleBatchDownload}
-              className="inline-flex items-center gap-1 rounded-xl border border-border bg-stone px-3 py-2 text-xs font-semibold text-ink hover:bg-sand"
+              aria-label="선택 이미지 저장"
+              className="inline-flex min-h-9 min-w-9 items-center justify-center gap-1 rounded-xl border border-line bg-stone px-2.5 text-xs font-semibold text-ink hover:bg-stone sm:px-3"
             >
-              <Download size={14} />
-              저장
+              <Download size={14} aria-hidden="true" />
+              <span className="hidden sm:inline">저장</span>
             </button>
             <button
               type="button"
               onClick={() => setBatchRemoveConfirm(true)}
-              className="inline-flex items-center gap-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700"
+              aria-label="선택 이미지 삭제"
+              className="inline-flex min-h-9 min-w-9 items-center justify-center gap-1 rounded-xl bg-red-600 px-2.5 text-xs font-bold text-white hover:bg-red-700 sm:px-3"
             >
-              <Trash2 size={14} />
-              삭제
+              <Trash2 size={14} aria-hidden="true" />
+              <span className="hidden sm:inline">삭제</span>
             </button>
           </div>
         </div>
@@ -438,55 +411,77 @@ export default function Gallery() {
 
       {/* Single Delete Confirm Modal */}
       <Modal
-        title="기록을 삭제할까요?"
+        title={gallery ? '이미지를 삭제할까요?' : '기록을 삭제할까요?'}
         open={Boolean(remove)}
-        onClose={() => setRemove(null)}
+        onClose={() => {
+          if (!deleting) setRemove(null);
+        }}
         footer={
           <>
-            <button className="btn-secondary" onClick={() => setRemove(null)}>
+            <button className="btn-secondary" disabled={deleting} onClick={() => setRemove(null)}>
               유지하기
             </button>
             <button
-              className="btn-danger"
-              onClick={() => {
-                if (remove) {
-                  deleteJobs([remove.id]);
-                  setRemove(null);
-                }
-              }}
+              className="btn-danger disabled:cursor-wait disabled:opacity-60"
+              disabled={deleting}
+              onClick={() => void executeSingleDelete()}
             >
-              기록 삭제
+              {deleting ? <Spinner /> : <Trash2 size={14} aria-hidden="true" />}
+              {gallery ? '파일 삭제' : '기록 삭제'}
             </button>
           </>
         }
       >
-        <p className="text-sm leading-relaxed text-muted">
-          이 기기의 기록과 설정 스냅샷을 삭제합니다
-          <br />
-          ComfyUI 서버에 저장된 이미지는 유지돼요
+        <p className="text-xs leading-relaxed text-muted">
+          {gallery ? (
+            <>
+              ComfyUI output 폴더의 이미지 파일을 삭제해요
+              <br />
+              삭제한 파일은 되돌릴 수 없어요
+            </>
+          ) : (
+            '이 기기의 기록을 삭제해요'
+          )}
         </p>
       </Modal>
 
       {/* Batch Delete Confirm Modal */}
       <Modal
-        title={`선택한 ${selectedIds.size}개 기록을 삭제할까요?`}
+        title={`선택한 ${selectedIds.size}개 ${gallery ? '이미지를' : '기록을'} 삭제할까요?`}
         open={batchRemoveConfirm}
-        onClose={() => setBatchRemoveConfirm(false)}
+        onClose={() => {
+          if (!deleting) setBatchRemoveConfirm(false);
+        }}
         footer={
           <>
-            <button className="btn-secondary" onClick={() => setBatchRemoveConfirm(false)}>
+            <button
+              className="btn-secondary"
+              disabled={deleting}
+              onClick={() => setBatchRemoveConfirm(false)}
+            >
               취소
             </button>
-            <button className="btn-danger" onClick={executeBatchDelete}>
+            <button
+              className="btn-danger disabled:cursor-wait disabled:opacity-60"
+              disabled={deleting}
+              onClick={() => void executeBatchDelete()}
+            >
+              {deleting ? <Spinner /> : <Trash2 size={14} aria-hidden="true" />}
               {selectedIds.size}개 일괄 삭제
             </button>
           </>
         }
       >
-        <p className="text-sm leading-relaxed text-muted">
-          선택된 항목들의 기록과 스냅샷을 기기에서 모두 삭제합니다.
-          <br />
-          즐겨찾기 항목도 선택된 경우 함께 삭제됩니다.
+        <p className="text-xs leading-relaxed text-muted">
+          {gallery ? (
+            <>
+              선택한 이미지 파일을 ComfyUI output 폴더에서 삭제해요
+              <br />
+              삭제한 파일은 되돌릴 수 없어요
+            </>
+          ) : (
+            '선택한 기록을 이 기기에서 삭제해요'
+          )}
         </p>
       </Modal>
 

@@ -43,10 +43,20 @@ export async function request<T>(base: string, path: string, init?: RequestInit)
   return body;
 }
 export const fetchInfo = (base: string) => request<ObjectInfo>(base, '/object_info');
-export const submit = (base: string, prompt: Workflow, client_id: string) =>
+// extra_pnginfo entries are written into saved PNGs by ComfyUI's SaveImage node.
+export const submit = (
+  base: string,
+  prompt: Workflow,
+  client_id: string,
+  pngInfo?: Record<string, unknown>,
+) =>
   request<{ prompt_id: string }>(base, '/prompt', {
     method: 'POST',
-    body: JSON.stringify({ prompt, client_id }),
+    body: JSON.stringify({
+      prompt,
+      client_id,
+      ...(pngInfo ? { extra_data: { extra_pnginfo: pngInfo } } : {}),
+    }),
   });
 export type HistoryItem = {
   outputs: Record<string, { images?: ImageRef[] }>;
@@ -60,12 +70,21 @@ export type Queue = {
   queue_running: [number, string, ...unknown[]][];
   queue_pending: [number, string, ...unknown[]][];
 };
+function imageParams(ref: ImageRef) {
+  const params = new URLSearchParams({
+    filename: ref.filename,
+    subfolder: ref.subfolder,
+    type: ref.type,
+  });
+  if (ref.v) params.set('v', String(ref.v));
+  return params;
+}
 export function imageUrl(base: string, ref: ImageRef) {
-  return `${base}/view?${new URLSearchParams(ref)}`;
+  return `${base}/view?${imageParams(ref)}`;
 }
 export function thumbnailUrl(base: string, ref: ImageRef) {
   if (base === '/comfy') {
-    return `/comfy/thumb?${new URLSearchParams(ref)}`;
+    return `/comfy/thumb?${imageParams(ref)}`;
   }
   return imageUrl(base, ref);
 }

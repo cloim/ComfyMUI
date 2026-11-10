@@ -187,6 +187,7 @@ export const modelSources = [
 export function catalog(
   info: ObjectInfo | null,
   assignments: FamilyAssignments = {},
+  modelOrder: string[] = [],
 ): ModelEntry[] {
   const entries: ModelEntry[] = [];
   const seen = new Set<string>();
@@ -196,7 +197,6 @@ export function catalog(
       if (!family) continue;
       // These models require reference-image or specialized Nunchaku workflows.
       if (/nunchaku|svdq|kontext|(^|[\\/])edit([\\/])/i.test(name)) continue;
-      if (family !== 'flux' && source.loader === 'CheckpointLoaderSimple') continue;
       const key = source.format + ':' + name;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -208,7 +208,31 @@ export function catalog(
         format: source.format,
       });
     }
-  return entries;
+  return sortModelEntries(entries, modelOrder);
+}
+export function sortModelEntries(entries: ModelEntry[], modelOrder: string[] = []): ModelEntry[] {
+  if (!modelOrder.length) return entries;
+  const orderMap = new Map<string, number>();
+  modelOrder.forEach((id, index) => {
+    if (!orderMap.has(id)) orderMap.set(id, index);
+  });
+  return [...entries].sort((a, b) => {
+    const idxA = orderMap.get(a.id);
+    const idxB = orderMap.get(b.id);
+    if (idxA !== undefined && idxB !== undefined) return idxA - idxB;
+    if (idxA !== undefined) return -1;
+    if (idxB !== undefined) return 1;
+    return 0;
+  });
+}
+export function applyModelReorder(
+  currentOrder: string[],
+  currentGroupIds: string[],
+  reorderedGroupIds: string[],
+): string[] {
+  const groupSet = new Set(currentGroupIds);
+  const base = currentOrder.filter((id) => !groupSet.has(id));
+  return [...reorderedGroupIds, ...base];
 }
 export function compatibleAssets(
   info: ObjectInfo | null,

@@ -5,15 +5,15 @@ import {
   CloudDownload,
   Copy,
   ExternalLink,
+  Eye,
+  EyeOff,
   FolderInput,
-  Hash,
   Heart,
   Layers2,
-  Pin,
   Plus,
   RefreshCw,
+  ScanSearch,
   Search,
-  Sparkles,
   Trash2,
   Wand2,
   X,
@@ -25,13 +25,9 @@ import {
   DEMO_LORAS,
   addLoraTags,
   appendTriggerWords,
-  cancelLoraDownload,
   deleteLoraFile,
-  downloadCivitaiLora,
   fetchCivitaiModelVersions,
   fetchCivitaiVersionById,
-  fetchDownloadProgress,
-  fetchLoraBaseModels,
   fetchLoraCivitaiMetadata,
   fetchLoraFolders,
   fetchLoraList,
@@ -42,7 +38,8 @@ import {
   isVideoPreview,
   loraPreviewUrl,
   moveLoraFile,
-  parseCivitaiInput,
+  civitaiAirProblem,
+  parseCivitaiAir,
   parseUsageTips,
   refreshLoraUpdates,
   relinkLoraCivitai,
@@ -51,14 +48,21 @@ import {
   saveLoraMetadata,
   scanLoras,
   serializeUsageTips,
+  type CivitaiAir,
   type CivitaiVersion,
-  type DownloadProgressSnapshot,
-  type LoraFilterParams,
   type LoraItem,
 } from '../lora-manager';
-import { Empty, Modal, SelectControl, Spinner } from '../components/ui';
-
-const DEFAULT_PINNED_TAGS = ['portrait', 'style', 'concept', 'detail'];
+import {
+  Empty,
+  IconButton,
+  Modal,
+  MultiSelect,
+  SelectControl,
+  Spinner,
+} from '../components/ui';
+import { DetailExamples } from '../components/ExampleGallery';
+import { HeaderActionButton, HeaderActions } from '../components/HeaderActions';
+import { DownloadTray } from '../components/DownloadTray';
 
 export default function Loras() {
   const {
@@ -70,6 +74,10 @@ export default function Loras() {
     setFamilyAssignments,
     refreshModels,
     notify,
+    downloads,
+    startDownload,
+    cancelDownload,
+    libraryRevision,
   } = useStudio();
   const navigate = useNavigate();
 
@@ -85,14 +93,12 @@ export default function Loras() {
   // Filter states
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sortBy, setSortBy] = useState<NonNullable<LoraFilterParams['sortBy']>>('date:desc');
   const [folder, setFolder] = useState('all');
-  const [baseModel, setBaseModel] = useState('all');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagLogic, setTagLogic] = useState<'any' | 'all'>('any');
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [updatesOnly, setUpdatesOnly] = useState(false);
-  const [autoAppendTrigger, setAutoAppendTrigger] = useState(true);
+  const [status, setStatus] = useState<'all' | 'favorites' | 'updates'>('all');
+  const favoritesOnly = status === 'favorites';
+  const updatesOnly = status === 'updates';
   const [showNsfw, setShowNsfw] = useState(false);
 
   // Facets & Tag management states
@@ -103,12 +109,6 @@ export default function Loras() {
     'Qwen',
   ]);
   const [roots, setRoots] = useState<string[]>(['E:/ComfyUI/models/loras']);
-  const [baseModels, setBaseModels] = useState<{ name: string; count: number }[]>([
-    { name: 'Flux.1 D', count: 1 },
-    { name: 'Krea2', count: 1 },
-    { name: 'MOSS', count: 1 },
-    { name: 'Qwen', count: 1 },
-  ]);
   const [topTags, setTopTags] = useState<{ tag: string; count: number }[]>([
     { tag: 'concept', count: 25 },
     { tag: 'portrait', count: 15 },
@@ -117,18 +117,17 @@ export default function Loras() {
     { tag: 'editorial', count: 6 },
     { tag: 'photorealistic', count: 7 },
   ]);
-  const [pinnedTags, setPinnedTags] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('cm-lora-pinned-tags');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return DEFAULT_PINNED_TAGS;
-  });
-  const [tagModalOpen, setTagModalOpen] = useState(false);
-  const [tagSearch, setTagSearch] = useState('');
 
   // Detail modal state
   const [activeLora, setActiveLora] = useState<LoraItem | null>(null);
+  const [examplesRevision, setExamplesRevision] = useState(0);
+  // A new default image replaces the card preview without reloading the list.
+  function handlePreviewChanged(filePath: string, previewUrl: string, nsfwLevel: number) {
+    const patch = (x: LoraItem) =>
+      x.file_path === filePath ? { ...x, preview_url: previewUrl, preview_nsfw_level: nsfwLevel } : x;
+    setItems((prev) => prev.map(patch));
+    setActiveLora((prev) => (prev ? patch(prev) : prev));
+  }
   const [editModelName, setEditModelName] = useState('');
   const [editBaseModel, setEditBaseModel] = useState('');
   const [editStrength, setEditStrength] = useState('0.8');
@@ -148,17 +147,13 @@ export default function Loras() {
   // CivitAI download modal state
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [civitaiQuery, setCivitaiQuery] = useState('');
-  const [civitaiMode, setCivitaiMode] = useState<'auto' | 'model' | 'version'>('auto');
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupVersions, setLookupVersions] = useState<CivitaiVersion[]>([]);
+  const [lookupAir, setLookupAir] = useState<CivitaiAir | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<number>(0);
   const [targetRoot, setTargetRoot] = useState('');
   const [targetFolder, setTargetFolder] = useState('auto');
   const [customSubfolder, setCustomSubfolder] = useState('');
-  const [downloading, setDownloading] = useState(false);
-  const [activeDownloadId, setActiveDownloadId] = useState('');
-  const [downloadProgress, setDownloadProgress] = useState<DownloadProgressSnapshot | null>(null);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const comfyLoraNames = useMemo(() => {
@@ -175,41 +170,10 @@ export default function Loras() {
     return () => clearTimeout(t);
   }, [search]);
 
-  function persistPinnedTags(tags: string[]) {
-    setPinnedTags(tags);
-    try {
-      localStorage.setItem('cm-lora-pinned-tags', JSON.stringify(tags));
-    } catch {}
-  }
-
-  function togglePinTag(tag: string) {
-    if (pinnedTags.includes(tag)) {
-      const next = pinnedTags.filter((t) => t !== tag);
-      persistPinnedTags(next);
-      notify(`#${tag} 태그를 빠른 필터 바에서 해제했어요`);
-    } else {
-      const next = [...pinnedTags, tag];
-      persistPinnedTags(next);
-      notify(`#${tag} 태그를 빠른 필터 바에 고정했어요`);
-    }
-  }
-
-  function toggleTagFilter(tag: string) {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-    );
-  }
-
   async function loadFacets() {
     if (connection.preview) {
       setFolders(['Flux1.D/commons', 'Flux1.D/illust', 'Krea2', 'Qwen']);
       setRoots(['E:/ComfyUI/models/loras']);
-      setBaseModels([
-        { name: 'Flux.1 D', count: 1 },
-        { name: 'Krea2', count: 1 },
-        { name: 'MOSS', count: 1 },
-        { name: 'Qwen', count: 1 },
-      ]);
       setTopTags([
         { tag: 'portrait', count: 2 },
         { tag: 'detail', count: 2 },
@@ -221,10 +185,9 @@ export default function Loras() {
       return;
     }
     try {
-      const [fList, rList, bmList, tList] = await Promise.all([
+      const [fList, rList, tList] = await Promise.all([
         fetchLoraFolders(connection.base).catch(() => []),
         fetchLoraRoots(connection.base).catch(() => []),
-        fetchLoraBaseModels(connection.base).catch(() => []),
         fetchLoraTopTags(connection.base, 150).catch(() => []),
       ]);
       if (fList.length) setFolders(fList);
@@ -232,7 +195,6 @@ export default function Loras() {
         setRoots(rList);
         setTargetRoot((prev) => prev || rList[0]);
       }
-      if (bmList.length) setBaseModels(bmList);
       if (tList.length) setTopTags(tList);
     } catch {
       /* Facets are optional */
@@ -255,9 +217,6 @@ export default function Loras() {
       }
       if (folder !== 'all') {
         filtered = filtered.filter((item) => item.folder === folder);
-      }
-      if (baseModel !== 'all') {
-        filtered = filtered.filter((item) => item.base_model === baseModel);
       }
       if (selectedTags.length > 0) {
         filtered = filtered.filter((item) => {
@@ -291,10 +250,8 @@ export default function Loras() {
       const res = await fetchLoraList(connection.base, {
         page: targetPage,
         pageSize: 100,
-        sortBy,
         search: debouncedSearch,
         folder,
-        baseModel,
         tags: selectedTags,
         tagLogic,
         favoritesOnly,
@@ -323,10 +280,8 @@ export default function Loras() {
   }, [
     connection.base,
     connection.preview,
-    sortBy,
     debouncedSearch,
     folder,
-    baseModel,
     selectedTags,
     tagLogic,
     favoritesOnly,
@@ -337,11 +292,18 @@ export default function Loras() {
     void loadFacets();
   }, [connection.base, connection.preview]);
 
+  // Reload the library when a background download lands.
+  const libraryRevisionRef = useRef(libraryRevision);
   useEffect(() => {
-    return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-    };
-  }, []);
+    if (libraryRevisionRef.current === libraryRevision) return;
+    libraryRevisionRef.current = libraryRevision;
+    void loadFacets();
+    void loadLoras(1, false);
+  }, [libraryRevision]);
+
+  const kindDownloads = downloads.filter((d) => d.kind === 'lora' && d.base === connection.base);
+  const isDownloadingVersion = (versionId?: number) =>
+    Boolean(versionId) && kindDownloads.some((d) => d.versionId === versionId);
 
   const hasMore = items.length < total;
 
@@ -403,9 +365,7 @@ export default function Loras() {
     setSettings((prev) => {
       const nextLoras = alreadyAdded
         ? prev.loras.map((l) =>
-            l.name === comfyName
-              ? { ...l, model: recommendedStrength, clip: recommendedClip }
-              : l,
+            l.name === comfyName ? { ...l, model: recommendedStrength, clip: recommendedClip } : l,
           )
         : [
             ...prev.loras,
@@ -416,9 +376,7 @@ export default function Loras() {
             },
           ];
       const nextPositive =
-        autoAppendTrigger && trainedWords.length > 0
-          ? appendTriggerWords(prev.positive, trainedWords)
-          : prev.positive;
+        trainedWords.length > 0 ? appendTriggerWords(prev.positive, trainedWords) : prev.positive;
       return {
         ...prev,
         loras: nextLoras,
@@ -426,9 +384,7 @@ export default function Loras() {
       };
     });
 
-    notify(
-      `${item.model_name || item.file_name} LoRA를 강도 ${recommendedStrength}로 적용했어요`,
-    );
+    notify(`${item.model_name || item.file_name} LoRA를 강도 ${recommendedStrength}로 적용했어요`);
     if (navigateAfter) {
       setActiveLora(null);
       navigate('/create');
@@ -542,9 +498,7 @@ export default function Loras() {
           trainedWords: words,
         },
       };
-      setItems((prev) =>
-        prev.map((x) => (x.file_path === activeLora.file_path ? updated : x)),
-      );
+      setItems((prev) => prev.map((x) => (x.file_path === activeLora.file_path ? updated : x)));
       setActiveLora(updated);
       notify('LoRA 메타데이터와 권장 강도를 저장했어요');
       return;
@@ -653,6 +607,7 @@ export default function Loras() {
       const res = await fetchLoraCivitaiMetadata(connection.base, activeLora.file_path);
       if (!res.success) throw new Error(res.error || 'CivitAI 정보를 찾을 수 없습니다');
       await loadLoras(1, false);
+      setExamplesRevision((n) => n + 1);
       notify('CivitAI 메타데이터와 프리뷰를 동기화했어요');
     } catch (e) {
       notify((e as Error).message);
@@ -681,6 +636,7 @@ export default function Loras() {
         ...(vid && vid > 0 ? { model_version_id: vid } : {}),
       });
       await loadLoras(1, false);
+      setExamplesRevision((n) => n + 1);
       notify(`CivitAI 모델 #${mid}로 재연결했어요`);
     } catch (e) {
       notify((e as Error).message);
@@ -739,9 +695,7 @@ export default function Loras() {
     if (connection.preview) {
       setActiveLora({ ...activeLora, file_name: clean });
       setItems((prev) =>
-        prev.map((x) =>
-          x.file_path === activeLora.file_path ? { ...x, file_name: clean } : x,
-        ),
+        prev.map((x) => (x.file_path === activeLora.file_path ? { ...x, file_name: clean } : x)),
       );
       notify(`파일명을 ${clean}으로 변경했어요`);
       return;
@@ -812,11 +766,13 @@ export default function Loras() {
   }
 
   async function handleLookupCivitai() {
-    const parsed = parseCivitaiInput(civitaiQuery, civitaiMode);
-    if (!parsed.modelId && !parsed.modelVersionId) {
-      notify('CivitAI 모델 URL이나 숫자 ID를 입력해 주세요');
+    const problem = civitaiAirProblem(civitaiQuery, 'lora');
+    if (problem) {
+      notify(problem);
       return;
     }
+    const parsed = parseCivitaiAir(civitaiQuery)!;
+    setLookupAir(parsed);
     if (connection.preview) {
       const mockVersion: CivitaiVersion = {
         id: parsed.modelVersionId || 988500,
@@ -850,10 +806,9 @@ export default function Loras() {
       } else if (parsed.modelVersionId) {
         const single = await fetchCivitaiVersionById(connection.base, parsed.modelVersionId);
         if (single.modelId) {
-          const versions = await fetchCivitaiModelVersions(
-            connection.base,
-            single.modelId,
-          ).catch(() => [single]);
+          const versions = await fetchCivitaiModelVersions(connection.base, single.modelId).catch(
+            () => [single],
+          );
           const list = versions.length ? versions : [single];
           setLookupVersions(list);
           setSelectedVersionId(single.id);
@@ -884,8 +839,7 @@ export default function Loras() {
 
     if (connection.preview) {
       const newItem: LoraItem = {
-        model_name:
-          selectedVer?.model?.name || selectedVer?.name || `CivitAI LoRA #${versionId}`,
+        model_name: selectedVer?.model?.name || selectedVer?.name || `CivitAI LoRA #${versionId}`,
         file_name: `civitai_${versionId}`,
         preview_url: '/sample.svg',
         preview_nsfw_level: 1,
@@ -925,65 +879,42 @@ export default function Loras() {
       return;
     }
 
-    const dlId = `cm-dl-${Date.now()}`;
-    setDownloading(true);
-    setActiveDownloadId(dlId);
-    setDownloadProgress({ progress: 0, status: 'downloading' });
+    const chosenFolder =
+      opts?.folderOverride !== undefined
+        ? opts.folderOverride
+        : targetFolder === 'auto'
+          ? ''
+          : targetFolder === 'custom'
+            ? customSubfolder.trim()
+            : targetFolder;
+    const useDefault = opts?.folderOverride === undefined && targetFolder === 'auto';
+    const airFileId =
+      lookupAir?.fileId && lookupAir.modelVersionId === versionId ? lookupAir.fileId : undefined;
+    const version = selectedVer || remoteVersions.find((v) => v.id === versionId);
+    const name =
+      [version?.model?.name || activeLora?.model_name, version?.name].filter(Boolean).join(' ') ||
+      `CivitAI #${versionId}`;
 
-    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-    pollTimerRef.current = setInterval(async () => {
-      const snap = await fetchDownloadProgress(connection.base, dlId);
-      if (snap) setDownloadProgress(snap);
-    }, 800);
-
-    try {
-      const chosenFolder =
-        opts?.folderOverride !== undefined
-          ? opts.folderOverride
-          : targetFolder === 'auto'
-            ? ''
-            : targetFolder === 'custom'
-              ? customSubfolder.trim()
-              : targetFolder;
-      const useDefault = opts?.folderOverride === undefined && targetFolder === 'auto';
-
-      await downloadCivitaiLora(connection.base, {
+    startDownload(
+      {
+        id: `cm-dl-${Date.now()}`,
+        kind: 'lora',
+        base: connection.base,
+        name,
+        versionId,
+        ...(modelId ? { modelId } : {}),
+      },
+      {
         ...(modelId ? { model_id: modelId } : {}),
         model_version_id: versionId,
         model_root: targetRoot || roots[0] || undefined,
         relative_path: chosenFolder,
         use_default_paths: useDefault,
-        download_id: dlId,
-      });
-
-      refreshModels();
-      await Promise.all([loadFacets(), loadLoras(1, false)]);
-      if (activeLora?.civitai?.modelId && modelId === activeLora.civitai.modelId) {
-        await handleLoadRemoteVersions(modelId);
-      }
-      setDownloadModalOpen(false);
-      notify('CivitAI LoRA 다운로드 및 라이브러리 반영을 완료했어요');
-    } catch (e) {
-      notify((e as Error).message);
-    } finally {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
-      setDownloading(false);
-      setActiveDownloadId('');
-      setDownloadProgress(null);
-    }
-  }
-
-  async function handleCancelDownload() {
-    if (!activeDownloadId) return;
-    try {
-      await cancelLoraDownload(connection.base, activeDownloadId);
-      notify('다운로드 취소 요청을 전송했어요');
-    } catch (e) {
-      notify((e as Error).message);
-    }
+        ...(airFileId ? { file_params: { id: airFileId } } : {}),
+      },
+    );
+    setDownloadModalOpen(false);
+    notify('백그라운드에서 다운로드를 시작했어요\n앱을 닫아도 ComfyUI 서버에서 계속 받아요');
   }
 
   const selectedLookupVersion = useMemo(
@@ -991,238 +922,145 @@ export default function Loras() {
     [lookupVersions, selectedVersionId],
   );
 
-  const filteredModalTags = useMemo(() => {
-    if (!tagSearch.trim()) return topTags;
-    const q = tagSearch.trim().toLowerCase();
-    return topTags.filter((t) => t.tag.toLowerCase().includes(q));
-  }, [topTags, tagSearch]);
-
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <HeaderActions>
+        <HeaderActionButton
+          primary
+          icon={CloudDownload}
+          label="CivitAI 다운로드"
+          onClick={() => setDownloadModalOpen(true)}
+        />
+        <HeaderActionButton
+          icon={RefreshCw}
+          label="업데이트 확인"
+          busy={checkingUpdates}
+          onClick={handleRefreshUpdates}
+        />
+        <HeaderActionButton
+          icon={ScanSearch}
+          label="로컬 스캔"
+          busy={scanning}
+          onClick={handleScanLoras}
+        />
+      </HeaderActions>
       {/* Top Toolbar */}
-      <div className="flex flex-none flex-col gap-3 border-b border-line bg-paper px-4 py-4 sm:px-7 lg:px-9">
-        <div data-ui-audit-row className="flex flex-wrap items-center justify-between gap-2.5">
-          <label className="relative min-w-0 flex-1 sm:max-w-80">
-            <Search size={17} className="pointer-events-none absolute left-3 top-3.5 text-muted" />
-            <input
-              type="search"
-              aria-label="LoRA 검색"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="이름, 파일명, 태그, 트리거 워드 검색"
-              className="field pl-10"
-            />
-          </label>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setDownloadModalOpen(true)}
-              className="btn-primary h-12"
+      <div
+        data-ui-audit-row
+        className="flex flex-none flex-wrap items-center gap-2 border-b border-line bg-paper px-4 py-3 sm:px-5 lg:px-6"
+      >
+        <label className="relative w-full min-w-0 sm:w-64 lg:w-72">
+          <Search
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+          />
+          <input
+            type="search"
+            aria-label="LoRA 검색"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="이름, 파일명, 태그, 트리거 워드 검색"
+            className="field pl-10"
+          />
+        </label>
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:max-w-full">
+          <div className="min-w-0 sm:w-36">
+            <SelectControl
+              aria-label="상태 필터"
+              value={status}
+              onChange={(e) => setStatus(e.target.value as typeof status)}
             >
-              <CloudDownload size={16} />
-              <span>CivitAI 다운로드</span>
-            </button>
-            <button
-              type="button"
-              disabled={checkingUpdates}
-              onClick={handleRefreshUpdates}
-              className="btn-secondary h-12"
-            >
-              {checkingUpdates ? <Spinner /> : <RefreshCw size={15} />}
-              <span>업데이트 확인</span>
-            </button>
-            <button
-              type="button"
-              disabled={scanning}
-              onClick={handleScanLoras}
-              className="btn-secondary h-12"
-            >
-              {scanning ? <Spinner /> : <RefreshCw size={15} />}
-              <span>로컬 스캔</span>
-            </button>
+              <option value="all">전체 LoRA</option>
+              <option value="favorites">즐겨찾기</option>
+              <option value="updates">업데이트 가능</option>
+            </SelectControl>
           </div>
-        </div>
-
-        {/* Select Filters Row */}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <SelectControl
-            aria-label="베이스 모델 필터"
-            value={baseModel}
-            onChange={(e) => setBaseModel(e.target.value)}
-          >
-            <option value="all">전체 베이스 모델</option>
-            {baseModels.map((bm) => (
-              <option key={bm.name} value={bm.name}>
-                {bm.name} ({bm.count})
-              </option>
-            ))}
-          </SelectControl>
-
-          <SelectControl
-            aria-label="폴더 필터"
-            value={folder}
-            onChange={(e) => setFolder(e.target.value)}
-          >
-            <option value="all">전체 폴더</option>
-            {folders.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </SelectControl>
-
-          <SelectControl
-            aria-label="정렬 기준"
-            value={sortBy}
-            onChange={(e) =>
-              setSortBy(e.target.value as NonNullable<LoraFilterParams['sortBy']>)
-            }
-          >
-            <option value="date:desc">최신 수정순</option>
-            <option value="name">이름순</option>
-            <option value="size:desc">용량 큰순</option>
-            <option value="usage:desc">사용 빈도순</option>
-          </SelectControl>
-        </div>
-
-        {/* Filter Chips & Options */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                setFavoritesOnly(false);
-                setUpdatesOnly(false);
-                setSelectedTags([]);
-              }}
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
-                !favoritesOnly && !updatesOnly && selectedTags.length === 0
-                  ? 'bg-ink text-lime font-semibold'
-                  : 'bg-stone text-muted hover:text-ink'
-              }`}
+          <div className="min-w-0 sm:w-36">
+            <SelectControl
+              aria-label="폴더 필터"
+              value={folder}
+              onChange={(e) => setFolder(e.target.value)}
             >
-              전체 ({total})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFavoritesOnly((v) => !v)}
-              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
-                favoritesOnly
-                  ? 'bg-ink text-lime font-semibold'
-                  : 'bg-stone text-muted hover:text-ink'
-              }`}
-            >
-              <Heart size={12} className={favoritesOnly ? 'fill-lime text-lime' : ''} />
-              즐겨찾기
-            </button>
-            <button
-              type="button"
-              onClick={() => setUpdatesOnly((v) => !v)}
-              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
-                updatesOnly
-                  ? 'bg-ink text-lime font-semibold'
-                  : 'bg-stone text-muted hover:text-ink'
-              }`}
-            >
-              <Sparkles size={12} />
-              업데이트 가능
-            </button>
-
-            {/* Tag Filter Manager Button */}
-            <button
-              type="button"
-              onClick={() => setTagModalOpen(true)}
-              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
-                selectedTags.length > 0
-                  ? 'bg-olive text-white shadow-sm'
-                  : 'border border-line bg-white text-ink hover:bg-stone'
-              }`}
-            >
-              <Hash size={13} />
-              <span>태그 필터</span>
-              {selectedTags.length > 0 && (
-                <span className="rounded-full bg-white/20 px-1.5 py-0.2 text-[10px] font-bold">
-                  {selectedTags.length}
-                </span>
-              )}
-            </button>
-
-            {/* Currently Active Tag Chips with Dismiss X */}
-            {selectedTags.map((t) => (
-              <span
-                key={t}
-                className="inline-flex items-center gap-1 rounded-lg bg-olive px-2.5 py-1.5 text-xs font-semibold text-white"
-              >
-                #{t}
-                <button
-                  type="button"
-                  aria-label={`${t} 태그 필터 해제`}
-                  onClick={() => toggleTagFilter(t)}
-                  className="rounded-full p-0.5 hover:bg-black/20"
-                >
-                  <X size={12} />
-                </button>
-              </span>
-            ))}
-
-            {/* Pinned Quick Tags (when not actively selected) */}
-            {pinnedTags
-              .filter((t) => !selectedTags.includes(t))
-              .map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => toggleTagFilter(t)}
-                  className="rounded-lg bg-stone px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-line hover:text-ink transition"
-                >
-                  #{t}
-                </button>
+              <option value="all">전체 폴더</option>
+              {folders.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
               ))}
-
-            {selectedTags.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSelectedTags([])}
-                className="rounded-lg px-2 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
-              >
-                태그 해제
-              </button>
-            )}
+            </SelectControl>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
-            <span className="font-mono text-[11px]">
-              표시 {items.length} / {total}개
-            </span>
-            <label className="inline-flex cursor-pointer items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={autoAppendTrigger}
-                onChange={(e) => setAutoAppendTrigger(e.target.checked)}
-                className="h-4 w-4 accent-olive"
-              />
-              적용 시 트리거 워드 자동 추가
-            </label>
-            <label className="inline-flex cursor-pointer items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={showNsfw}
-                onChange={(e) => setShowNsfw(e.target.checked)}
-                className="h-4 w-4 accent-olive"
-              />
-              민감 프리뷰 표시
-            </label>
+          <div className="col-span-2 flex min-w-0 gap-2">
+            <div className="min-w-0 flex-1 sm:w-56 sm:flex-initial">
+            <MultiSelect
+              label="태그 필터"
+              placeholder="전체 태그"
+              options={topTags.map((t) => ({ value: t.tag, label: `#${t.tag}`, count: t.count }))}
+              value={selectedTags}
+              onChange={setSelectedTags}
+              footer={
+                <div className="flex items-center justify-between gap-2">
+                  <div
+                    role="group"
+                    aria-label="태그 일치 조건"
+                    className="flex rounded-md bg-paper p-0.5"
+                  >
+                    {(
+                      [
+                        ['any', '하나라도 포함'],
+                        ['all', '모두 포함'],
+                      ] as const
+                    ).map(([v, l]) => (
+                      <button
+                        key={v}
+                        type="button"
+                        aria-pressed={tagLogic === v}
+                        onClick={() => setTagLogic(v)}
+                        className={`min-h-7 rounded px-2 text-2xs font-semibold transition ${
+                          tagLogic === v
+                            ? 'bg-white text-ink shadow-sm'
+                            : 'text-muted hover:text-ink'
+                        }`}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={selectedTags.length === 0}
+                    onClick={() => setSelectedTags([])}
+                    className="min-h-7 rounded-md px-2 text-2xs font-semibold text-muted hover:bg-paper hover:text-ink disabled:opacity-40"
+                  >
+                    선택 해제
+                  </button>
+                </div>
+              }
+            />
+            </div>
+            <IconButton
+              icon={showNsfw ? Eye : EyeOff}
+              label="민감 프리뷰 표시"
+              pressed={showNsfw}
+              onClick={() => setShowNsfw((v) => !v)}
+              className={`h-9 w-9 border ${showNsfw ? 'border-ink' : 'border-line bg-white'}`}
+            />
           </div>
+        </div>
+        <div className="ml-auto flex items-center gap-3 text-xs text-muted">
+          <span className="font-mono text-2xs">
+            표시 {items.length} / {total}개
+          </span>
         </div>
       </div>
+
+      <DownloadTray downloads={kindDownloads} onCancel={(id) => void cancelDownload(id)} />
 
       {/* Scrollable Grid Area (Infinite Scroll without pagination buttons) */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
         data-ui-audit-scroll-root
-        className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4 sm:px-7 lg:px-9"
+        className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 pt-4 sm:px-5 lg:px-6"
       >
         {apiError ? (
           <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-800">
@@ -1246,10 +1084,8 @@ export default function Loras() {
               onClick={() => {
                 setSearch('');
                 setFolder('all');
-                setBaseModel('all');
                 setSelectedTags([]);
-                setFavoritesOnly(false);
-                setUpdatesOnly(false);
+                setStatus('all');
               }}
               className="btn-primary"
             >
@@ -1309,11 +1145,11 @@ export default function Loras() {
                       )}
 
                       <div className="absolute left-2.5 top-2.5 flex flex-wrap items-center gap-1">
-                        <span className="rounded-md bg-ink/80 px-2 py-0.5 text-[10px] font-semibold text-white">
+                        <span className="rounded-md bg-ink/80 px-2 py-0.5 text-2xs font-semibold text-white">
                           {item.base_model || 'Unknown'}
                         </span>
                         {item.update_available ? (
-                          <span className="rounded-md bg-lime px-2 py-0.5 text-[10px] font-bold text-ink">
+                          <span className="rounded-md bg-lime px-2 py-0.5 text-2xs font-bold text-ink">
                             업데이트
                           </span>
                         ) : null}
@@ -1344,7 +1180,7 @@ export default function Loras() {
                       <h2 className="line-clamp-1 text-sm font-bold text-ink [overflow-wrap:anywhere]">
                         {item.model_name || item.file_name}
                       </h2>
-                      <p className="mt-1 truncate font-mono text-[11px] text-muted">
+                      <p className="mt-1 truncate font-mono text-2xs text-muted">
                         {item.folder ? `${item.folder}/${item.file_name}` : item.file_name}
                       </p>
                     </button>
@@ -1367,10 +1203,7 @@ export default function Loras() {
                   </div>
 
                   {/* Card Footer */}
-                  <div
-                    data-ui-audit-row
-                    className="mt-4 flex items-center justify-between gap-2"
-                  >
+                  <div data-ui-audit-row className="mt-4 flex items-center justify-between gap-2">
                     <button
                       type="button"
                       onClick={() => applyLoraToGeneration(item, false)}
@@ -1395,148 +1228,19 @@ export default function Loras() {
 
         {/* Infinite Scroll Progress and End Status */}
         {loadingMore && (
-          <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted">
+          <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted">
             <Spinner />
             <span>추가 LoRA 불러오는 중</span>
           </div>
         )}
 
-        {!loading && items.length > 0 && !hasMore && (
-          <p className="py-6 text-center text-xs text-muted">
-            모든 LoRA({total}개)를 불러왔어요
-          </p>
-        )}
       </div>
-
-      {/* Tag Filter Management Modal */}
-      <Modal
-        title="# 태그 필터 관리"
-        open={tagModalOpen}
-        onClose={() => setTagModalOpen(false)}
-        footer={
-          <div className="flex w-full items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={() => setSelectedTags([])}
-              className="btn-secondary text-xs"
-              disabled={selectedTags.length === 0}
-            >
-              선택 전체 해제
-            </button>
-            <button
-              type="button"
-              onClick={() => setTagModalOpen(false)}
-              className="btn-primary text-xs"
-            >
-              필터 적용 및 닫기
-            </button>
-          </div>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-12">
-              <label className="relative sm:col-span-7">
-                <Search
-                  size={16}
-                  className="pointer-events-none absolute left-3 top-3.5 text-muted"
-                />
-                <input
-                  type="search"
-                  aria-label="태그 이름 검색"
-                  value={tagSearch}
-                  onChange={(e) => setTagSearch(e.target.value)}
-                  placeholder="태그 검색 (예: portrait, style)"
-                  className="field pl-9 text-xs"
-                />
-              </label>
-              <div className="sm:col-span-5">
-                <SelectControl
-                  aria-label="태그 일치 조건"
-                  value={tagLogic}
-                  onChange={(e) => setTagLogic(e.target.value as 'any' | 'all')}
-                >
-                  <option value="any">하나라도 포함 (OR)</option>
-                  <option value="all">모두 포함 (AND)</option>
-                </SelectControl>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-xs text-muted">
-              <span>
-                선택된 필터: <strong className="text-ink">{selectedTags.length}개</strong>
-              </span>
-              <span className="text-[11px]">
-                핀 아이콘을 누르면 상단 빠른 필터 바에 고정됩니다
-              </span>
-            </div>
-          </div>
-
-          {/* Tag Grid / List */}
-          <div className="max-h-[46dvh] overflow-y-auto pr-1">
-            {filteredModalTags.length > 0 ? (
-              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                {filteredModalTags.map((t) => {
-                  const isSelected = selectedTags.includes(t.tag);
-                  const isPinned = pinnedTags.includes(t.tag);
-
-                  return (
-                    <div
-                      key={t.tag}
-                      onClick={() => toggleTagFilter(t.tag)}
-                      className={`flex cursor-pointer items-center justify-between rounded-xl border p-2.5 transition ${
-                        isSelected
-                          ? 'border-olive bg-lime/20 text-ink'
-                          : 'border-line bg-white hover:bg-stone text-muted'
-                      }`}
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                            isSelected
-                              ? 'border-olive bg-olive text-white'
-                              : 'border-line bg-white'
-                          }`}
-                        >
-                          {isSelected && <Check size={12} />}
-                        </span>
-                        <span className="truncate text-xs font-semibold text-ink">
-                          #{t.tag}
-                        </span>
-                        <span className="font-mono text-[11px] text-muted">({t.count})</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        aria-label={`${t.tag} 상단 고정 토글`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          togglePinTag(t.tag);
-                        }}
-                        className={`rounded-lg p-1.5 transition ${
-                          isPinned
-                            ? 'text-olive hover:bg-black/5'
-                            : 'text-muted/60 hover:text-ink hover:bg-stone'
-                        }`}
-                        title={isPinned ? '상단 고정 해제' : '상단 바에 고정'}
-                      >
-                        <Pin size={14} className={isPinned ? 'fill-current' : ''} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="py-8 text-center text-xs text-muted">검색된 태그가 없습니다</p>
-            )}
-          </div>
-        </div>
-      </Modal>
 
       {/* LoRA Detail & Management Modal */}
       <Modal
         title={activeLora ? activeLora.model_name || activeLora.file_name : 'LoRA 상세 관리'}
         open={Boolean(activeLora)}
+        size="lg"
         onClose={() => setActiveLora(null)}
         footer={
           activeLora ? (
@@ -1571,6 +1275,13 @@ export default function Loras() {
       >
         {activeLora ? (
           <div className="flex flex-col gap-5">
+            <DetailExamples
+              kind="loras"
+              item={activeLora}
+              showNsfw={showNsfw}
+              revision={examplesRevision}
+              onPreviewChanged={handlePreviewChanged}
+            />
             {/* Top Summary */}
             <div className="flex flex-col gap-3 rounded-xl bg-paper p-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -1828,12 +1539,10 @@ export default function Loras() {
                         <div className="flex items-center gap-2">
                           <span className="font-bold">{ver.name}</span>
                           <span className="chip">{ver.baseModel || 'LoRA'}</span>
-                          <span className="chip">
-                            {ver.existsLocally ? '설치됨' : '미설치'}
-                          </span>
+                          <span className="chip">{ver.existsLocally ? '설치됨' : '미설치'}</span>
                         </div>
                         {ver.modelSizeKB ? (
-                          <p className="mt-1 font-mono text-[11px] text-muted">
+                          <p className="mt-1 font-mono text-2xs text-muted">
                             버전 #{ver.id} | {formatBytes(ver.modelSizeKB * 1024)}
                           </p>
                         ) : null}
@@ -1841,7 +1550,7 @@ export default function Loras() {
                       {!ver.existsLocally ? (
                         <button
                           type="button"
-                          disabled={downloading}
+                          disabled={isDownloadingVersion(ver.id)}
                           onClick={() =>
                             handleStartDownload({
                               modelId: ver.modelId || activeLora.civitai?.modelId,
@@ -1932,7 +1641,7 @@ export default function Loras() {
           </>
         }
       >
-        <p className="text-sm text-muted">
+        <p className="text-xs leading-relaxed text-muted">
           <strong>{deleteTarget?.model_name || deleteTarget?.file_name}</strong> 파일과 메타데이터를
           삭제합니다
         </p>
@@ -1943,13 +1652,12 @@ export default function Loras() {
         title="CivitAI LoRA 다운로드"
         open={downloadModalOpen}
         onClose={() => {
-          if (!downloading) setDownloadModalOpen(false);
+          setDownloadModalOpen(false);
         }}
         footer={
           <>
             <button
               type="button"
-              disabled={downloading}
               onClick={() => setDownloadModalOpen(false)}
               className="btn-secondary"
             >
@@ -1957,55 +1665,59 @@ export default function Loras() {
             </button>
             <button
               type="button"
-              disabled={downloading || !selectedLookupVersion}
+              disabled={!selectedLookupVersion || isDownloadingVersion(selectedLookupVersion.id)}
               onClick={() => handleStartDownload()}
               className="btn-primary"
             >
               <CloudDownload size={16} />
-              {downloading ? '다운로드 진행 중' : '선택 버전 다운로드'}
+              {isDownloadingVersion(selectedLookupVersion?.id)
+                ? '다운로드 진행 중'
+                : '선택 버전 다운로드'}
             </button>
           </>
         }
       >
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <span className="text-xs font-semibold">CivitAI 모델 URL 또는 ID 입력</span>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-12">
-              <div className="sm:col-span-4">
-                <SelectControl
-                  aria-label="CivitAI 입력 유형"
-                  value={civitaiMode}
-                  onChange={(e) => setCivitaiMode(e.target.value as 'auto' | 'model' | 'version')}
-                >
-                  <option value="auto">URL / 모델 ID</option>
-                  <option value="model">모델 ID</option>
-                  <option value="version">버전 ID</option>
-                </SelectControl>
-              </div>
-              <div className="sm:col-span-5">
-                <input
-                  type="text"
-                  aria-label="CivitAI 주소 또는 ID"
-                  value={civitaiQuery}
-                  onChange={(e) => setCivitaiQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void handleLookupCivitai();
-                  }}
-                  placeholder="https://civitai.com/models/840370"
-                  className="field"
-                />
-              </div>
-              <div className="sm:col-span-3">
-                <button
-                  type="button"
-                  disabled={lookupLoading}
-                  onClick={handleLookupCivitai}
-                  className="btn-secondary w-full"
-                >
-                  {lookupLoading ? <Spinner /> : 'CivitAI 조회'}
-                </button>
-              </div>
+            <label htmlFor="civitai-air" className="text-xs font-semibold">
+              CivitAI AIR 코드
+            </label>
+            <div data-ui-audit-row className="flex items-center gap-2">
+              <input
+                id="civitai-air"
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                enterKeyHint="search"
+                aria-label="CivitAI AIR 코드"
+                value={civitaiQuery}
+                onChange={(e) => setCivitaiQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleLookupCivitai();
+                }}
+                placeholder="urn:air:flux1:lora:civitai:840370@940211"
+                className="field min-w-0 flex-1 font-mono"
+              />
+              <button
+                type="button"
+                disabled={lookupLoading}
+                onClick={handleLookupCivitai}
+                className="btn-secondary shrink-0"
+              >
+                {lookupLoading ? <Spinner /> : 'CivitAI 조회'}
+              </button>
             </div>
+            <p className="text-2xs leading-relaxed text-muted">
+              CivitAI 모델 페이지의 AIR 항목을 복사해 붙여 넣으면 되고, 버전(@숫자)이 있으면 그
+              버전을 먼저 선택해요
+            </p>
+            {lookupAir?.fileId && selectedLookupVersion?.id === lookupAir.modelVersionId && (
+              <p className="text-2xs font-semibold text-olive">
+                AIR에 지정된 파일로 받아요:{' '}
+                {selectedLookupVersion.files?.find((f) => f.id === lookupAir.fileId)?.name ||
+                  `파일 #${lookupAir.fileId}`}
+              </p>
+            )}
           </div>
 
           {selectedLookupVersion ? (
@@ -2030,8 +1742,7 @@ export default function Loras() {
                   >
                     {lookupVersions.map((ver) => (
                       <option key={ver.id} value={String(ver.id)}>
-                        {ver.name} ({ver.baseModel || 'LoRA'})
-                        {ver.existsLocally ? ' [설치됨]' : ''}
+                        {ver.name} ({ver.baseModel || 'LoRA'}){ver.existsLocally ? ' [설치됨]' : ''}
                       </option>
                     ))}
                   </SelectControl>
@@ -2072,33 +1783,10 @@ export default function Loras() {
             </div>
           ) : (
             <p className="rounded-xl bg-paper p-4 text-xs leading-relaxed text-muted">
-              CivitAI 모델 URL이나 모델 ID를 입력하고 조회를 누르면 버전 목록과 트리거 워드, 파일
-              크기를 확인할 수 있어요
+              AIR 코드를 입력하고 조회를 누르면 버전 목록과 트리거 워드, 파일 크기를 확인할 수
+              있어요
             </p>
           )}
-
-          {downloading ? (
-            <div className="flex flex-col gap-2 rounded-xl border border-line bg-paper p-4">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold">
-                  다운로드 진행률 {Math.round(downloadProgress?.progress || 0)}%
-                </span>
-                <button
-                  type="button"
-                  onClick={handleCancelDownload}
-                  className="text-xs font-semibold text-red-700"
-                >
-                  취소
-                </button>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-stone">
-                <div
-                  className="h-full bg-olive transition-all duration-300"
-                  style={{ width: `${Math.min(100, Math.round(downloadProgress?.progress || 5))}%` }}
-                />
-              </div>
-            </div>
-          ) : null}
         </div>
       </Modal>
     </div>

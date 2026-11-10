@@ -1,5 +1,4 @@
-import { useId, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
 import { Box, RefreshCw, Tags } from 'lucide-react';
 import { useStudio } from '../studio';
 import { options } from '../domain';
@@ -21,18 +20,18 @@ export default function ModelPanel() {
     info,
     connectionState,
     familyAssignments,
+    modelOrder,
     refreshModels,
     notify,
   } = useStudio();
   const [classify, setClassify] = useState(false);
-  const panelId = useId();
-  const entries = useMemo(() => catalog(info, familyAssignments), [info, familyAssignments]);
-  const tabs = families;
+  const entries = useMemo(
+    () => catalog(info, familyAssignments, modelOrder),
+    [info, familyAssignments, modelOrder],
+  );
   const familyModels = entries.filter((e) => e.family === s.architecture);
   const visible = familyModels;
   const selected = selectedEntry(s, info, familyAssignments);
-  const labels = Object.fromEntries(entries.map((e) => [e.id, e.name]));
-  const descriptions = Object.fromEntries(entries.map((e) => [e.id, e.format]));
   const clips = compatibleAssets(info, 'clip', s.architecture, familyAssignments);
   const vaes = compatibleAssets(info, 'vae', s.architecture, familyAssignments);
   function chooseFamily(family: ModelFamily) {
@@ -61,13 +60,7 @@ export default function ModelPanel() {
         title="모델 계열과 모델"
         icon={Box}
         action={
-          <div className="-my-3 -mr-2 flex items-center">
-            <Link
-              to="/models"
-              className="mr-1 flex min-h-8 items-center gap-1 px-2 text-xs font-medium text-muted hover:text-ink"
-            >
-              관리
-            </Link>
+          <div className="-my-1.5 -mr-1 flex items-center">
             <IconButton
               icon={Tags}
               label="모델과 LoRA 계열 분류"
@@ -82,70 +75,55 @@ export default function ModelPanel() {
           </div>
         }
       >
-        <div role="tablist" aria-label="모델 계열" className="mb-4 grid w-full grid-cols-4 gap-1.5">
-          {tabs.map((f, i) => (
-            <button
-              key={f.id}
-              role="tab"
-              aria-selected={s.architecture === f.id}
-              aria-controls={panelId}
-              tabIndex={s.architecture === f.id ? 0 : -1}
-              className={`flex min-h-11 min-w-0 items-center justify-center gap-1 rounded-xl border px-1 text-xs font-semibold sm:gap-2 sm:px-2.5 ${s.architecture === f.id ? 'border-ink bg-ink text-lime' : 'border-line bg-paper text-muted hover:bg-stone'}`}
-              onClick={() => chooseFamily(f.id)}
-              onKeyDown={(e) => {
-                const delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-                let idx =
-                  e.key === 'Home'
-                    ? 0
-                    : e.key === 'End'
-                      ? tabs.length - 1
-                      : (i + delta + tabs.length) % tabs.length;
-                if (!delta && !['Home', 'End'].includes(e.key)) return;
-                e.preventDefault();
-                chooseFamily(tabs[idx].id);
-                (
-                  e.currentTarget.parentElement!.querySelectorAll('[role=tab]')[
-                    idx
-                  ] as HTMLButtonElement
-                ).focus();
-              }}
+        <div className="flex min-w-0 flex-col gap-3">
+          <div
+            data-ui-audit-row
+            className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-center gap-2"
+          >
+            <SelectControl
+              aria-label="모델 계열"
+              value={s.architecture}
+              onChange={(e) => chooseFamily(e.target.value as ModelFamily)}
             >
-              <span className="truncate">{f.label}</span>
-              <span className="font-mono text-[10px] opacity-80">
-                {entries.filter((e) => e.family === f.id).length}
-              </span>
-            </button>
-          ))}
-        </div>
-        <div
-          id={panelId}
-          role="tabpanel"
-          aria-label={`${families.find((f) => f.id === s.architecture)?.label} 모델`}
-          className="flex min-w-0 flex-col gap-4"
-        >
-          {connectionState === 'connecting' ? (
-            <div
-              className="h-12 animate-pulse rounded-xl bg-stone"
-              aria-label="모델 목록을 불러오는 중"
-            />
-          ) : visible.length ? (
-            <Picker
-              label="모델"
-              value={selected?.id || s.model}
-              items={visible.map((e) => e.id)}
-              labels={labels}
-              descriptions={descriptions}
-              onChange={(id) => {
-                const entry = entries.find((e) => e.id === id)!;
-                setSettings((prev) => selectModel(prev, entry, info, familyAssignments));
-              }}
-            />
-          ) : (
-            <div className="rounded-xl bg-paper p-4 text-center text-xs leading-relaxed text-muted">
-              이 계열의 모델이 없어요
-              <br />
-              다른 탭이나 계열 분류를 확인해 주세요
-            </div>
+              {families.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label} ({entries.filter((e) => e.family === f.id).length})
+                </option>
+              ))}
+            </SelectControl>
+            {connectionState === 'connecting' ? (
+              <div
+                className="h-9 animate-pulse rounded-lg bg-stone"
+                aria-label="모델 목록을 불러오는 중"
+              />
+            ) : (
+              <SelectControl
+                aria-label="모델"
+                value={selected?.family === s.architecture ? selected.id : ''}
+                disabled={!visible.length}
+                onChange={(e) => {
+                  const entry = entries.find((x) => x.id === e.target.value);
+                  if (entry)
+                    setSettings((prev) => selectModel(prev, entry, info, familyAssignments));
+                }}
+              >
+                {(!selected || selected.family !== s.architecture) && (
+                  <option value="" disabled>
+                    {visible.length ? '모델 선택' : '모델 없음'}
+                  </option>
+                )}
+                {visible.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name} ({e.format})
+                  </option>
+                ))}
+              </SelectControl>
+            )}
+          </div>
+          {connectionState !== 'connecting' && !visible.length && (
+            <p className="text-2xs leading-relaxed text-muted">
+              이 계열의 모델이 없어요 | 다른 계열이나 계열 분류를 확인해 주세요
+            </p>
           )}
           {s.model && (!selected || selected.family !== s.architecture) && (
             <p role="status" className="text-xs text-red-700">
@@ -153,7 +131,7 @@ export default function ModelPanel() {
             </p>
           )}
           <details
-            className="rounded-xl bg-paper p-4"
+            className="rounded-lg bg-paper p-3"
             open={!s.clip1 || !s.vae || (s.architecture === 'flux' && !s.clip2) || undefined}
           >
             <summary className="cursor-pointer text-xs font-semibold">
@@ -164,7 +142,7 @@ export default function ModelPanel() {
                   : '설치 확인 필요'}
               </span>
             </summary>
-            <div className="mt-4 flex flex-col gap-3">
+            <div className="mt-3 flex flex-col gap-2.5">
               <Field label={s.architecture === 'flux' ? 'CLIP L' : '텍스트 인코더'}>
                 <Picker
                   label={s.architecture === 'flux' ? 'CLIP L' : '텍스트 인코더'}
@@ -232,7 +210,7 @@ function Classification({ open, onClose }: { open: boolean; onClose: () => void 
         </button>
       }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
         <p className="text-xs leading-relaxed text-muted">
           파일명으로 알기 어려운 모델과 LoRA는 직접 계열을 지정하세요
           <br />
@@ -258,9 +236,9 @@ function Classification({ open, onClose }: { open: boolean; onClose: () => void 
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <div className="flex max-h-[45dvh] flex-col gap-3 overflow-y-auto">
+        <div className="flex max-h-[45dvh] flex-col gap-2 overflow-y-auto">
           {filtered.map((name) => (
-            <label key={name} className="flex flex-col gap-2 rounded-xl bg-paper p-3">
+            <label key={name} className="flex flex-col gap-1.5 rounded-lg bg-paper p-2.5">
               <span className="text-xs [overflow-wrap:anywhere]">{name}</span>
               <SelectControl
                 aria-label={`${name} 계열`}
