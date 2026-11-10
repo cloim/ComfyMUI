@@ -43,5 +43,8 @@ temp/
 *.pem
 *.key
 
+# App state database (settings and presets shared by devices)
+data/
+
 # Local development and design documents
 docs/

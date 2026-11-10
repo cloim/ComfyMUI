@@ -1,9 +1,43 @@
 // Isolated ComfyUI protocol fixture, used only by npm run test:e2e.
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { crc32, deflateSync } from 'node:zlib';
+import { join } from 'node:path';
 import { WebSocketServer } from 'ws';
 
 const jobs = new Map();
+// Generated images are written here so the app server can sync records with real files.
+const outputDir = mkdtempSync(join(tmpdir(), 'comfymui-e2e-output-'));
+
+// Minimal 1x1 PNG with the text chunks ComfyUI's SaveImage writes (prompt + extra_pnginfo).
+function pngWithText(texts) {
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const out = Buffer.alloc(body.length + 8);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeUInt32BE(crc32(body), body.length + 4);
+    return out;
+  };
+  const ihdr = Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]);
+  // Python json.dumps escapes non-ASCII, as ComfyUI does.
+  const asciiJson = (value) =>
+    JSON.stringify(value).replace(
+      /[^\x00-\x7f]/g,
+      (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'),
+    );
+  const text = Object.entries(texts).map(([key, value]) =>
+    chunk('tEXt', Buffer.from(key + '\0' + asciiJson(value), 'latin1')),
+  );
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    ...text,
+    chunk('IDAT', deflateSync(Buffer.from([0, 255, 255, 255]))),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 const choices = (values) => [values];
 
 const mockLoras = [
@@ -222,6 +256,25 @@ const schema = {
     },
   },
   VAEDecode: { input: { required: { samples: ['LATENT'], vae: ['VAE'] } } },
+  VAEEncode: { input: { required: { pixels: ['IMAGE'], vae: ['VAE'] } } },
+  LoadImage: { input: { required: { image: choices(['example.png']) } } },
+  UpscaleModelLoader: {
+    input: { required: { model_name: choices(['4x-UltraSharp.pth', 'RealESRGAN_x2.pth']) } },
+  },
+  ImageUpscaleWithModel: {
+    input: { required: { upscale_model: ['UPSCALE_MODEL'], image: ['IMAGE'] } },
+  },
+  ImageScale: {
+    input: {
+      required: {
+        image: ['IMAGE'],
+        upscale_method: choices(['nearest-exact', 'bilinear', 'area', 'bicubic', 'lanczos']),
+        width: ['INT'],
+        height: ['INT'],
+        crop: choices(['disabled', 'center']),
+      },
+    },
+  },
   SaveImage: {
     input: { required: { images: ['IMAGE'], filename_prefix: ['STRING'] } },
     output_node: true,
@@ -360,6 +413,16 @@ const mock = createServer(async (req, res) => {
         trainedWords: ['soft studio glow v2', 'ultra skin detail'],
         model: { name: 'Flux Soft Portrait LoRA', type: 'LORA' },
       },
+      {
+        id: 990777,
+        modelId,
+        name: 'v3.0 Background',
+        baseModel: 'Flux.1 D',
+        existsLocally: false,
+        modelSizeKB: 152000,
+        trainedWords: ['soft studio glow v3'],
+        model: { name: 'Flux Soft Portrait LoRA', type: 'LORA' },
+      },
     ]);
   }
   if (req.method === 'GET' && url.pathname.startsWith('/api/lm/loras/civitai/model/version/')) {
@@ -443,6 +506,45 @@ const mock = createServer(async (req, res) => {
       ],
     });
   }
+  const metaMatch = url.pathname.match(/^\/api\/lm\/(checkpoints|loras)\/metadata$/);
+  if (req.method === 'GET' && metaMatch) {
+    const list = metaMatch[1] === 'loras' ? mockLoras : mockCheckpoints;
+    const item = list.find((x) => x.file_path === url.searchParams.get('file_path'));
+    if (!item?.civitai?.modelId) {
+      return send({ success: false, error: 'Model not found or no CivitAI metadata' }, 404);
+    }
+    // Absolute URLs like CivitAI's, so the app offers them as default images.
+    const media = (name) => `http://${req.headers.host}/api/lm/previews?path=${name}`;
+    return send({
+      success: true,
+      metadata: {
+        id: item.civitai.id,
+        modelId: item.civitai.modelId,
+        images: [
+          {
+            url: media('example-1.svg'),
+            width: 832,
+            height: 1216,
+            nsfwLevel: 1,
+            type: 'image',
+            meta: {
+              prompt: `${metaMatch[1]} studio portrait, soft key light, 85mm`,
+              negativePrompt: 'blurry',
+              sampler: 'euler',
+              steps: 24,
+              cfgScale: 1,
+              seed: 777,
+              Size: '832x1216',
+              'Distilled CFG Scale': '3.5',
+              resources: [{ name: 'flux-studio', type: 'model' }],
+            },
+          },
+          { url: media('example-2.svg'), width: 1216, height: 832, nsfwLevel: 1, type: 'image' },
+          { url: media('example-3.svg'), width: 1024, height: 1024, nsfwLevel: 16, type: 'image' },
+        ],
+      },
+    });
+  }
   if (req.method === 'GET' && url.pathname === '/api/lm/checkpoints/scan') {
     return send({ status: 'success', message: 'Checkpoint scan completed' });
   }
@@ -487,13 +589,17 @@ const mock = createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname.startsWith('/api/lm/download-progress/')) {
     return send({
       success: true,
-      progress: {
-        progress: 100,
-        status: 'completed',
-        bytes_downloaded: 152000000,
-        total_bytes: 152000000,
-      },
+      progress: 100,
+      bytes_downloaded: 152000000,
+      total_bytes: 152000000,
+      bytes_per_second: 0,
     });
+  }
+  // The old JSON sync file in ComfyUI's user folder; the app server imports it once.
+  if (req.method === 'GET' && url.pathname === '/userdata/comfymui-state.json') {
+    return globalThis.__legacyState
+      ? send(globalThis.__legacyState)
+      : send({ error: 'File not found' }, 404);
   }
   if (req.method === 'POST') {
     let body = '';
@@ -503,6 +609,10 @@ const mock = createServer(async (req, res) => {
       data = JSON.parse(body);
     } catch {
       return send({ error: { message: 'Invalid JSON body' } }, 400);
+    }
+    if (url.pathname === '/userdata/comfymui-state.json') {
+      globalThis.__legacyState = data && typeof data.entries === 'object' ? data : null;
+      return send('comfymui-state.json');
     }
     if (url.pathname === '/prompt') {
       const text = data.prompt?.['2']?.inputs?.text || data.prompt?.['2']?.inputs?.prompt || '';
@@ -517,7 +627,13 @@ const mock = createServer(async (req, res) => {
       if (!data.client_id || !data.prompt?.['7'])
         return send({ error: { message: 'API contract mismatch' } }, 400);
       const id = crypto.randomUUID();
-      jobs.set(id, { start: Date.now(), prompt: data.prompt, text, cancelled: false });
+      jobs.set(id, {
+        start: Date.now(),
+        prompt: data.prompt,
+        pngInfo: data.extra_data?.extra_pnginfo || {},
+        text,
+        cancelled: false,
+      });
 
       if (!text.includes('slow')) {
         setTimeout(() => {
@@ -577,6 +693,22 @@ const mock = createServer(async (req, res) => {
         if (j) j.cancelled = true;
       }
       return send({});
+    }
+    const previewMatch = url.pathname.match(/^\/api\/lm\/(checkpoints|loras)\/set-preview-from-url$/);
+    if (previewMatch) {
+      const list = previewMatch[1] === 'loras' ? mockLoras : mockCheckpoints;
+      const target = list.find((x) => x.file_path === data.model_path);
+      if (!target || !data.image_url) {
+        return send({ success: false, error: 'Model path and image URL are required' }, 400);
+      }
+      const name = new URL(data.image_url).searchParams.get('path') || 'preview.svg';
+      target.preview_url = `/api/lm/previews?path=${name}`;
+      target.preview_nsfw_level = data.nsfw_level || 0;
+      return send({
+        success: true,
+        preview_url: target.preview_url,
+        preview_nsfw_level: target.preview_nsfw_level,
+      });
     }
     if (url.pathname === '/api/lm/loras/save-metadata') {
       const target = mockLoras.find((x) => x.file_path === data.file_path);
@@ -643,7 +775,7 @@ const mock = createServer(async (req, res) => {
         const ckptList = schema.CheckpointLoaderSimple.input.required.ckpt_name[0];
         if (!ckptList.includes(newRel)) ckptList.push(newRel);
         mockCheckpoints.unshift({
-          model_name: `Flux Studio Checkpoint v3 (${vid})`,
+          model_name: `Flux Studio Checkpoint v3 (${vid})${data.file_params?.id ? ` file ${data.file_params.id}` : ''}`,
           file_name: newName,
           preview_url: '/api/lm/previews?path=flux-model.svg',
           preview_nsfw_level: 1,
@@ -813,16 +945,23 @@ const mock = createServer(async (req, res) => {
           },
         },
       });
+    const images = Array.from({ length: j.prompt['4']?.inputs?.batch_size || 1 }, (_, i) => ({
+      filename: `mock-${id}-${i}.png`,
+      subfolder: '',
+      type: 'output',
+    }));
+    if (!j.filesWritten) {
+      for (const image of images)
+        writeFileSync(
+          join(outputDir, image.filename),
+          pngWithText({ prompt: j.prompt, ...j.pngInfo }),
+        );
+      j.filesWritten = true;
+    }
     return send({
       [id]: {
         outputs: {
-          7: {
-            images: Array.from({ length: j.prompt['4']?.inputs?.batch_size || 1 }, (_, i) => ({
-              filename: `mock-${i}.svg`,
-              subfolder: '',
-              type: 'output',
-            })),
-          },
+          7: { images },
         },
         status: { completed: true, status_str: 'success' },
       },
@@ -857,4 +996,7 @@ mock.on('upgrade', (req, socket, head) => {
 await new Promise((resolve) => mock.listen(8799, '127.0.0.1', resolve));
 process.env.COMFY_URL = 'http://127.0.0.1:8799';
 process.env.PORT = '4174';
+process.env.COMFY_OUTPUT_DIR = outputDir;
+process.env.STATE_DB = join(mkdtempSync(join(tmpdir(), 'comfymui-e2e-state-')), 'state.db');
+process.env.STATE_TEST_RESET = '1';
 await import('../server.mjs');
