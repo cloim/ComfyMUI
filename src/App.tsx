@@ -40,17 +40,48 @@ export default function App() {
 // Server status. Shown beside the sidebar brand; the header keeps it only on widths
 // where the sidebar is hidden but there is still room.
 function ConnectionBadge({ state, className }: { state: string; className: string }) {
+  const { reconnect, notify } = useStudio();
   const label =
-    state === 'connected' ? '연결됨' : state === 'preview' ? '미리보기' : '연결 확인';
+    state === 'connected'
+      ? '연결됨'
+      : state === 'preview'
+        ? '미리보기'
+        : state === 'connecting'
+          ? '연결 중'
+          : '다시 연결';
+  const dotColor =
+    state === 'connected'
+      ? 'bg-olive'
+      : state === 'preview'
+        ? 'bg-amber-600'
+        : state === 'connecting'
+          ? 'bg-amber-500 animate-pulse'
+          : 'bg-red-600';
+
+  if (state === 'error') {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          reconnect();
+          notify('ComfyUI 서버에 다시 연결을 시도해요');
+        }}
+        title="클릭하여 서버에 다시 연결"
+        className={`${className} shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-red-300 bg-red-50/50 px-2 py-0.5 text-2xs text-red-600 hover:bg-red-100/50`}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
+        {label}
+      </button>
+    );
+  }
+
   return (
     <Link
       to="/settings"
       title={state === 'preview' ? '미리보기 모드' : label}
       className={`${className} shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-line bg-paper px-2 py-0.5 text-2xs text-muted hover:text-ink`}
     >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${state === 'connected' ? 'bg-olive' : 'bg-amber-600'}`}
-      />
+      <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
       {label}
     </Link>
   );

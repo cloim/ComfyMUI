@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   defaults,
   DEFAULT_PROMPTS,
@@ -233,6 +241,12 @@ function useStudioState() {
     },
     { shared: true },
   );
+  const connectionRef = useRef(connection);
+  connectionRef.current = connection;
+  const [reconnectSeq, setReconnectSeq] = useState(0);
+  const reconnect = useCallback(() => {
+    setReconnectSeq((s) => s + 1);
+  }, []);
   const [remoteHydrated, setRemoteHydrated] = useState(false);
   // The ComfyUI output folder is the history. null means it is not available
   // (preview mode or a direct ComfyUI address) and local records are shown instead.
@@ -293,21 +307,26 @@ function useStudioState() {
       setRemoteHydrated(true);
     }
     void pull();
+    const onResume = () => {
+      void pull();
+      if (!connectionRef.current.preview) {
+        reconnect();
+      }
+    };
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') void pull();
+      if (document.visibilityState === 'visible') onResume();
       else void flushServerWrites(true);
     };
-    const onFocus = () => void pull();
     const onPageHide = () => void flushServerWrites(true);
     document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('focus', onFocus);
-    window.addEventListener('online', onFocus);
+    window.addEventListener('focus', onResume);
+    window.addEventListener('online', onResume);
     window.addEventListener('pagehide', onPageHide);
     return () => {
       active = false;
       document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('focus', onFocus);
-      window.removeEventListener('online', onFocus);
+      window.removeEventListener('focus', onResume);
+      window.removeEventListener('online', onResume);
       window.removeEventListener('pagehide', onPageHide);
     };
   }, []);
@@ -387,7 +406,16 @@ function useStudioState() {
     return () => {
       active = false;
     };
-  }, [connection, online]);
+  }, [connection, online, reconnectSeq]);
+  useEffect(() => {
+    if (connection.preview || !online || connectionState !== 'error') return;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== 'hidden') {
+        reconnect();
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [connection.preview, online, connectionState, reconnect]);
   useEffect(() => {
     if (!info || !remoteHydrated) return;
     if (!connection.preview && info === demoInfo) return;
@@ -564,7 +592,7 @@ function useStudioState() {
       clearTimeout(timer);
       socket?.close();
     };
-  }, [connection, clientId, online]);
+  }, [connection, clientId, online, reconnectSeq]);
   useEffect(() => {
     let stopped = false,
       polling = false,
@@ -1091,7 +1119,8 @@ function useStudioState() {
     info,
     familyAssignments,
     setFamilyAssignments,
-    refreshModels: () => setConnection((c) => ({ ...c })),
+    reconnect,
+    refreshModels: reconnect,
     connect,
     preview: () => setConnection({ ...connection, preview: true }),
     notice,
