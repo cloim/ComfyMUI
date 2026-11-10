@@ -1,6 +1,6 @@
 const CACHE = '__CACHE_VERSION__';
 const SHELL = __PRECACHE__;
-const THUMB_CACHE = 'comfymui-thumbs-v1';
+const THUMB_CACHE = 'comfymui-thumbs-v2';
 const MAX_THUMBS = 150;
 
 async function trimCache(name, max) {

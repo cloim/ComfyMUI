@@ -12,6 +12,11 @@
   --color-olive: #4a6427;
   --font-sans: 'Noto Sans KR Variable', sans-serif;
   --font-display: 'Manrope Variable', 'Noto Sans KR Variable', sans-serif;
+  /* Type scale: 2xs caption and badge, xs body and controls, sm section and card titles, base page title */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
 }
 @layer base {
   * {
@@ -73,67 +78,44 @@
 }
 @layer components {
   .field {
-    @apply min-h-12 w-full rounded-xl border border-line bg-white px-3.5 py-3 text-sm text-ink shadow-none transition-colors placeholder:text-muted focus:border-olive focus:outline-none focus:ring-2 focus:ring-olive/15;
+    @apply min-h-9 w-full rounded-lg border border-line bg-white px-3 py-1.5 text-xs text-ink shadow-none transition-colors placeholder:text-muted focus:border-olive focus:outline-none focus:ring-2 focus:ring-olive/15;
   }
   .panel {
-    @apply rounded-2xl border border-line bg-white p-4 sm:p-5;
+    @apply rounded-xl border border-line bg-white p-3.5 sm:p-4;
   }
   .btn-primary {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-ink px-5 py-3 text-xs font-semibold text-lime transition hover:bg-ink/90 disabled:cursor-wait disabled:opacity-55;
+    @apply inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-ink px-3.5 py-1.5 text-xs font-semibold text-lime transition hover:bg-ink/90 disabled:cursor-wait disabled:opacity-55;
   }
   .btn-secondary {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 py-3 text-xs font-medium text-ink transition hover:bg-stone disabled:cursor-wait disabled:opacity-50;
+    @apply inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-stone disabled:cursor-wait disabled:opacity-50;
   }
   .btn-danger {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-red-700 px-5 py-3 text-xs font-semibold text-white hover:bg-red-800;
+    @apply inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-red-700 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-red-800;
   }
   .chip {
-    @apply inline-flex items-center rounded-md bg-stone px-2 py-1 text-[10px] text-muted;
+    @apply inline-flex items-center rounded-md bg-stone px-2 py-0.5 text-2xs text-muted;
   }
 }
 /* The shared modal owns focus, drag geometry, stacking and scroll locking. */
 .modal-overlay {
-  @apply bg-ink/40 p-6 backdrop-blur-sm;
+  @apply bg-ink/40 p-3 backdrop-blur-sm sm:p-4;
 }
 .modal-panel {
-  @apply rounded-2xl bg-white;
-  max-height: min(88dvh, 900px);
+  @apply rounded-xl bg-white;
+  max-height: min(86dvh, 820px);
 }
 .modal-header {
-  @apply gap-3 border-line p-4 sm:p-5;
+  @apply gap-2.5 border-line px-4 py-3;
 }
 .modal-title {
-  @apply text-base font-bold text-ink;
+  @apply text-sm font-bold text-ink;
 }
 .modal-close {
-  @apply h-11 w-11 rounded-xl text-muted hover:bg-stone;
+  @apply h-8 w-8 rounded-lg text-muted hover:bg-stone;
 }
 .modal-body {
-  @apply p-4 text-ink sm:p-5;
+  @apply p-4 text-xs text-ink;
 }
 .modal-footer {
-  @apply flex-wrap border-line p-4 sm:p-5;
-}
-@media (max-width: 767px) {
-  /* Mobile dialogs are bottom sheets and ignore saved desktop geometry. */
-  .modal-overlay {
-    @apply items-end p-0;
-  }
-  .modal-panel {
-    @apply w-full rounded-b-none rounded-t-3xl;
-    max-height: 88dvh;
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  .modal-header {
-    @apply relative pt-6;
-  }
-  .modal-header::before {
-    content: '';
-    @apply absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-line;
-  }
-  input,
-  textarea,
-  select {
-    font-size: 16px !important;
-  }
+  @apply flex-wrap border-line px-4 py-3;
 }

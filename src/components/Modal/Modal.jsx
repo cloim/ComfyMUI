@@ -27,7 +27,6 @@ export function Modal({
   const panelRef = useRef(null);
   const previouslyFocusedRef = useRef(null);
   const overlayPointerDownRef = useRef(false);
-  const sheetTouchStartRef = useRef(null);
   const modalId = useId();
   const [zIndex, setZIndex] = useState(null);
 
@@ -130,25 +129,7 @@ export function Modal({
         aria-labelledby={`${modalId}-title`}
         tabIndex={-1}
       >
-        <div
-          className={canDrag ? 'modal-header is-draggable' : 'modal-header'}
-          {...headerProps}
-          onTouchStart={(event) => {
-            if (window.innerWidth > 767 || event.target.closest('button,input,select,textarea'))
-              return;
-            sheetTouchStartRef.current = event.touches[0]?.clientY ?? null;
-          }}
-          onTouchEnd={(event) => {
-            const start = sheetTouchStartRef.current;
-            sheetTouchStartRef.current = null;
-            if (
-              start !== null &&
-              event.changedTouches[0]?.clientY - start > 80 &&
-              isTopModal(modalId)
-            )
-              onClose();
-          }}
-        >
+        <div className={canDrag ? 'modal-header is-draggable' : 'modal-header'} {...headerProps}>
           <h2 className="modal-title" id={`${modalId}-title`}>
             {title}
           </h2>

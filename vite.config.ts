@@ -18,7 +18,12 @@ export default defineConfig({
           const filename = url.searchParams.get('filename') || '';
           const subfolder = url.searchParams.get('subfolder') || '';
           const type = url.searchParams.get('type') || 'output';
-          if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+          if (
+            !filename ||
+            filename.includes('..') ||
+            filename.includes('/') ||
+            filename.includes('\\')
+          ) {
             res.statusCode = 400;
             return res.end(JSON.stringify({ error: { message: '잘못된 썸네일 파라미터입니다' } }));
           }
@@ -31,7 +36,9 @@ export default defineConfig({
             const upstreamRes = await fetch(viewUrl, { signal: AbortSignal.timeout(10000) });
             if (!upstreamRes.ok) {
               res.statusCode = upstreamRes.status;
-              return res.end(JSON.stringify({ error: { message: '원본 이미지를 가져올 수 없습니다' } }));
+              return res.end(
+                JSON.stringify({ error: { message: '원본 이미지를 가져올 수 없습니다' } }),
+              );
             }
             const sharp = (await import('sharp')).default;
             const buffer = await upstreamRes.arrayBuffer();
