@@ -17,7 +17,11 @@ mkdirSync(thumbCacheDir, { recursive: true });
 function sameOrigin(req) {
   if (!req.headers.origin) return true;
   try {
-    return new URL(req.headers.origin).host === req.headers.host;
+    const originHost = new URL(req.headers.origin).host;
+    const directHost = req.headers.host;
+    const fwdHeader = req.headers['x-forwarded-host'];
+    const forwardedHost = typeof fwdHeader === 'string' ? fwdHeader.split(',')[0].trim() : null;
+    return originHost === directHost || (forwardedHost !== null && originHost === forwardedHost);
   } catch {
     return false;
   }
@@ -234,7 +238,9 @@ app.post('/api/state', express.json({ limit: '8mb' }), (req, res) => {
     return res.status(400).json({ error: { message: '저장할 값이 없습니다' } });
   const bad = Object.keys(values).filter((key) => !STATE_KEY.test(key));
   if (bad.length)
-    return res.status(400).json({ error: { message: `저장할 수 없는 항목입니다: ${bad.join(', ')}` } });
+    return res
+      .status(400)
+      .json({ error: { message: `저장할 수 없는 항목입니다: ${bad.join(', ')}` } });
   res.json({ updatedAt: stateDb.write(values) });
 });
 
