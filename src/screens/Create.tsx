@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, type ComponentProps } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Box,
@@ -20,7 +20,7 @@ import {
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
-import { useStudio } from '../studio';
+import { useStudio, useStudioSelector } from '../studio';
 import {
   hasPromptAttribute,
   togglePromptAttribute,
@@ -29,6 +29,7 @@ import {
   downloadJson,
   buildWorkflow,
   type Generation,
+  type Job,
   type PromptAssembleElement,
   type Workflow,
 } from '../domain';
@@ -42,11 +43,14 @@ import {
   SelectControl,
   IconButton,
   Spinner,
+  HelpTip,
   modifiedField,
 } from '../components/ui';
 import { Result } from '../components/Result';
 import { PromptHelper } from '../components/PromptHelper';
 import ModelPanel from '../components/ModelPanel';
+import { LoraPicker } from '../components/LoraPicker';
+import { CreationTools } from '../components/CreationTools';
 import {
   compatibleAssets,
   selectedEntry,
@@ -64,9 +68,15 @@ export default function Create() {
     setSelectedAssembleId,
     info,
     familyAssignments,
-    notify,
-    jobs,
-  } = useStudio();
+  } = useStudioSelector((state) => ({
+    settings: state.settings,
+    setSettings: state.setSettings,
+    promptAssemble: state.promptAssemble,
+    selectedAssembleId: state.selectedAssembleId,
+    setSelectedAssembleId: state.setSelectedAssembleId,
+    info: state.info,
+    familyAssignments: state.familyAssignments,
+  }));
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [advanced, setAdvanced] = useState(false);
   const [advancedTab, setAdvancedTab] = useState('settings');
@@ -139,10 +149,9 @@ export default function Create() {
               onChange={(e) => patch({ positive: e.target.value })}
               placeholder="어떤 장면을 만들고 싶으세요?"
             />
-            <PromptHelper
+            <RecentPromptHelper
               value={s.positive}
               onChange={(val) => patch({ positive: val })}
-              jobs={jobs}
               textareaRef={promptTextareaRef}
             />
             <button
@@ -171,6 +180,30 @@ export default function Create() {
           <Section
             title="LoRA"
             icon={Layers2}
+            help={
+              <HelpTip label="LoRA 강도">
+                <div className="flex flex-col gap-2 break-keep">
+                  <p>
+                    <b>모델 강도</b>
+                    <br />
+                    이미지를 만드는 모델에 LoRA의 스타일과 특징을 반영하는 정도예요
+                  </p>
+                  <p>
+                    <b>CLIP 강도</b>
+                    <br />
+                    프롬프트를 해석하는 텍스트 인코더에 LoRA를 반영하는 정도예요
+                  </p>
+                  <p>
+                    0은 적용하지 않고, 1은 기본 배율로 적용해요. 값을 높일수록 효과가 강해지며
+                    이미지가 왜곡될 수 있어요
+                  </p>
+                  <p>
+                    CLIP 강도는 Flux 계열에서 조절하며, 텍스트 인코더 가중치가 포함된 LoRA에
+                    적용돼요
+                  </p>
+                </div>
+              </HelpTip>
+            }
             action={
               <div className="-my-1 flex items-center gap-2">
                 <button
@@ -299,6 +332,7 @@ export default function Create() {
             </div>
           </Section>
         </fieldset>
+        <CreationTools />
         <button
           aria-label="고급 설정"
           onClick={() => openAdvanced()}
@@ -320,32 +354,27 @@ export default function Create() {
         <PreviewPanel />
       </aside>
       <Advanced open={advanced} initialTab={advancedTab} onClose={() => setAdvanced(false)} />
-      <Modal title="LoRA 추가" open={addLora} onClose={() => setAddLora(false)}>
-        <div className="flex flex-col gap-3">
-          <p className="text-xs text-muted">모델과 같은 계열의 LoRA를 선택해 주세요</p>
-          <Picker
-            label="LoRA"
-            value=""
-            items={loras.filter((v) => !s.loras.some((l) => l.name === v))}
-            onChange={(name) => {
-              if (s.loras.length >= 20) {
-                notify('LoRA는 최대 20개까지 추가할 수 있어요');
-                return;
-              }
-              patch({
-                loras: [
-                  ...s.loras,
-                  { name, model: 0.8, clip: s.architecture === 'flux' ? 0.8 : 0 },
-                ],
-              });
-              setAddLora(false);
-            }}
-          />
-        </div>
-      </Modal>
+      <LoraPicker open={addLora} onClose={() => setAddLora(false)} />
     </div>
   );
 }
+function RecentPromptHelper(props: Omit<ComponentProps<typeof PromptHelper>, 'jobs'>) {
+  const recent = useRef<Job[]>([]);
+  const jobs = useStudioSelector((state) => {
+    const next = state.jobs.slice(0, 50);
+    // Autocomplete depends only on recent prompt text, never on image progress.
+    if (
+      recent.current.length !== next.length ||
+      next.some(
+        (job, index) => job.settings?.positive !== recent.current[index]?.settings?.positive,
+      )
+    )
+      recent.current = next;
+    return recent.current;
+  });
+  return <PromptHelper {...props} jobs={jobs} />;
+}
+
 function PromptAssembleBar({
   elements,
   selectedId,
@@ -508,7 +537,7 @@ function PromptAssembleBar({
   );
 }
 function PreviewPanel() {
-  const { jobs } = useStudio();
+  const jobs = useStudioSelector((state) => state.jobs);
   const lastComplete = jobs.find((j) => j.status === 'complete' && j.images.length > 0);
   return (
     <div className="rounded-xl border border-line bg-white p-3.5 sm:p-4">
@@ -552,73 +581,69 @@ export function GenerateControls() {
   return (
     <>
       <div className="flex min-w-0 items-center gap-1.5">
-            {clientQueue.length > 0 && (
-              <button
-                className="btn-secondary relative flex shrink-0 items-center gap-1.5 px-2.5"
-                onClick={() => setShowQueue(true)}
-                aria-label="기기 내 대기열 보기"
-              >
-                <ListOrdered size={15} />
-                <span className="hidden sm:inline">대기열</span>
-                <span className="rounded-full bg-olive px-1.5 py-0.5 text-2xs font-bold text-white">
-                  {clientQueue.length}
-                </span>
-              </button>
-            )}
-            <label
-              className="relative w-[60px] shrink-0 sm:w-[68px]"
-              title={`장 수 | 2장 이상이면 Seed를 바꿔 ${RUN_LIMIT}장까지 이어서 생성`}
-            >
-              <input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={RUN_LIMIT}
-                step={1}
-                aria-label="장 수"
-                value={countText}
-                onChange={(e) => setCountText(e.target.value)}
-                onBlur={() => setCountText(String(count))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') run();
-                }}
-                className="field pr-6 text-center font-mono [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-              />
-              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-2xs text-muted">
-                장
-              </span>
-            </label>
-            <button
-              data-testid="generate"
-              disabled={disabled}
-              onClick={run}
-              className="btn-primary shrink-0 whitespace-nowrap px-3"
-            >
-              <span className="flex items-center gap-1.5">
-                {busy ? <Spinner /> : <Sparkles size={15} />}
-                <span className="sm:hidden">
-                  {active ? '추가' : connection.preview ? '체험' : '생성'}
-                </span>
-                <span className="hidden sm:inline">
-                  {active
-                    ? '대기열에 추가'
-                    : connection.preview
-                      ? '미리보기 체험하기'
-                      : '이미지 생성'}
-                </span>
-              </span>
-              <span className="hidden rounded bg-white/15 px-1.5 py-0.5 text-2xs font-normal sm:inline">
-                {active
-                  ? `${active.status === 'queued' ? '대기 중' : '생성 중'} ${active.progress}%`
-                  : s.workflow
-                    ? 'API'
-                    : `${count}장`}
-              </span>
-            </button>
+        {clientQueue.length > 0 && (
+          <button
+            className="btn-secondary relative flex shrink-0 items-center gap-1.5 px-2.5"
+            onClick={() => setShowQueue(true)}
+            aria-label="기기 내 대기열 보기"
+          >
+            <ListOrdered size={15} />
+            <span className="hidden sm:inline">대기열</span>
+            <span className="rounded-full bg-olive px-1.5 py-0.5 text-2xs font-bold text-white">
+              {clientQueue.length}
+            </span>
+          </button>
+        )}
+        <label
+          className="relative w-[60px] shrink-0 sm:w-[68px]"
+          title={`장 수 | 2장 이상이면 Seed를 바꿔 ${RUN_LIMIT}장까지 이어서 생성`}
+        >
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={RUN_LIMIT}
+            step={1}
+            aria-label="장 수"
+            value={countText}
+            onChange={(e) => setCountText(e.target.value)}
+            onBlur={() => setCountText(String(count))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') run();
+            }}
+            className="field pr-6 text-center font-mono [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
+          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-2xs text-muted">
+            장
+          </span>
+        </label>
+        <button
+          data-testid="generate"
+          disabled={disabled}
+          onClick={run}
+          className="btn-primary shrink-0 whitespace-nowrap px-3"
+        >
+          <span className="flex items-center gap-1.5">
+            {busy ? <Spinner /> : <Sparkles size={15} />}
+            <span className="sm:hidden">
+              {active ? '추가' : connection.preview ? '체험' : '생성'}
+            </span>
+            <span className="hidden sm:inline">
+              {active ? '대기열에 추가' : connection.preview ? '미리보기 체험하기' : '이미지 생성'}
+            </span>
+          </span>
+          <span className="hidden rounded bg-white/15 px-1.5 py-0.5 text-2xs font-normal sm:inline">
+            {active
+              ? `${active.status === 'queued' ? '대기 중' : '생성 중'} ${active.progress}%`
+              : s.workflow
+                ? 'API'
+                : `${count}장`}
+          </span>
+        </button>
       </div>
 
       <Modal
-        title={`기기 내 대기열 (${clientQueue.length}개)`}
+        title={`서버 대기열 (${clientQueue.length}개)`}
         open={showQueue}
         onClose={() => setShowQueue(false)}
         footer={
@@ -627,12 +652,12 @@ export function GenerateControls() {
               <button
                 className="btn-secondary text-red-700"
                 onClick={() => {
-                  clearQueue();
+                  void clearQueue();
                   setShowQueue(false);
                 }}
               >
                 <Trash2 size={14} />
-                대기열 비우기
+                대기열 모두 취소
               </button>
             )}
             <button className="btn-primary" onClick={() => setShowQueue(false)}>
@@ -646,10 +671,11 @@ export function GenerateControls() {
         ) : (
           <div className="flex flex-col gap-2.5">
             <p className="text-xs text-muted">
-              앞선 생성이 완료되면 순서대로 서버에 자동 전송돼요.
+              ComfyUI 서버 대기열에 등록된 작업입니다. PWA 창을 최소화하거나 닫아도 서버에서 계속
+              생성돼요.
             </p>
             <div className="flex max-h-[360px] flex-col gap-1.5 overflow-y-auto pr-1">
-              {clientQueue.map((item, index) => (
+              {clientQueue.map((item) => (
                 <div
                   key={item.id}
                   className="flex items-center justify-between gap-2.5 rounded-lg border border-line bg-paper p-2.5 text-xs"
@@ -666,22 +692,10 @@ export function GenerateControls() {
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5">
                     <IconButton
-                      icon={ArrowUp}
-                      disabled={index === 0}
-                      onClick={() => moveQueueItem(index, index - 1)}
-                      label="위로 이동"
-                    />
-                    <IconButton
-                      icon={ArrowDown}
-                      disabled={index === clientQueue.length - 1}
-                      onClick={() => moveQueueItem(index, index + 1)}
-                      label="아래로 이동"
-                    />
-                    <IconButton
                       icon={Trash2}
                       danger
-                      onClick={() => removeFromQueue(item.id)}
-                      label="대기열에서 삭제"
+                      onClick={() => void removeFromQueue(item.id)}
+                      label="대기 취소"
                     />
                   </div>
                 </div>
@@ -690,7 +704,6 @@ export function GenerateControls() {
           </div>
         )}
       </Modal>
-
     </>
   );
 }
@@ -703,7 +716,17 @@ function Advanced({
   onClose: () => void;
   initialTab: string;
 }) {
-  const { settings: s, setSettings, info, notify } = useStudio();
+  const {
+    settings: s,
+    setSettings,
+    info,
+    notify,
+  } = useStudioSelector((state) => ({
+    settings: state.settings,
+    setSettings: state.setSettings,
+    info: state.info,
+    notify: state.notify,
+  }));
   const patch = (v: Partial<Generation>) => setSettings((s) => ({ ...s, ...v }));
   const prof = qualityProfiles[s.architecture] || qualityProfiles.flux;
   const archLabel = families.find((f) => f.id === s.architecture)?.label || s.architecture;
@@ -1030,7 +1053,7 @@ function WorkflowInputs({
   workflow: Workflow;
   onChange: (w: Workflow) => void;
 }) {
-  const { info } = useStudio();
+  const info = useStudioSelector((state) => state.info);
   function edit(id: string, key: string, value: unknown) {
     const w = structuredClone(workflow);
     w[id].inputs[key] = value;

@@ -3,8 +3,10 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import {
@@ -33,15 +35,16 @@ import {
   type ObjectInfo,
 } from './domain';
 import {
-  fetchInfo,
   normalizeBase,
   request,
   submit,
   websocketUrl,
   imageUrl,
+  ApiError,
   type Queue,
   type HistoryItem,
 } from './api';
+import { startConnection } from './connection';
 import {
   catalog,
   selectModel,
@@ -53,6 +56,14 @@ import {
 import { parseBinaryPreview } from './preview';
 import { useDownloadTracker } from './downloads';
 import { deleteOutputFiles, outputKey } from './outputs';
+import { backgroundKeepAlive } from './keep-alive';
+import { reusableSettings } from './creation-tools';
+import {
+  deferredWriter,
+  defaultPower,
+  previewInterval,
+  type PowerPreferences,
+} from './performance';
 import {
   fetchGallery,
   galleryJob,
@@ -87,6 +98,7 @@ function usePersisted<T>(
     useIDB?: boolean;
     // Shared across devices through the server database.
     shared?: boolean;
+    debounceMs?: number;
   },
 ) {
   const initialRef = useRef(initial);
@@ -103,25 +115,55 @@ function usePersisted<T>(
     return migrated;
   });
   const [failed, setFailed] = useState(false);
-
-  const store = (next: T) => {
-    try {
-      localStorage.setItem(key, JSON.stringify(next));
-      setFailed(false);
-    } catch {
-      setFailed(true);
-    }
-    if (options?.useIDB) {
-      void idbSet(key, next).catch(() => setFailed(true));
-    }
+  const edited = useRef(false);
+  const writer = useRef<ReturnType<typeof deferredWriter<T>> | null>(null);
+  if (!writer.current)
+    writer.current = deferredWriter((next: T) => {
+      // Blob URLs belong to this page and must never be restored after a reload.
+      const saved =
+        key === 'cm-jobs' && Array.isArray(next)
+          ? next.map(({ livePreview: _preview, ...job }) => job)
+          : next;
+      try {
+        localStorage.setItem(key, JSON.stringify(saved));
+        setFailed(false);
+      } catch {
+        setFailed(true);
+      }
+      if (options?.useIDB) {
+        void idbSet(key, saved).catch(() => setFailed(true));
+      }
+    }, options?.debounceMs || 0);
+  const store = (next: T, prev?: T) => {
+    edited.current = true;
+    const statusChanged =
+      key === 'cm-jobs' &&
+      Array.isArray(next) &&
+      Array.isArray(prev) &&
+      (next.length !== prev.length ||
+        next.some((job, i) => job.id !== prev[i]?.id || job.status !== prev[i]?.status));
+    writer.current!.schedule(next, !options?.debounceMs || statusChanged);
   };
+  useEffect(() => {
+    const flush = () => writer.current?.flush();
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      flush();
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onHidden);
+    };
+  }, []);
 
   // Saves on this device only; used for automatic corrections that every device repeats.
   const setSilentValue = (updater: T | ((prev: T) => T)) => {
     setRawValue((prev) => {
       const next = typeof updater === 'function' ? (updater as (p: T) => T)(prev) : updater;
       if (JSON.stringify(next) === JSON.stringify(prev)) return prev;
-      store(next);
+      store(next, prev);
       return next;
     });
   };
@@ -129,7 +171,8 @@ function usePersisted<T>(
   const setValue = (updater: T | ((prev: T) => T)) => {
     setRawValue((prev) => {
       const next = typeof updater === 'function' ? (updater as (p: T) => T)(prev) : updater;
-      store(next);
+      if (Object.is(next, prev)) return prev;
+      store(next, prev);
       if (options?.shared) queueServerWrite(key, next);
       return next;
     });
@@ -171,7 +214,7 @@ function usePersisted<T>(
     void migrateLocalStorageToIDB().then(async () => {
       try {
         const stored = await idbGet<T>(key);
-        if (stored === undefined) return;
+        if (stored === undefined || edited.current) return;
         const next = options?.migrate ? options.migrate(stored) : stored;
         setRawValue((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
       } catch {
@@ -227,6 +270,18 @@ function useStudioState() {
   );
   const [jobs, setJobs, historyError, setSilentJobs] = usePersisted<Job[]>('cm-jobs', [], {
     useIDB: true,
+    debounceMs: 1000,
+    migrate: (list) =>
+      list.map((job) =>
+        job.status === 'submitting'
+          ? {
+              ...job,
+              status: 'error',
+              submissionUncertain: true,
+              error: '전송 중 화면이 다시 열렸습니다. 서버 큐를 확인한 후 다시 생성해 주세요',
+            }
+          : job,
+      ),
   });
   const [clientQueue, setClientQueue, queueError] = usePersisted<QueueItem[]>(
     'cm-client-queue',
@@ -244,9 +299,14 @@ function useStudioState() {
   const connectionRef = useRef(connection);
   connectionRef.current = connection;
   const [reconnectSeq, setReconnectSeq] = useState(0);
+  const forceInfoRefresh = useRef(false);
   const reconnect = useCallback(() => {
     setReconnectSeq((s) => s + 1);
   }, []);
+  const refreshModels = useCallback(() => {
+    forceInfoRefresh.current = true;
+    reconnect();
+  }, [reconnect]);
   const [remoteHydrated, setRemoteHydrated] = useState(false);
   // The ComfyUI output folder is the history. null means it is not available
   // (preview mode or a direct ComfyUI address) and local records are shown instead.
@@ -272,6 +332,10 @@ function useStudioState() {
       return false;
     }
   });
+  const [power, setPower] = usePersisted<PowerPreferences>('cm-power', defaultPower);
+  const powerRef = useRef(power);
+  powerRef.current = power;
+  const lastPreviewAt = useRef(0);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const unreadBadgesRef = useRef<number>(0);
   const previousRunningJobsRef = useRef<Set<string>>(new Set());
@@ -318,6 +382,11 @@ function useStudioState() {
       else void flushServerWrites(true);
     };
     const onPageHide = () => void flushServerWrites(true);
+    const onState = (event: Event) => {
+      const { key, value } = (event as CustomEvent<{ key: string; value: unknown }>).detail;
+      sharedRegistry.get(key)?.applyServer(value);
+    };
+    window.addEventListener('comfymui:state', onState);
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('focus', onResume);
     window.addEventListener('online', onResume);
@@ -328,6 +397,8 @@ function useStudioState() {
       window.removeEventListener('focus', onResume);
       window.removeEventListener('online', onResume);
       window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('comfymui:state', onState);
+      backgroundKeepAlive.stop();
     };
   }, []);
   useEffect(() => {
@@ -366,47 +437,32 @@ function useStudioState() {
     };
   }, []);
   useEffect(() => {
-    let active = true;
     if (connection.preview) {
       setInfo(demoInfo);
       setConnectionState('preview');
       return;
     }
-    setInfo((prev) => (prev === demoInfo ? null : prev));
-    const cacheKey = 'cm-info-cache:' + connection.base;
-    let hasStale = false;
-    void idbGet<ObjectInfo>(cacheKey).then((cached) => {
-      if (!active) return;
-      if (cached && Object.keys(cached).length && Object.values(cached).some((n) => n.input)) {
-        hasStale = true;
-        setInfo(cached);
-      }
-    });
+    setInfo(null);
     setConnectionState('connecting');
-    fetchInfo(connection.base)
-      .then((data) => {
-        if (!active) return;
-        if (!data || !Object.keys(data).length || !Object.values(data).some((n) => n.input))
-          throw new Error('ComfyUI 노드 정보를 확인해 주세요');
-        setInfo((prev) => {
-          if (prev && JSON.stringify(prev) === JSON.stringify(data)) return prev;
-          return data;
-        });
-        setConnectionState('connected');
-        setConnectionError('');
-        void idbSet(cacheKey, data);
-      })
-      .catch((e) => {
-        if (active) {
+    setConnectionError('');
+    const refresh = forceInfoRefresh.current;
+    forceInfoRefresh.current = false;
+    return startConnection(
+      connection.base,
+      {
+        ready: (data) => {
+          setInfo(data);
+          setConnectionState('connected');
+          setConnectionError('');
+        },
+        error: (error) => {
           setConnectionState('error');
-          setConnectionError(e.message);
-          if (!hasStale) setInfo(null);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [connection, online, reconnectSeq]);
+          setConnectionError(error.message);
+        },
+      },
+      refresh,
+    );
+  }, [connection.base, connection.preview, online, reconnectSeq]);
   useEffect(() => {
     if (connection.preview || !online || connectionState !== 'error') return;
     const timer = setInterval(() => {
@@ -449,6 +505,7 @@ function useStudioState() {
           ? {
               ...j,
               status: 'error',
+              submissionUncertain: true,
               error: '전송 중 화면이 다시 열렸습니다. 서버 큐를 확인한 후 다시 생성해 주세요',
             }
           : j,
@@ -456,9 +513,11 @@ function useStudioState() {
     );
   }, []);
   function updateJob(id: string, patch: Partial<Job>) {
-    setJobs((all) =>
-      all.map((j) => {
+    setJobs((all) => {
+      const next = all.map((j) => {
         if (j.id !== id) return j;
+        if (Object.entries(patch).every(([key, value]) => Object.is(j[key as keyof Job], value)))
+          return j;
         // A late poll response must not revive a completed or cancelled request.
         if (
           ['complete', 'error', 'cancelled'].includes(j.status) &&
@@ -478,8 +537,9 @@ function useStudioState() {
           startedAt: nextStartedAt,
           completedAt: nextCompletedAt,
         };
-      }),
-    );
+      });
+      return next.every((job, i) => job === all[i]) ? all : next;
+    });
   }
   useEffect(() => {
     if (connection.preview || !online) return;
@@ -537,10 +597,25 @@ function useStudioState() {
       socket.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer) {
           try {
+            const network = (
+              navigator as Navigator & {
+                connection?: { saveData?: boolean; effectiveType?: string };
+              }
+            ).connection;
+            const slow = Boolean(
+              network?.saveData || /(^|-)2g$/.test(network?.effectiveType || ''),
+            );
+            const now = Date.now();
+            if (
+              now - lastPreviewAt.current <
+              previewInterval(powerRef.current.saving, document.hidden, slow)
+            )
+              return;
             const parsed = parseBinaryPreview(event.data);
             if (parsed) {
               const runningJob = jobRef.current.find((j) => !j.preview && j.status === 'running');
               if (runningJob) {
+                lastPreviewAt.current = now;
                 const url = URL.createObjectURL(parsed.blob);
                 if (activePreviewBlobRef.current) URL.revokeObjectURL(activePreviewBlobRef.current);
                 activePreviewBlobRef.current = url;
@@ -556,16 +631,37 @@ function useStudioState() {
         if (typeof event.data !== 'string') return;
         try {
           const { type, data } = JSON.parse(event.data);
-          const j = jobRef.current.find(
-            (j) => j.id === data.prompt_id && j.base === connection.base && !j.preview,
-          );
+          let j = data?.prompt_id
+            ? jobRef.current.find(
+                (j) => j.id === data.prompt_id && j.base === connection.base && !j.preview,
+              )
+            : undefined;
+
+          // Some ComfyUI versions send executing { node: null } or status without prompt_id when done
+          if (!j && data && (data.node === null || type === 'executing')) {
+            j = jobRef.current.find((item) => !item.preview && item.status === 'running');
+          }
+
           if (!j || ['complete', 'error', 'cancelled'].includes(j.status)) return;
           if (type === 'progress')
             updateJob(j.id, {
               status: 'running',
+              stage: 'sampling',
               progress: Math.min(99, Math.round((data.value / Math.max(1, data.max)) * 100)),
             });
-          if (type === 'execution_start') updateJob(j.id, { status: 'running' });
+          if (type === 'execution_start')
+            updateJob(j.id, { status: 'running', stage: 'preparing' });
+          if (type === 'executing' && data.node !== null) {
+            const graph = buildWorkflow(j.settings);
+            const node = graph[String(data.node)]?.class_type || '';
+            updateJob(j.id, {
+              stage: /SaveImage|VAEDecode|ImageScale|ImageUpscale/i.test(node)
+                ? 'saving'
+                : /sampler/i.test(node)
+                  ? 'sampling'
+                  : 'preparing',
+            });
+          }
           if ((type === 'executing' && data.node === null) || type === 'executed') {
             void fetchHistoryOnce(j.id, j.base);
           }
@@ -592,7 +688,7 @@ function useStudioState() {
       clearTimeout(timer);
       socket?.close();
     };
-  }, [connection, clientId, online, reconnectSeq]);
+  }, [connection.base, connection.preview, clientId, online]);
   useEffect(() => {
     let stopped = false,
       polling = false,
@@ -601,6 +697,7 @@ function useStudioState() {
       if (polling || !navigator.onLine) return;
       polling = true;
       try {
+        const queues = new Map<string, Queue>();
         for (const j of jobRef.current.filter(
           (j) => !j.preview && ['queued', 'running'].includes(j.status),
         )) {
@@ -635,7 +732,11 @@ function useStudioState() {
                       },
                 );
             } else {
-              const q = await request<Queue>(j.base, '/queue');
+              let q = queues.get(j.base);
+              if (!q) {
+                q = await request<Queue>(j.base, '/queue');
+                queues.set(j.base, q);
+              }
               if (stopped) return;
               if (q.queue_running.some((row) => row[1] === j.id))
                 updateJob(j.id, { status: 'running', error: undefined });
@@ -658,7 +759,17 @@ function useStudioState() {
     }
     function schedulePoll() {
       if (stopped) return;
-      const delay = isWsConnectedRef.current ? 15000 : 2500;
+      const hasPendingJob = jobRef.current.some(
+        (j) => !j.preview && ['queued', 'running'].includes(j.status),
+      );
+      const delay =
+        document.hidden && powerRef.current.saving
+          ? 30000
+          : isWsConnectedRef.current
+            ? 15000
+            : hasPendingJob
+              ? 2500
+              : 10000;
       pollTimer = setTimeout(async () => {
         await poll();
         schedulePoll();
@@ -672,18 +783,26 @@ function useStudioState() {
   }, []);
   useEffect(() => {
     const timer = setInterval(() => {
-      if (!jobRef.current.some((j) => j.preview && ['running', 'queued'].includes(j.status)))
-        return;
+      // Find the currently running or earliest queued preview job to run one by one
+      const activePreview =
+        jobRef.current.find((j) => j.preview && j.status === 'running') ||
+        jobRef.current
+          .filter((j) => j.preview && j.status === 'queued')
+          .sort((a, b) => a.createdAt - b.createdAt)[0];
+
+      if (!activePreview) return;
+
       setJobs((all) =>
         all.map((j) => {
-          if (!j.preview || !['running', 'queued'].includes(j.status)) return j;
-          const progress = Math.min(100, Math.round((Date.now() - j.createdAt) / 45));
+          if (j.id !== activePreview.id) return j;
+          const startedAt = j.startedAt || Date.now();
+          const progress = Math.min(100, Math.round((Date.now() - startedAt) / 45));
           const isDone = progress === 100;
           return {
             ...j,
             progress,
             status: isDone ? 'complete' : 'running',
-            startedAt: j.startedAt || j.createdAt,
+            startedAt,
             completedAt: isDone ? j.completedAt || Date.now() : undefined,
             images: isDone ? [{ filename: 'sample.svg', subfolder: '', type: 'output' }] : [],
           };
@@ -692,124 +811,254 @@ function useStudioState() {
     }, 300);
     return () => clearInterval(timer);
   }, [setJobs]);
-  async function executeJob(input: Generation) {
-    if (submitLock.current) return;
-    submitLock.current = true;
-    setBusy(true);
-    let tempId = '';
-    try {
-      if (!online && !connection.preview) throw new Error('네트워크 연결 후 다시 생성해 주세요');
-      if (!connection.preview && connectionState !== 'connected')
-        throw new Error('연결 설정에서 서버를 확인해 주세요');
-      const snapshot = structuredClone(input);
-      // A plain upscale only reads the image, so the original model may be gone.
-      const usesModel = !snapshot.upscale || snapshot.upscale.refine > 0;
-      if (!connection.preview && usesModel) validateSelection(snapshot, info!, familyAssignments);
-      if (snapshot.random && !snapshot.workflow) snapshot.seed = randomSeed();
-      const workflow = buildWorkflow(snapshot);
-      if (!connection.preview) validateAgainstServer(workflow, info!);
-      // An upscale is a one-off job and leaves the create form as it is.
-      if (!snapshot.upscale) setSettings(snapshot);
-      tempId = newId();
-      const job: Job = {
-        id: tempId,
-        createdAt: Date.now(),
-        settings: snapshot,
-        base: connection.base,
-        preview: connection.preview,
-        status: connection.preview ? 'running' : 'submitting',
-        startedAt: connection.preview ? Date.now() : undefined,
-        progress: 0,
-        images: [],
-      };
-      setJobs((all) => trimJobsPreservingFavorites([job, ...all], 500));
-      if (!connection.preview) {
-        const response = await submit(connection.base, workflow, clientId, {
-          comfymui: { ...snapshot, workflow: null },
-        });
+
+  async function submitSingleJob(input: Generation, isBatch = false): Promise<boolean> {
+    if (!online && !connection.preview) {
+      notify('네트워크 연결 후 다시 생성해 주세요');
+      return false;
+    }
+    if (!connection.preview && connectionState !== 'connected') {
+      notify('연결 설정에서 서버를 확인해 주세요');
+      return false;
+    }
+    const snapshot = structuredClone(input);
+    const usesModel = !snapshot.upscale || snapshot.upscale.refine > 0;
+    if (!connection.preview && usesModel) {
+      try {
+        validateSelection(snapshot, info!, familyAssignments);
+      } catch (e) {
+        notify((e as Error).message);
+        return false;
+      }
+    }
+    if (snapshot.random && !snapshot.workflow) snapshot.seed = randomSeed();
+    const workflow = buildWorkflow(snapshot);
+    if (!connection.preview) {
+      try {
+        validateAgainstServer(workflow, info!);
+      } catch (e) {
+        notify((e as Error).message);
+        return false;
+      }
+    }
+    if (!snapshot.upscale && !snapshot.draftTarget && !isBatch)
+      setSettings(reusableSettings(snapshot));
+    const tempId = newId();
+    const job: Job = {
+      id: tempId,
+      createdAt: Date.now(),
+      settings: snapshot,
+      base: connection.base,
+      preview: connection.preview,
+      status: connection.preview ? 'queued' : 'submitting',
+      startedAt: connection.preview ? Date.now() : undefined,
+      progress: 0,
+      images: [],
+      requestToken: tempId,
+    };
+    setJobs((all) => trimJobsPreservingFavorites([job, ...all], 500));
+
+    if (!connection.preview) {
+      try {
+        const response = await submit(
+          connection.base,
+          workflow,
+          clientId,
+          {
+            comfymui: { ...snapshot, workflow: null },
+            comfymui_request_id: tempId,
+          },
+          tempId,
+        );
         if (!response.prompt_id) throw new Error('서버의 작업 번호를 확인할 수 없습니다');
         updateJob(tempId, { id: response.prompt_id, status: 'queued' });
-      }
-      notify(connection.preview ? '미리보기 체험을 시작했어요' : '생성 요청을 서버에 보냈어요');
-    } catch (e) {
-      const message = (e as Error).message;
-      if (tempId)
+        return true;
+      } catch (e) {
+        const message = (e as Error).message;
         updateJob(tempId, {
           status: 'error',
           error: message + '\n서버 큐를 확인한 뒤 재시도해 주세요',
+          submissionUncertain: !(e instanceof ApiError) || e.status === 0 || e.status >= 500,
         });
-      notify(message);
+        notify(message);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async function generate(input = settings) {
+    if (submitLock.current) return;
+    submitLock.current = true;
+    setBusy(true);
+    try {
+      const ok = await submitSingleJob(input);
+      if (ok) {
+        notify(connection.preview ? '미리보기 체험을 시작했어요' : '생성 요청을 서버에 보냈어요');
+      }
     } finally {
       submitLock.current = false;
       setBusy(false);
     }
   }
 
-  async function generate(input = settings) {
-    const hasActive = jobRef.current.some((j) =>
-      ['submitting', 'queued', 'running'].includes(j.status),
-    );
-    if (hasActive || submitLock.current) {
-      const snapshot = structuredClone(input);
-      if (snapshot.random && !snapshot.workflow) snapshot.seed = randomSeed();
-      const item: QueueItem = {
-        id: newId(),
-        createdAt: Date.now(),
-        settings: snapshot,
-      };
-      setClientQueue((q) => [...q, item]);
-      notify('기기 내 대기열에 추가했어요');
+  function removeFromQueue(id: string) {
+    const target = jobRef.current.find((j) => j.id === id);
+    if (target) {
+      void cancel(target);
+    }
+  }
+
+  function moveQueueItem() {
+    notify('서버 대기열은 등록된 순서대로 실행돼요');
+  }
+
+  async function clearQueue() {
+    const pendingJobs = jobRef.current.filter((j) => j.status === 'queued');
+    if (pendingJobs.length === 0) {
+      notify('대기 중인 작업이 없어요');
       return;
     }
-    await executeJob(input);
-  }
+    const realServerJobs = pendingJobs.filter((j) => !j.preview);
+    const idsToDelete = realServerJobs.map((j) => j.id);
 
-  // Auto-process client queue when no active job is running
-  useEffect(() => {
-    const hasActive = jobs.some((j) => ['submitting', 'queued', 'running'].includes(j.status));
-    if (hasActive || submitLock.current || clientQueue.length === 0) return;
-    if (!online && !connection.preview) return;
-    if (!connection.preview && connectionState !== 'connected') return;
-
-    const nextItem = clientQueue[0];
-    setClientQueue((q) => q.slice(1));
-    void executeJob(nextItem.settings);
-  }, [jobs, clientQueue, online, connection.preview, connectionState]);
-
-  function removeFromQueue(id: string) {
-    setClientQueue((q) => q.filter((item) => item.id !== id));
-    notify('대기열 항목을 삭제했어요');
-  }
-
-  function moveQueueItem(fromIndex: number, toIndex: number) {
-    setClientQueue((q) => reorderQueue(q, fromIndex, toIndex));
-  }
-
-  function clearQueue() {
-    setClientQueue([]);
-    notify('대기열을 모두 비웠어요');
-  }
-
-  function enqueueBatch(count: number, base = settings) {
-    const validCount = Math.min(20, Math.max(1, Math.round(count)));
-    const items: QueueItem[] = [];
-    for (let i = 0; i < validCount; i++) {
-      const snap = structuredClone(base);
-      if (snap.random && !snap.workflow) snap.seed = randomSeed();
-      else if (!snap.workflow && i > 0) snap.seed = randomSeed();
-      items.push({ id: newId(), createdAt: Date.now() + i, settings: snap });
+    if (idsToDelete.length > 0) {
+      try {
+        await request(connection.base, '/queue', {
+          method: 'POST',
+          body: JSON.stringify({ delete: idsToDelete }),
+        });
+      } catch (e) {
+        notify((e as Error).message);
+        return;
+      }
     }
-    const hasActive = jobRef.current.some((j) =>
-      ['submitting', 'queued', 'running'].includes(j.status),
+
+    setJobs((all) =>
+      all.map((j) => (pendingJobs.some((p) => p.id === j.id) ? { ...j, status: 'cancelled' } : j)),
     );
-    if (!hasActive && items.length > 0) {
-      const [first, ...rest] = items;
-      setClientQueue((q) => [...q, ...rest]);
-      void executeJob(first.settings);
-    } else {
-      setClientQueue((q) => [...q, ...items]);
+    notify(`대기열의 ${pendingJobs.length}개 작업을 모두 취소했어요`);
+  }
+
+  async function enqueueBatch(count: number, base = settings) {
+    if (submitLock.current) return;
+    submitLock.current = true;
+    setBusy(true);
+    const validCount = Math.min(20, Math.max(1, Math.round(count)));
+    let successCount = 0;
+    try {
+      for (let i = 0; i < validCount; i++) {
+        const snap = structuredClone(base);
+        if (snap.random && !snap.workflow) snap.seed = randomSeed();
+        else if (!snap.workflow && i > 0) snap.seed = randomSeed();
+        const ok = await submitSingleJob(snap, i > 0);
+        if (ok) {
+          successCount++;
+        } else {
+          break;
+        }
+      }
+      if (successCount > 0) {
+        notify(
+          connection.preview
+            ? `${successCount}회 연속 생성을 시작했어요`
+            : `ComfyUI 서버 대기열에 ${successCount}건을 일괄 등록했어요`,
+        );
+      }
+    } finally {
+      submitLock.current = false;
+      setBusy(false);
     }
-    notify(`Seed를 변경하여 ${validCount}회 연속 생성을 등록했어요`);
+  }
+
+  async function enqueueExperiment(inputs: Generation[]) {
+    if (submitLock.current) return;
+    if (inputs.length < 2 || inputs.length > 6) {
+      notify('실험은 2~6개 조건으로 실행해 주세요');
+      return;
+    }
+    submitLock.current = true;
+    setBusy(true);
+    let sent = 0;
+    try {
+      for (const input of inputs) {
+        if (!(await submitSingleJob(input, true))) break;
+        sent++;
+      }
+      notify(
+        `실험 ${sent}/${inputs.length}개 조건을 ${connection.preview ? '미리보기' : '서버 대기열'}에 등록했어요`,
+      );
+    } finally {
+      submitLock.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function checkSubmission(job: Job): Promise<boolean> {
+    if (job.preview || !job.submissionUncertain) return false;
+    try {
+      const queue = await request<Queue>(job.base, '/queue');
+      const match = [...queue.queue_running, ...queue.queue_pending].find((row) => {
+        const extra = row[3] as { comfymui_request_id?: string } | undefined;
+        return extra?.comfymui_request_id === (job.requestToken || job.id);
+      });
+      if (match) {
+        // Replace the uncertain record in place; normal terminal-state guards do not apply.
+        setJobs((all) =>
+          all.map((j) =>
+            j.id === job.id
+              ? {
+                  ...j,
+                  id: match[1],
+                  status: queue.queue_running.some((r) => r[1] === match[1]) ? 'running' : 'queued',
+                  submissionUncertain: false,
+                  error: undefined,
+                }
+              : j,
+          ),
+        );
+        notify('서버에서 기존 요청을 찾았어요. 새 요청 없이 추적을 이어가요');
+        return true;
+      }
+      if (job.base === GALLERY_BASE) {
+        const index = await fetchGallery(true);
+        if (index?.available) {
+          setGallery(index);
+          const files = index.files.filter(
+            (file) => file.requestToken === (job.requestToken || job.id),
+          );
+          if (files.length) {
+            setJobs((all) =>
+              all.map((j) =>
+                j.id === job.id
+                  ? {
+                      ...j,
+                      status: 'complete',
+                      submissionUncertain: false,
+                      error: undefined,
+                      progress: 100,
+                      completedAt: Math.max(...files.map((file) => file.mtime)),
+                      images: files.map((file) => ({
+                        filename: file.filename,
+                        subfolder: file.subfolder,
+                        type: file.type,
+                        v: file.mtime,
+                      })),
+                    }
+                  : j,
+              ),
+            );
+            notify('이미 저장된 결과를 찾았어요. 새 요청 없이 결과를 복원했어요');
+            return true;
+          }
+        }
+      }
+      notify('대기열에서 요청을 찾지 못했어요. 이미 완료됐을 수 있으니 기록을 확인해 주세요');
+      return false;
+    } catch (error) {
+      notify((error as Error).message);
+      throw error;
+    }
   }
 
   function pinSeed(seed: number) {
@@ -819,6 +1068,8 @@ function useStudioState() {
 
   function generateVariation(baseJob: Job) {
     const next = baseSettings(structuredClone(baseJob.settings));
+    delete next.experiment;
+    delete next.draftTarget;
     next.seed = randomSeed();
     next.random = true;
     void generate(next);
@@ -828,6 +1079,8 @@ function useStudioState() {
     const source = baseJob.images[0];
     if (!source) return;
     const next = upscaleSettings(structuredClone(baseJob.settings), source, model, scale, refine);
+    delete next.experiment;
+    delete next.draftTarget;
     void generate(next);
     notify(`${next.width} × ${next.height}로 업스케일을 등록했어요`);
   }
@@ -879,12 +1132,12 @@ function useStudioState() {
     },
   });
 
-  async function refreshGallery() {
+  async function refreshGallery(force = false) {
     if (connection.preview) {
       setGallery(null);
       return;
     }
-    const next = await fetchGallery();
+    const next = await fetchGallery(force);
     if (next) setGallery(next.available ? next : null);
   }
 
@@ -960,14 +1213,26 @@ function useStudioState() {
       notify((e as Error).message);
     }
   }
-  // Wake Lock, live preview cleanup, background notification and badging
+  const hasActiveJob = jobs.some((j) => ['submitting', 'queued', 'running'].includes(j.status));
+  const isRunning = jobs.some((j) => ['submitting', 'running'].includes(j.status));
+  // Server jobs continue without keeping an audio pipeline or phone screen awake.
   useEffect(() => {
-    const hasActiveJob = jobs.some((j) => ['submitting', 'running'].includes(j.status));
-    if (hasActiveJob) {
+    if (hasActiveJob && power.backgroundAudio && !power.saving) {
+      backgroundKeepAlive.start();
+    } else {
+      backgroundKeepAlive.stop();
+    }
+
+    let disposed = false;
+    if (isRunning && power.keepScreen && !power.saving) {
       if ('wakeLock' in navigator && !wakeLockRef.current) {
         navigator.wakeLock
           .request('screen')
           .then((wl) => {
+            if (disposed) {
+              void wl.release();
+              return;
+            }
             wakeLockRef.current = wl;
             wl.addEventListener('release', () => {
               wakeLockRef.current = null;
@@ -980,13 +1245,27 @@ function useStudioState() {
         wakeLockRef.current.release().catch(() => {});
         wakeLockRef.current = null;
       }
-      if (activePreviewBlobRef.current) {
+      if (!isRunning && activePreviewBlobRef.current) {
         URL.revokeObjectURL(activePreviewBlobRef.current);
         activePreviewBlobRef.current = null;
         setLivePreviewUrl('');
       }
     }
 
+    return () => {
+      disposed = true;
+    };
+  }, [hasActiveJob, isRunning, power]);
+  useEffect(
+    () => () => {
+      backgroundKeepAlive.stop();
+      void wakeLockRef.current?.release();
+      if (activePreviewBlobRef.current) URL.revokeObjectURL(activePreviewBlobRef.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
     for (const j of jobs) {
       if (previousRunningJobsRef.current.has(j.id) && j.status === 'complete') {
         if (document.visibilityState === 'hidden') {
@@ -1002,7 +1281,7 @@ function useStudioState() {
               });
             } catch {}
           }
-          if ('vibrate' in navigator) {
+          if (notificationsEnabled && 'vibrate' in navigator) {
             try {
               navigator.vibrate([200, 100, 200]);
             } catch {}
@@ -1024,10 +1303,20 @@ function useStudioState() {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         const running = jobRef.current.some((j) => ['submitting', 'running'].includes(j.status));
-        if (running && 'wakeLock' in navigator && !wakeLockRef.current) {
+        if (
+          running &&
+          powerRef.current.keepScreen &&
+          !powerRef.current.saving &&
+          'wakeLock' in navigator &&
+          !wakeLockRef.current
+        ) {
           navigator.wakeLock
             .request('screen')
             .then((wl) => {
+              if (!powerRef.current.keepScreen || powerRef.current.saving) {
+                void wl.release();
+                return;
+              }
               wakeLockRef.current = wl;
             })
             .catch(() => {});
@@ -1040,7 +1329,7 @@ function useStudioState() {
 
   const completedJobCount = jobs.filter((j) => j.status === 'complete').length;
   useEffect(() => {
-    void refreshGallery();
+    void refreshGallery(true);
   }, [connection.preview, connection.base, completedJobCount]);
   useEffect(() => {
     const onVisible = () => {
@@ -1094,8 +1383,14 @@ function useStudioState() {
   function connect(base: string) {
     const normalized = normalizeBase(base);
     setConnection({ base: normalized, preview: false });
+    reconnect();
   }
-  const active = jobs.find((j) => ['submitting', 'queued', 'running'].includes(j.status));
+  const runningJob = jobs.find((j) => ['submitting', 'running'].includes(j.status));
+  const queuedJob = jobs
+    .filter((j) => j.status === 'queued')
+    .sort((a, b) => a.createdAt - b.createdAt)[0];
+  const active = runningJob || queuedJob || null;
+  const serverQueue = jobs.filter((j) => j.status === 'queued');
   return {
     settings,
     setSettings,
@@ -1120,7 +1415,7 @@ function useStudioState() {
     familyAssignments,
     setFamilyAssignments,
     reconnect,
-    refreshModels: reconnect,
+    refreshModels,
     connect,
     preview: () => setConnection({ ...connection, preview: true }),
     notice,
@@ -1128,10 +1423,13 @@ function useStudioState() {
     online,
     socketState,
     generate,
+    enqueueExperiment,
+    checkSubmission,
     busy,
     active,
     cancel,
-    clientQueue,
+    clientQueue: serverQueue,
+    serverQueue,
     removeFromQueue,
     moveQueueItem,
     clearQueue,
@@ -1152,6 +1450,8 @@ function useStudioState() {
     libraryRevision,
     livePreviewUrl,
     notificationsEnabled,
+    power,
+    setPower,
     toggleNotifications,
     clearBadge,
     storageError:
@@ -1166,11 +1466,72 @@ function useStudioState() {
   };
 }
 type Studio = ReturnType<typeof useStudioState>;
-const Context = createContext<Studio | null>(null);
+type StudioStore = { get: () => Studio; subscribe: (listener: () => void) => () => void };
+const Context = createContext<StudioStore | null>(null);
 export function StudioProvider({ children }: { children: ReactNode }) {
   const state = useStudioState();
-  return <Context.Provider value={state}>{children}</Context.Provider>;
+  const live = useRef(state);
+  live.current = state;
+  const store = useRef<{
+    snapshot: Studio;
+    listeners: Set<() => void>;
+    actions: Partial<Studio>;
+    api: StudioStore;
+  } | null>(null);
+  if (!store.current) {
+    const actions = Object.fromEntries(
+      Object.entries(state)
+        .filter(([, value]) => typeof value === 'function')
+        .map(([key]) => [
+          key,
+          (...args: unknown[]) => (live.current[key as keyof Studio] as Function)(...args),
+        ]),
+    ) as Partial<Studio>;
+    const listeners = new Set<() => void>();
+    const entry = {
+      snapshot: { ...state, ...actions },
+      listeners,
+      actions,
+      api: null as unknown as StudioStore,
+    };
+    entry.api = {
+      get: () => entry.snapshot,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    };
+    store.current = entry;
+  }
+  useLayoutEffect(() => {
+    store.current!.snapshot = { ...state, ...store.current!.actions };
+    store.current!.listeners.forEach((listener) => listener());
+  });
+  return <Context.Provider value={store.current.api}>{children}</Context.Provider>;
+}
+function sameSelection<T>(a: T, b: T) {
+  if (Object.is(a, b)) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) =>
+      Object.is((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+    )
+  );
+}
+export function useStudioSelector<T>(selector: (state: Studio) => T): T {
+  const store = useContext(Context)!;
+  const cached = useRef<{ value: T } | null>(null);
+  return useSyncExternalStore(store.subscribe, () => {
+    const next = selector(store.get());
+    if (!cached.current || !sameSelection(cached.current.value, next))
+      cached.current = { value: next };
+    return cached.current.value;
+  });
 }
 export function useStudio() {
-  return useContext(Context)!;
+  return useStudioSelector((state) => state);
 }

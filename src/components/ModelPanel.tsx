@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Box, RefreshCw, Tags } from 'lucide-react';
-import { useStudio } from '../studio';
+import { useStudioSelector } from '../studio';
 import { options } from '../domain';
 import {
   catalog,
@@ -23,7 +23,16 @@ export default function ModelPanel() {
     modelOrder,
     refreshModels,
     notify,
-  } = useStudio();
+  } = useStudioSelector((s) => ({
+    settings: s.settings,
+    setSettings: s.setSettings,
+    info: s.info,
+    connectionState: s.connectionState,
+    familyAssignments: s.familyAssignments,
+    modelOrder: s.modelOrder,
+    refreshModels: s.refreshModels,
+    notify: s.notify,
+  }));
   const [classify, setClassify] = useState(false);
   const entries = useMemo(
     () => catalog(info, familyAssignments, modelOrder),
@@ -114,7 +123,8 @@ export default function ModelPanel() {
                 )}
                 {visible.map((e) => (
                   <option key={e.id} value={e.id}>
-                    {e.name} ({e.format})
+                    {e.name}
+                    {e.format === '체크포인트' ? '' : ` (${e.format})`}
                   </option>
                 ))}
               </SelectControl>
@@ -178,7 +188,12 @@ export default function ModelPanel() {
   );
 }
 function Classification({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { info, familyAssignments, setFamilyAssignments, notify } = useStudio();
+  const { info, familyAssignments, setFamilyAssignments, notify } = useStudioSelector((s) => ({
+    info: s.info,
+    familyAssignments: s.familyAssignments,
+    setFamilyAssignments: s.setFamilyAssignments,
+    notify: s.notify,
+  }));
   const [kind, setKind] = useState('model'),
     [search, setSearch] = useState('');
   const names =

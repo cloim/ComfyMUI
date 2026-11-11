@@ -19,7 +19,7 @@ import {
   FileText,
   type LucideIcon,
 } from 'lucide-react';
-import { useStudio } from '../studio';
+import { useStudioSelector } from '../studio';
 import {
   DEFAULT_PROMPTS,
   DEFAULT_PROMPT_ASSEMBLE,
@@ -28,6 +28,7 @@ import {
   type PromptAssembleElement,
 } from '../domain';
 import { usePwa } from '../pwa';
+import { SyncConflicts } from '../components/SyncConflicts';
 import {
   Section,
   Spinner,
@@ -59,7 +60,7 @@ export default function Settings() {
     socketState,
     online,
     presets,
-    jobs,
+    jobCount,
     notificationsEnabled,
     toggleNotifications,
     defaultPrompts,
@@ -67,7 +68,30 @@ export default function Settings() {
     promptAssemble,
     setPromptAssemble,
     setSettings,
-  } = useStudio();
+    power,
+    setPower,
+  } = useStudioSelector((s) => ({
+    connection: s.connection,
+    connect: s.connect,
+    connectionState: s.connectionState,
+    connectionError: s.connectionError,
+    preview: s.preview,
+    info: s.info,
+    notify: s.notify,
+    socketState: s.socketState,
+    online: s.online,
+    presets: s.presets,
+    jobCount: s.jobs.length,
+    notificationsEnabled: s.notificationsEnabled,
+    toggleNotifications: s.toggleNotifications,
+    defaultPrompts: s.defaultPrompts,
+    setDefaultPrompts: s.setDefaultPrompts,
+    promptAssemble: s.promptAssemble,
+    setPromptAssemble: s.setPromptAssemble,
+    setSettings: s.setSettings,
+    power: s.power,
+    setPower: s.setPower,
+  }));
   const [activeTab, setActiveTab] = useState<SettingsCategory>(() => {
     const param = new URLSearchParams(window.location.search).get('tab');
     return param === 'prompt' || param === 'app' || param === 'connection' ? param : 'connection';
@@ -957,8 +981,51 @@ export default function Settings() {
             <Section title="화면 유지와 완료 알림" icon={Bell}>
               <div className="flex flex-col gap-4">
                 <p className="text-xs leading-relaxed text-muted">
-                  생성 중에는 화면이 꺼지지 않도록 유지하고, 앱이 백그라운드일 때 생성이 끝나면
-                  알림과 진동으로 알려드려요
+                  서버에 등록된 작업은 화면을 꺼도 계속 생성돼요
+                  <br />
+                  앱이 종료되면 완료 알림은 전달되지 않을 수 있어요
+                </p>
+                <label className="flex min-h-11 items-center justify-between gap-3 text-xs font-semibold">
+                  절전 모드
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label="절전 모드"
+                    checked={power.saving}
+                    onChange={(e) => setPower({ ...power, saving: e.target.checked })}
+                    className="h-5 w-5 accent-olive"
+                  />
+                </label>
+                <p className="text-xs leading-relaxed text-muted">
+                  절전 중에는 화면 유지와 백그라운드 오디오를 끄고 미리보기·진행 확인 빈도를 줄여요
+                </p>
+                <label className="flex min-h-11 items-center justify-between gap-3 text-xs font-semibold">
+                  생성 중 화면 유지
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label="생성 중 화면 유지"
+                    checked={power.keepScreen}
+                    disabled={power.saving}
+                    onChange={(e) => setPower({ ...power, keepScreen: e.target.checked })}
+                    className="h-5 w-5 accent-olive disabled:opacity-40"
+                  />
+                </label>
+                <label className="flex min-h-11 items-center justify-between gap-3 text-xs font-semibold">
+                  백그라운드 연결 유지용 오디오
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label="백그라운드 연결 유지용 오디오"
+                    checked={power.backgroundAudio}
+                    disabled={power.saving}
+                    onChange={(e) => setPower({ ...power, backgroundAudio: e.target.checked })}
+                    className="h-5 w-5 accent-olive disabled:opacity-40"
+                  />
+                </label>
+                <p className="text-xs leading-relaxed text-muted">
+                  오디오는 선택 사항이며 배터리를 더 사용할 수 있어요. 느린 통신에서는 절전 설정과
+                  관계없이 미리보기 빈도를 낮춰요
                 </p>
                 <div data-ui-audit-row className="flex flex-wrap items-center gap-2">
                   <button
@@ -981,9 +1048,10 @@ export default function Settings() {
             </Section>
             <Section title="이 기기의 데이터" icon={ShieldCheck}>
               <div className="flex flex-col gap-4">
+                <SyncConflicts recovery />
                 <div className="flex flex-wrap gap-2">
                   <Status>프리셋 {presets.length}개</Status>
-                  <Status>생성 기록 {jobs.length}개</Status>
+                  <Status>생성 기록 {jobCount}개</Status>
                   <Status>{online ? '온라인' : '오프라인'}</Status>
                 </div>
                 <p className="text-xs leading-relaxed text-muted">

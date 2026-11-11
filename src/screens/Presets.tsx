@@ -12,7 +12,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useStudio } from '../studio';
+import { useStudioSelector } from '../studio';
 import { families } from '../models';
 import { importPresets, downloadJson, newId, parseSettings, type Preset } from '../domain';
 import { Empty, IconButton, Modal, Spinner, FieldError } from '../components/ui';
@@ -22,7 +22,13 @@ export const presetColors = {
   rose: 'bg-[#eddfda] text-[#916858]',
 };
 export default function Presets() {
-  const { presets, setPresets, setSettings, notify } = useStudio();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const { presets, setPresets, setSettings, notify } = useStudioSelector((s) => ({
+    presets: s.presets,
+    setPresets: s.setPresets,
+    setSettings: s.setSettings,
+    notify: s.notify,
+  }));
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Preset | null>(null);
   const [editing, setEditing] = useState<Preset | null>(null);
@@ -65,23 +71,28 @@ export default function Presets() {
             />
           </label>
           <div className="flex gap-2">
-            <label
-              className={`btn-secondary cursor-pointer ${importing ? 'pointer-events-none opacity-50' : ''}`}
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={importing}
+              aria-label="프리셋 JSON 가져오기"
+              onClick={() => fileInput.current?.click()}
             >
               {importing ? <Spinner /> : <Upload size={16} />}
               <span className="hidden sm:inline">가져오기</span>
-              <input
-                disabled={importing}
-                aria-label="프리셋 JSON 가져오기"
-                className="sr-only"
-                type="file"
-                accept=".json,application/json"
-                onChange={(e) => {
-                  void load(e.target.files?.[0]);
-                  e.target.value = '';
-                }}
-              />
-            </label>
+            </button>
+            <input
+              ref={fileInput}
+              disabled={importing}
+              aria-label="프리셋 JSON 파일"
+              className="hidden"
+              type="file"
+              accept=".json,application/json"
+              onChange={(e) => {
+                void load(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
             <IconButton
               icon={Download}
               className="!h-9 !w-9"
@@ -285,7 +296,12 @@ export function PresetEditor({
   open: boolean;
   onClose: () => void;
 }) {
-  const { settings, presets, setPresets, notify } = useStudio();
+  const { settings, presets, setPresets, notify } = useStudioSelector((s) => ({
+    settings: s.settings,
+    presets: s.presets,
+    setPresets: s.setPresets,
+    notify: s.notify,
+  }));
   const [name, setName] = useState(existing?.name || '');
   const [description, setDescription] = useState(existing?.description || '');
   const [color, setColor] = useState(existing?.color || 'sage');

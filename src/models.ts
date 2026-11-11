@@ -197,7 +197,7 @@ export function catalog(
       if (!family) continue;
       // These models require reference-image or specialized Nunchaku workflows.
       if (/nunchaku|svdq|kontext|(^|[\\/])edit([\\/])/i.test(name)) continue;
-      const key = source.format + ':' + name;
+      const key = name.replaceAll('\\', '/');
       if (seen.has(key)) continue;
       seen.add(key);
       entries.push({

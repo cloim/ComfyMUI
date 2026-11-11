@@ -11,11 +11,13 @@ import {
   Share2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { baseSettings, type Job } from '../domain';
+import { type Generation, type Job } from '../domain';
+import { makeFinalSettings, reusableSettings } from '../creation-tools';
+import { classifyJobError, jobStageLabel, lowerMemorySettings } from '../job-recovery';
 import { imageUrl } from '../api';
 import { useStudio } from '../studio';
-import { calculateRemainingEstimate } from '../estimate';
-import { IconButton, Spinner } from './ui';
+import { calculateRemainingEstimate, jobsAhead } from '../estimate';
+import { IconButton, Spinner, Modal } from './ui';
 import { ImageViewer } from './ImageViewer';
 import { UpscaleDialog } from './UpscaleDialog';
 // `fallback` is the latest completed job, shown while `job` has no image yet (running, failed or cancelled).
@@ -47,10 +49,40 @@ export function Result({
     jobs,
     clientQueue,
     info,
+    reconnect,
+    checkSubmission,
   } = useStudio();
   const [upscaling, setUpscaling] = useState(false);
+  const [plan, setPlan] = useState<{
+    title: string;
+    settings: Generation;
+    warning: string;
+    uncertain?: boolean;
+  } | null>(null);
   const active = job && ['submitting', 'queued', 'running'].includes(job.status);
-  const estimate = active && job ? calculateRemainingEstimate(jobs, job, clientQueue.length) : null;
+  const queuedCount = job ? jobsAhead(jobs, job).length : 0;
+  const estimate = active && job ? calculateRemainingEstimate(jobs, job, queuedCount) : null;
+  const recovery = classifyJobError(job?.error || '');
+  async function retry() {
+    if (!job || busy || regenerating) return;
+    setRegenerating(true);
+    try {
+      if (job.submissionUncertain) {
+        if (!(await checkSubmission(job)))
+          setPlan({
+            title: '새 요청으로 다시 생성',
+            settings: { ...reusableSettings(job.settings), random: false },
+            warning:
+              '기존 요청이 이미 완료됐거나 서버에 남아 있을 수 있어요. 기록을 확인한 뒤 새 요청을 보내세요. 중복 생성될 수 있어요',
+            uncertain: true,
+          });
+      } else await generate(job.settings);
+    } catch (error) {
+      notify((error as Error).message);
+    } finally {
+      setRegenerating(false);
+    }
+  }
   const previewImg = active && job?.status === 'running' ? job.livePreview || livePreviewUrl : null;
   const hasImage = (j?: Job): j is Job => j?.status === 'complete' && Boolean(j.images[0]);
   const shown = hasImage(job) ? job : hasImage(fallback) ? fallback : undefined;
@@ -64,7 +96,7 @@ export function Result({
       : '3 / 4';
   const reuse = () => {
     if (job) {
-      setSettings(baseSettings(structuredClone(job.settings)));
+      setSettings(reusableSettings(job.settings));
       notify('생성 설정을 불러왔어요');
     }
   };
@@ -127,12 +159,8 @@ export function Result({
             if (!previewImg) setImageFailed(true);
           }}
           onLoad={() => setImageFailed(false)}
-          className={`h-full w-full object-contain transition-all duration-700 ${
-            previewImg
-              ? 'opacity-95'
-              : active
-                ? 'scale-105 opacity-35 blur-sm'
-                : 'group-hover:scale-[1.02]'
+          className={`h-full w-full object-contain transition-opacity duration-700 ${
+            previewImg ? 'opacity-95' : active ? 'opacity-35 blur-sm' : ''
           }`}
         />
         {previewImg && (
@@ -156,7 +184,7 @@ export function Result({
             <div
               className={`flex flex-col items-center gap-1.5 ${previewImg ? 'rounded-xl bg-white/85 px-4 py-2.5 shadow-lg backdrop-blur-md' : ''}`}
             >
-              <p className="text-center text-xs font-semibold">{labels[job!.status]}</p>
+              <p className="text-center text-xs font-semibold">{jobStageLabel(job!)}</p>
               <p className="font-mono text-base font-bold">{job!.progress}%</p>
               <div className="h-1.5 w-32 overflow-hidden rounded-full bg-ink/15">
                 <div
@@ -166,13 +194,30 @@ export function Result({
               </div>
               {estimate && (
                 <div className="flex flex-col items-center gap-0.5 text-xs text-ink/80 font-medium">
-                  <span>약 {estimate.remainingSeconds}초 남음</span>
-                  {estimate.queueAheadCount > 0 && (
-                    <span className="text-2xs text-muted">
-                      대기열 앞 {estimate.queueAheadCount}개 작업
-                    </span>
-                  )}
+                  <span>
+                    {job!.status === 'queued' ? '생성 예상' : '약'} {estimate.minSeconds}~
+                    {estimate.maxSeconds}초
+                    {job!.status === 'queued' ? ' (대기 시간 제외)' : ' 남음'}
+                  </span>
+                  <span className="text-2xs text-muted">
+                    최근 {estimate.sampleCount}건 기준
+                    {estimate.confidence === 'low'
+                      ? ' · 표본이 적어요'
+                      : ' · 모델 준비에 따라 달라져요'}
+                  </span>
                 </div>
+              )}
+              {!estimate && (
+                <span className="text-2xs text-muted">
+                  {job!.settings.workflow || job!.settings.upscale
+                    ? '이 작업은 예상 시간을 제공하지 않아요'
+                    : '예상 시간을 계산할 기록이 부족해요'}
+                </span>
+              )}
+              {queuedCount > 0 && (
+                <span className="text-2xs text-muted">
+                  앞에 이 앱의 작업 {queuedCount}개 · 다른 작업도 있을 수 있어요
+                </span>
               )}
             </div>
             {(job!.status === 'queued' || job!.preview) && (
@@ -246,24 +291,96 @@ export function Result({
               {job.error}
             </p>
           )}
-          {['error', 'cancelled'].includes(job.status) && (
-            <button
-              disabled={regenerating || busy}
+          {job.status === 'error' &&
+            recovery === 'memory' &&
+            !job.settings.workflow &&
+            !job.settings.upscale && (
+              <button
+                className="btn-secondary"
+                disabled={busy || regenerating}
+                onClick={() =>
+                  setPlan({
+                    title: '해상도 낮춰 재시도',
+                    settings: lowerMemorySettings(job.settings),
+                    warning:
+                      '해상도를 줄이고 배치 수를 1로 바꿔 메모리 사용을 줄여요. Seed와 프롬프트는 유지해요',
+                  })
+                }
+              >
+                해상도 낮춰 재시도
+              </button>
+            )}
+          {job.status === 'error' && recovery === 'model' && (
+            <Link
               className="btn-secondary"
+              to="/create"
+              onClick={() => {
+                setSettings(reusableSettings(job.settings));
+                reconnect();
+              }}
+            >
+              모델·설치 목록 다시 확인
+            </Link>
+          )}
+          {job.status === 'error' && recovery === 'connection' && !job.submissionUncertain && (
+            <Link className="btn-secondary" to="/settings" onClick={reconnect}>
+              연결 설정 확인
+            </Link>
+          )}
+          {job.submissionUncertain && (
+            <button
+              className="btn-secondary"
+              disabled={busy || regenerating}
               onClick={async () => {
                 setRegenerating(true);
                 try {
-                  await generate(job.settings);
+                  await checkSubmission(job);
+                } catch {
+                  /* The connection error is shown by the store. */
                 } finally {
                   setRegenerating(false);
                 }
               }}
+            >
+              {regenerating && <Spinner />}서버 작업 확인
+            </button>
+          )}
+          {['error', 'cancelled'].includes(job.status) && (
+            <button
+              disabled={regenerating || busy}
+              className="btn-secondary"
+              onClick={() => void retry()}
             >
               {regenerating ? <Spinner /> : null}이 설정으로 다시 생성
             </button>
           )}
           {job.status === 'complete' && (
             <>
+              {job.settings.draftTarget && (
+                <button
+                  className="btn-primary"
+                  disabled={busy || regenerating}
+                  onClick={() => {
+                    try {
+                      setPlan({
+                        title: '시안에서 최종 생성',
+                        settings: makeFinalSettings(job.settings),
+                        warning:
+                          '같은 Seed·프롬프트·LoRA를 유지하고 원래 해상도와 Steps로 생성해요. 해상도가 달라지면 구도가 달라질 수 있어요',
+                      });
+                    } catch (error) {
+                      notify((error as Error).message);
+                    }
+                  }}
+                >
+                  이 시안으로 최종 생성
+                </button>
+              )}
+              {job.settings.experiment && (
+                <p className="text-xs font-semibold text-olive">
+                  실험 조건 · {job.settings.experiment.label}
+                </p>
+              )}
               <div className="flex flex-wrap gap-1.5">
                 <Link to="/create" onClick={reuse} className="btn-secondary flex-1 min-w-[112px]">
                   <RotateCcw size={14} />
@@ -336,6 +453,65 @@ export function Result({
       {job?.status === 'complete' && (
         <UpscaleDialog job={job} open={upscaling} onClose={() => setUpscaling(false)} />
       )}
+      <Modal
+        title={plan?.title || '생성 설정 확인'}
+        open={Boolean(plan)}
+        onClose={() => {
+          if (!regenerating) setPlan(null);
+        }}
+        footer={
+          <>
+            <button className="btn-secondary" disabled={regenerating} onClick={() => setPlan(null)}>
+              취소
+            </button>
+            <button
+              className="btn-primary"
+              disabled={regenerating || busy}
+              onClick={async () => {
+                if (!plan || regenerating || busy) return;
+                setRegenerating(true);
+                try {
+                  if (plan.uncertain && job && (await checkSubmission(job))) {
+                    setPlan(null);
+                    return;
+                  }
+                  await generate(plan.settings);
+                  setPlan(null);
+                } catch (error) {
+                  notify((error as Error).message);
+                } finally {
+                  setRegenerating(false);
+                }
+              }}
+            >
+              {regenerating && <Spinner />}확인하고 생성
+            </button>
+          </>
+        }
+      >
+        {plan && (
+          <div className="flex flex-col gap-3 text-xs leading-relaxed">
+            <p>{plan.warning}</p>
+            <dl className="grid grid-cols-2 gap-2 rounded-xl bg-paper p-4">
+              <dt>해상도</dt>
+              <dd className="text-right font-mono">
+                {job?.settings.width} × {job?.settings.height} → {plan.settings.width} ×{' '}
+                {plan.settings.height}
+              </dd>
+              <dt>Steps</dt>
+              <dd className="text-right font-mono">
+                {job?.settings.steps} → {plan.settings.steps}
+              </dd>
+              <dt>배치 수</dt>
+              <dd className="text-right font-mono">
+                {job?.settings.batch} → {plan.settings.batch}
+              </dd>
+              <dt>Seed</dt>
+              <dd className="break-all text-right font-mono">{plan.settings.seed}</dd>
+            </dl>
+          </div>
+        )}
+      </Modal>
       <ImageViewer
         src={source}
         alt={generatedImage ? '생성한 이미지' : '우아한 성인 여성 인물을 담은 샘플 일러스트'}

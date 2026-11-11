@@ -119,6 +119,21 @@ const info: ObjectInfo = {
   },
 };
 describe('four directly supported families', () => {
+  it('lists a shared model folder once while preserving the checkpoint loader for existing workflows', () => {
+    const shared: ObjectInfo = {
+      ...info,
+      CheckpointLoaderSimple: {
+        input: { required: { ckpt_name: [['Krea2\\krea2_turbo.safetensors']] } },
+      },
+    };
+    const matches = catalog(shared).filter((e) => /krea2_turbo\.safetensors$/.test(e.name));
+    expect(matches).toHaveLength(1);
+    const settings = selectModel(defaults, matches[0], shared);
+    expect(buildWorkflow(settings)['1']).toEqual({
+      class_type: 'CheckpointLoaderSimple',
+      inputs: { ckpt_name: 'Krea2\\krea2_turbo.safetensors' },
+    });
+  });
   it('exposes exactly the requested four families and excludes older Qwen and reference-image models', () => {
     expect(families.map((f) => f.id)).toEqual(['flux', 'krea2', 'moss', 'qwen21']);
     const models = catalog(info);

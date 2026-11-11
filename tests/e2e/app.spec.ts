@@ -11,7 +11,7 @@ async function connect(page: Page) {
   await page.goto('/create');
   await page
     .getByRole('combobox', { name: '모델', exact: true })
-    .selectOption({ label: 'Flux1.D/test-model.safetensors (체크포인트)' });
+    .selectOption({ label: 'Flux1.D/test-model.safetensors' });
 }
 test('mobile preview, advanced values, presets CRUD and persistence', async ({ page }) => {
   const errors: string[] = [];
@@ -59,7 +59,6 @@ test('real protocol submission, LoRA chain, batch outputs, poll fallback and reu
 }) => {
   await connect(page);
   await page.getByRole('button', { name: '추가', exact: true }).click();
-  await page.getByRole('button', { name: 'LoRA 선택', exact: true }).click();
   await page.getByRole('button', { name: 'Flux1.D/soft.safetensors', exact: true }).click();
   await expect(page.getByLabel('생성 수', { exact: true })).toHaveCount(0);
   const submitted = page.waitForRequest(
@@ -297,7 +296,6 @@ test('family-first model selection, GGUF submission and manual LoRA classificati
   await modelSelect.selectOption({ label: 'Flux1.D/forest-Q4.gguf (GGUF)' });
   await expect(modelSelect.locator('option:checked')).toHaveText('Flux1.D/forest-Q4.gguf (GGUF)');
   await page.getByRole('button', { name: '추가', exact: true }).click();
-  await page.getByRole('button', { name: 'LoRA 선택', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Krea2/style.safetensors', exact: true }),
   ).toHaveCount(0);
@@ -316,7 +314,6 @@ test('family-first model selection, GGUF submission and manual LoRA classificati
   await page.getByLabel('unknown.safetensors 계열', { exact: true }).selectOption('flux');
   await page.getByRole('button', { name: '완료', exact: true }).click();
   await page.getByRole('button', { name: '추가', exact: true }).click();
-  await page.getByRole('button', { name: 'LoRA 선택', exact: true }).click();
   await page.getByRole('button', { name: 'unknown.safetensors', exact: true }).click();
   expect(
     await page.evaluate(() => JSON.parse(localStorage.getItem('cm-settings')!).loras),
@@ -737,11 +734,11 @@ test('sidebar cleanup, prompt assemble multi-select, model dropdown, LoRA keyboa
   const familyBox = await page.getByLabel('모델 계열', { exact: true }).boundingBox();
   const modelBox = await modelSelect.boundingBox();
   expect(Math.abs(familyBox!.y - modelBox!.y)).toBeLessThanOrEqual(2);
-  await modelSelect.selectOption({ label: 'Flux1.D/another.safetensors (체크포인트)' });
+  await modelSelect.selectOption({ label: 'Flux1.D/another.safetensors' });
   await expect
     .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('cm-settings')!).model))
     .toBe('Flux1.D/another.safetensors');
-  await modelSelect.selectOption({ label: 'Flux1.D/test-model.safetensors (체크포인트)' });
+  await modelSelect.selectOption({ label: 'Flux1.D/test-model.safetensors' });
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   // 4. 프롬프트 어셈블 다중 선택 및 설정 연동 확인
@@ -760,7 +757,6 @@ test('sidebar cleanup, prompt assemble multi-select, model dropdown, LoRA keyboa
 
   // 5. LoRA 강도 클릭하여 키보드 입력 지원 확인
   await page.getByRole('button', { name: '추가', exact: true }).click();
-  await page.getByRole('button', { name: 'LoRA 선택', exact: true }).click();
   await page.getByRole('button', { name: 'Flux1.D/soft.safetensors', exact: true }).click();
   await page.getByRole('button', { name: /LoRA 1 모델 강도 값 직접 입력/ }).click();
   const strengthInput = page.getByLabel('LoRA 1 모델 강도 수치 입력', { exact: true });
@@ -798,7 +794,7 @@ test('sidebar cleanup, prompt assemble multi-select, model dropdown, LoRA keyboa
   expect(Math.abs(mobileModelBox!.y - mobileFamilyBox!.y)).toBeLessThanOrEqual(2);
   expect(mobileModelBox!.x + mobileModelBox!.width).toBeLessThanOrEqual(390);
   await expect(mobileModel.locator('option:checked')).toHaveText(
-    'Flux1.D/test-model.safetensors (체크포인트)',
+    'Flux1.D/test-model.safetensors',
   );
 
   // 9. 설정 - 프롬프트 어셈블 기존 요소/속성 수정, 검색 및 일괄 편집 관리 확인

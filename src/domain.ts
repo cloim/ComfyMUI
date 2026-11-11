@@ -42,6 +42,8 @@ export type Generation = {
   denoise: number;
   workflow: Workflow | null;
   upscale?: UpscaleSpec | null;
+  draftTarget?: { width: number; height: number; steps: number };
+  experiment?: { id: string; label: string };
 };
 // Upscales an existing output image with an upscale model, then optionally re-samples it
 // at low denoise with the original model and prompt to restore fine detail.
@@ -136,6 +138,9 @@ export type Job = {
   favorite?: boolean;
   startedAt?: number;
   completedAt?: number;
+  stage?: 'preparing' | 'sampling' | 'saving';
+  requestToken?: string;
+  submissionUncertain?: boolean;
 };
 
 export function trimJobsPreservingFavorites(jobs: Job[], limit = 500): Job[] {
@@ -176,7 +181,6 @@ export function migrateGenerationSettings(settings: Generation): Generation {
   }
   return next;
 }
-
 
 export type PromptAssembleElement = {
   id: string;

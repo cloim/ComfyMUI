@@ -22,6 +22,7 @@ import Loras from './screens/Loras';
 import Models from './screens/Models';
 import Settings from './screens/Settings';
 import { usePwa } from './pwa';
+import { SyncConflicts } from './components/SyncConflicts';
 const nav = [
   { path: '/create', label: '만들기', icon: Sparkles },
   { path: '/models', label: '모델', icon: Box },
@@ -187,6 +188,7 @@ function Shell() {
             />
           </div>
         </header>
+        <SyncConflicts />
         {(!online || storageError) && (
           <div
             role="status"

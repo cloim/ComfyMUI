@@ -929,19 +929,24 @@ export function Section({
   icon: Icon,
   children,
   action,
+  help,
 }: {
   title: string;
   icon: LucideIcon;
   children: ReactNode;
   action?: ReactNode;
+  help?: ReactNode;
 }) {
   return (
     <section className="panel">
       <div className="mb-3 flex items-center justify-between gap-2.5">
-        <h2 className="flex items-center gap-2 text-sm font-bold">
-          <Icon size={15} className="text-muted" />
-          {title}
-        </h2>
+        <div className="flex min-w-0 items-center gap-1">
+          <h2 className="flex items-center gap-2 text-sm font-bold">
+            <Icon size={15} className="text-muted" />
+            {title}
+          </h2>
+          {help}
+        </div>
         {action}
       </div>
       {children}

@@ -17,7 +17,7 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
-import { useStudio } from '../studio';
+import { useStudioSelector } from '../studio';
 import { assetFamily, families, selectModel, type ModelEntry, type ModelFamily } from '../models';
 import {
   DEMO_MODELS,
@@ -50,14 +50,7 @@ import {
   type CivitaiVersion,
   type ModelManagerItem,
 } from '../model-manager';
-import {
-  Empty,
-  IconButton,
-  Modal,
-  MultiSelect,
-  SelectControl,
-  Spinner,
-} from '../components/ui';
+import { Empty, IconButton, Modal, MultiSelect, SelectControl, Spinner } from '../components/ui';
 import { DetailExamples } from '../components/ExampleGallery';
 import { HeaderActionButton, HeaderActions } from '../components/HeaderActions';
 import { DownloadTray } from '../components/DownloadTray';
@@ -76,7 +69,20 @@ export default function Models() {
     startDownload,
     cancelDownload,
     libraryRevision,
-  } = useStudio();
+  } = useStudioSelector((s) => ({
+    connection: s.connection,
+    info: s.info,
+    settings: s.settings,
+    setSettings: s.setSettings,
+    familyAssignments: s.familyAssignments,
+    setFamilyAssignments: s.setFamilyAssignments,
+    refreshModels: s.refreshModels,
+    notify: s.notify,
+    downloads: s.downloads,
+    startDownload: s.startDownload,
+    cancelDownload: s.cancelDownload,
+    libraryRevision: s.libraryRevision,
+  }));
   const navigate = useNavigate();
 
   const [items, setItems] = useState<ModelManagerItem[]>(connection.preview ? DEMO_MODELS : []);
@@ -102,8 +108,8 @@ export default function Models() {
   // Facets & Tag management states
   const [folders, setFolders] = useState<string[]>(['Flux1.D', 'Krea2', 'Qwen']);
   const [roots, setRoots] = useState<string[]>([
-    'E:/ComfyUI/models/checkpoints',
     'E:/ComfyUI/models/diffusion_models',
+    'E:/ComfyUI/models/checkpoints',
   ]);
   const [topTags, setTopTags] = useState<{ tag: string; count: number }[]>([
     { tag: 'flux', count: 10 },
@@ -133,7 +139,9 @@ export default function Models() {
   // A new default image replaces the card preview without reloading the list.
   function handlePreviewChanged(filePath: string, previewUrl: string, nsfwLevel: number) {
     const patch = (x: ModelManagerItem) =>
-      x.file_path === filePath ? { ...x, preview_url: previewUrl, preview_nsfw_level: nsfwLevel } : x;
+      x.file_path === filePath
+        ? { ...x, preview_url: previewUrl, preview_nsfw_level: nsfwLevel }
+        : x;
     setItems((prev) => prev.map(patch));
     setActiveModel((prev) => (prev ? patch(prev) : prev));
   }
@@ -160,7 +168,7 @@ export default function Models() {
   async function loadFacets() {
     if (connection.preview) {
       setFolders(['Flux1.D', 'Krea2', 'Qwen']);
-      setRoots(['E:/ComfyUI/models/checkpoints', 'E:/ComfyUI/models/diffusion_models']);
+      setRoots(['E:/ComfyUI/models/diffusion_models', 'E:/ComfyUI/models/checkpoints']);
       setTopTags([
         { tag: 'flux', count: 1 },
         { tag: 'photorealistic', count: 1 },
@@ -179,8 +187,10 @@ export default function Models() {
       ]);
       if (fList.length) setFolders(fList);
       if (rList.length) {
-        setRoots(rList);
-        setTargetRoot((prev) => prev || rList[0]);
+        const primary = rList.find((r) => /[/\\]diffusion_models[/\\]?$/i.test(r));
+        const ordered = primary ? [primary, ...rList.filter((r) => r !== primary)] : rList;
+        setRoots(ordered);
+        setTargetRoot((prev) => prev || ordered[0]);
       }
       if (tList.length) setTopTags(tList);
     } catch {
@@ -664,7 +674,7 @@ export default function Models() {
           .startsWith(r.replaceAll('\\', '/').toLowerCase()),
       ) ||
       roots[0] ||
-      'E:/ComfyUI/models/checkpoints';
+      'E:/ComfyUI/models/diffusion_models';
     const targetDir = editMoveFolder
       ? `${matchedRoot.replace(/\/+$/, '')}/${editMoveFolder.replace(/^\/+|\/+$/g, '')}`
       : matchedRoot.replace(/\/+$/, '');
@@ -939,51 +949,51 @@ export default function Models() {
           </div>
           <div className="col-span-2 flex min-w-0 gap-2">
             <div className="min-w-0 flex-1 sm:w-56 sm:flex-initial">
-            <MultiSelect
-              label="태그 필터"
-              placeholder="전체 태그"
-              options={topTags.map((t) => ({ value: t.tag, label: `#${t.tag}`, count: t.count }))}
-              value={selectedTags}
-              onChange={setSelectedTags}
-              footer={
-                <div className="flex items-center justify-between gap-2">
-                  <div
-                    role="group"
-                    aria-label="태그 일치 조건"
-                    className="flex rounded-md bg-paper p-0.5"
-                  >
-                    {(
-                      [
-                        ['any', '하나라도 포함'],
-                        ['all', '모두 포함'],
-                      ] as const
-                    ).map(([v, l]) => (
-                      <button
-                        key={v}
-                        type="button"
-                        aria-pressed={tagLogic === v}
-                        onClick={() => setTagLogic(v)}
-                        className={`min-h-7 rounded px-2 text-2xs font-semibold transition ${
-                          tagLogic === v
-                            ? 'bg-white text-ink shadow-sm'
-                            : 'text-muted hover:text-ink'
-                        }`}
-                      >
-                        {l}
-                      </button>
-                    ))}
+              <MultiSelect
+                label="태그 필터"
+                placeholder="전체 태그"
+                options={topTags.map((t) => ({ value: t.tag, label: `#${t.tag}`, count: t.count }))}
+                value={selectedTags}
+                onChange={setSelectedTags}
+                footer={
+                  <div className="flex items-center justify-between gap-2">
+                    <div
+                      role="group"
+                      aria-label="태그 일치 조건"
+                      className="flex rounded-md bg-paper p-0.5"
+                    >
+                      {(
+                        [
+                          ['any', '하나라도 포함'],
+                          ['all', '모두 포함'],
+                        ] as const
+                      ).map(([v, l]) => (
+                        <button
+                          key={v}
+                          type="button"
+                          aria-pressed={tagLogic === v}
+                          onClick={() => setTagLogic(v)}
+                          className={`min-h-7 rounded px-2 text-2xs font-semibold transition ${
+                            tagLogic === v
+                              ? 'bg-white text-ink shadow-sm'
+                              : 'text-muted hover:text-ink'
+                          }`}
+                        >
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={selectedTags.length === 0}
+                      onClick={() => setSelectedTags([])}
+                      className="min-h-7 rounded-md px-2 text-2xs font-semibold text-muted hover:bg-paper hover:text-ink disabled:opacity-40"
+                    >
+                      선택 해제
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    disabled={selectedTags.length === 0}
-                    onClick={() => setSelectedTags([])}
-                    className="min-h-7 rounded-md px-2 text-2xs font-semibold text-muted hover:bg-paper hover:text-ink disabled:opacity-40"
-                  >
-                    선택 해제
-                  </button>
-                </div>
-              }
-            />
+                }
+              />
             </div>
             <IconButton
               icon={showNsfw ? Eye : EyeOff}
@@ -1087,14 +1097,14 @@ export default function Models() {
                             loop
                             playsInline
                             autoPlay
-                            className={`h-full w-full object-cover ${blurred ? 'scale-110 blur-xl' : ''}`}
+                            className={`h-full w-full object-contain ${blurred ? 'blur-xl' : ''}`}
                           />
                         ) : (
                           <img
                             src={previewSrc}
                             alt={item.model_name || item.file_name}
                             loading="lazy"
-                            className={`h-full w-full object-cover ${blurred ? 'scale-110 blur-xl' : ''}`}
+                            className={`h-full w-full object-contain ${blurred ? 'blur-xl' : ''}`}
                           />
                         )
                       ) : (
@@ -1203,7 +1213,6 @@ export default function Models() {
             <span>추가 모델 불러오는 중</span>
           </div>
         )}
-
       </div>
 
       {/* Model Detail & Management Modal */}

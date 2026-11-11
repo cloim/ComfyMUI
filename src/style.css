@@ -25,6 +25,10 @@
   body {
     @apply m-0 break-keep font-sans antialiased;
   }
+  img,
+  video {
+    @apply object-contain;
+  }
   button,
   a,
   input,

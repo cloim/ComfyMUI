@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateRemainingEstimate, getJobDurationMs } from '../src/estimate';
+import { calculateRemainingEstimate, getJobDurationMs, jobsAhead } from '../src/estimate';
 import type { Job } from '../src/domain';
 import { defaults } from '../src/domain';
 
@@ -18,6 +18,59 @@ function makeJob(partial: Partial<Job>): Job {
 }
 
 describe('calculateRemainingEstimate', () => {
+  it('ignores queue time, different servers/models and failed jobs', () => {
+    const current = makeJob({ status: 'running' });
+    const sample = makeJob({ startedAt: 1000, completedAt: 11000 });
+    expect(getJobDurationMs(makeJob({ createdAt: 1, completedAt: 11000 }))).toBeNull();
+    expect(
+      calculateRemainingEstimate(
+        [sample, { ...sample, id: 'other', base: 'another-server' }],
+        current,
+      ),
+    ).toBeNull();
+    expect(
+      calculateRemainingEstimate(
+        [
+          sample,
+          { ...sample, id: 'other', settings: { ...sample.settings, model: 'other-model' } },
+        ],
+        current,
+      ),
+    ).toBeNull();
+    expect(
+      calculateRemainingEstimate([sample, { ...sample, id: 'failed', status: 'error' }], current),
+    ).toBeNull();
+  });
+  it('scales by batch size and supplies an uncertainty range and sample count', () => {
+    const sample = makeJob({
+      startedAt: 1000,
+      completedAt: 11000,
+      settings: { ...defaults, batch: 1 },
+    });
+    const current = makeJob({
+      status: 'queued',
+      progress: 80,
+      settings: { ...defaults, batch: 2 },
+    });
+    const result = calculateRemainingEstimate([sample, { ...sample, id: 'second' }], current)!;
+    expect(result.remainingSeconds).toBe(20);
+    expect(result.minSeconds).toBeLessThan(20);
+    expect(result.maxSeconds).toBeGreaterThan(20);
+    expect(result.sampleCount).toBe(2);
+    expect(result.confidence).toBe('low');
+  });
+  it('counts only the running and earlier queued jobs of the same server', () => {
+    const current = makeJob({ id: 'current', status: 'queued', createdAt: 20 });
+    const earlier = makeJob({ id: 'earlier', status: 'queued', createdAt: 10 });
+    const later = makeJob({ id: 'later', status: 'queued', createdAt: 30 });
+    const running = makeJob({ id: 'running', status: 'running' });
+    expect(
+      jobsAhead([current, earlier, later, running, { ...earlier, base: 'other' }], current).map(
+        (j) => j.id,
+      ),
+    ).toEqual(['earlier', 'running']);
+    expect(jobsAhead([current], running)).toEqual([]);
+  });
   it('returns null when there are fewer than 2 completed samples for the architecture', () => {
     const current = makeJob({
       id: 'current',

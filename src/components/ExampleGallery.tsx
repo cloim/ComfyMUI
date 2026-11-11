@@ -180,7 +180,7 @@ export function ExampleGallery({
                     autoPlay={!isHidden}
                     playsInline
                     preload="metadata"
-                    className={`h-full w-full object-cover ${isHidden ? 'scale-110 blur-2xl' : ''}`}
+                    className={`h-full w-full object-contain ${isHidden ? 'blur-2xl' : ''}`}
                   />
                 ) : (
                   <img
@@ -188,7 +188,7 @@ export function ExampleGallery({
                     alt=""
                     loading="lazy"
                     draggable={false}
-                    className={`h-full w-full object-cover transition-transform duration-300 ${isHidden ? 'scale-110 blur-2xl' : 'group-hover:scale-[1.03]'}`}
+                    className={`h-full w-full object-contain ${isHidden ? 'blur-2xl' : ''}`}
                   />
                 )}
                 {isHidden ? (
