@@ -28,6 +28,7 @@ export type GalleryFile = {
   type: 'output';
   mtime: number;
   size: number;
+  requestToken?: string;
   settings?: Partial<Generation>;
   summary?: GallerySummary;
   // No generation data in the file (made outside ComfyUI or saved without metadata).
@@ -38,10 +39,11 @@ export type GalleryIndex = { available: boolean; files: GalleryFile[] };
 // The app server only knows the folder of its own ComfyUI.
 export const GALLERY_BASE = '/comfy';
 
-export async function fetchGallery(): Promise<GalleryIndex | null> {
+export async function fetchGallery(force = false): Promise<GalleryIndex | null> {
   try {
     const response = await fetch('/api/gallery', {
       cache: 'no-store',
+      headers: force ? { 'X-Gallery-Refresh': '1' } : undefined,
       signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) return null;
@@ -105,6 +107,7 @@ export function galleryJob(file: GalleryFile, fallbackNegative: string): Job {
     id: `file:${galleryKey(file)}@${file.mtime}`,
     createdAt: file.mtime,
     completedAt: file.mtime,
+    requestToken: file.requestToken,
     settings: gallerySettings(file, fallbackNegative),
     base: GALLERY_BASE,
     preview: false,
