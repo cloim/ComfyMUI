@@ -21,10 +21,21 @@ export function openStateDb(file) {
       value TEXT NOT NULL
     );
   `);
-  const selectAll = db.prepare('SELECT key, value, updated_at FROM state');
+  // Older installations have no revision column. Adding it preserves every value.
+  if (
+    !db
+      .prepare('PRAGMA table_info(state)')
+      .all()
+      .some((column) => column.name === 'revision')
+  ) {
+    db.exec('ALTER TABLE state ADD COLUMN revision INTEGER NOT NULL DEFAULT 1');
+  }
+  const selectAll = db.prepare('SELECT key, value, updated_at, revision FROM state');
+  const selectOne = db.prepare('SELECT value, updated_at, revision FROM state WHERE key = ?');
   const upsert = db.prepare(
-    `INSERT INTO state (key, value, updated_at) VALUES (?, ?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    `INSERT INTO state (key, value, updated_at, revision) VALUES (?, ?, ?, 1)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at,
+       revision = state.revision + 1`,
   );
   const insertMissing = db.prepare(
     'INSERT OR IGNORE INTO state (key, value, updated_at) VALUES (?, ?, ?)',
@@ -35,7 +46,7 @@ export function openStateDb(file) {
   );
 
   function transaction(work) {
-    db.exec('BEGIN');
+    db.exec('BEGIN IMMEDIATE');
     try {
       work();
       db.exec('COMMIT');
@@ -46,13 +57,20 @@ export function openStateDb(file) {
   }
 
   return {
+    close() {
+      db.close();
+    },
     // { key: { value, updatedAt } }
     entries() {
-      /** @type {Record<string, { value: unknown, updatedAt: number }>} */
+      /** @type {Record<string, { value: unknown, updatedAt: number, revision: number }>} */
       const out = {};
       for (const row of selectAll.all()) {
         try {
-          out[row.key] = { value: JSON.parse(row.value), updatedAt: row.updated_at };
+          out[row.key] = {
+            value: JSON.parse(row.value),
+            updatedAt: row.updated_at,
+            revision: row.revision,
+          };
         } catch {
           // A broken row is skipped; the next write from a device replaces it.
         }
@@ -68,6 +86,31 @@ export function openStateDb(file) {
         }
       });
       return now;
+    },
+    // Each key is checked under the same write lock. An outdated client can never
+    // overwrite a row; non-conflicting keys from the request still make progress.
+    compareAndWrite(values, revisions) {
+      /** @type {Record<string, { value: unknown, updatedAt: number, revision: number }>} */
+      const entries = {};
+      /** @type {Record<string, { value: unknown, updatedAt: number, revision: number }>} */
+      const conflicts = {};
+      transaction(() => {
+        for (const [key, value] of Object.entries(values)) {
+          if (!STATE_KEY.test(key)) throw new Error('Invalid state key');
+          const row = selectOne.get(key);
+          const revision = row?.revision ?? 0;
+          if (!Number.isSafeInteger(revisions?.[key]) || revisions[key] !== revision) {
+            conflicts[key] = row
+              ? { value: JSON.parse(row.value), updatedAt: row.updated_at, revision }
+              : { value: null, updatedAt: 0, revision: 0 };
+            continue;
+          }
+          const updatedAt = Date.now();
+          upsert.run(key, JSON.stringify(value), updatedAt);
+          entries[key] = { value, updatedAt, revision: revision + 1 };
+        }
+      });
+      return { entries, conflicts };
     },
     // Keeps rows that already exist; used for the one-time legacy import.
     importMissing(entries) {
