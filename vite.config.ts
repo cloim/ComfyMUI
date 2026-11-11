@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { objectInfoMiddleware } from './object-info.mjs';
 export default defineConfig({
   plugins: [
     react(),
@@ -10,6 +11,9 @@ export default defineConfig({
     {
       name: 'dev-thumbnail-proxy',
       configureServer(server) {
+        server.middlewares.use(
+          objectInfoMiddleware(process.env.COMFY_URL || 'http://127.0.0.1:8188', { prewarm: true }),
+        );
         server.middlewares.use(async (req, res, next) => {
           const url = new URL(req.url || '', 'http://localhost');
           if (url.pathname !== '/comfy/thumb' && url.pathname !== '/comfy-thumb') {

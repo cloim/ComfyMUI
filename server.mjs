@@ -3,10 +3,11 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
 import sharp from 'sharp';
 import { mkdirSync, existsSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
-import { listGallery } from './gallery.mjs';
+import { listGallery, invalidateGallery } from './gallery.mjs';
 import { resolve, join, dirname, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { openStateDb, STATE_KEY } from './state-db.mjs';
+import { objectInfoMiddleware } from './object-info.mjs';
 
 const app = express();
 const upstream = process.env.COMFY_URL || 'http://127.0.0.1:8188';
@@ -154,7 +155,10 @@ app.get('/api/gallery', async (req, res) => {
   if (!dir) return res.json({ available: false, items: [] });
   try {
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ available: true, items: await listGallery(dir) });
+    res.json({
+      available: true,
+      items: await listGallery(dir, { force: req.headers['x-gallery-refresh'] === '1' }),
+    });
   } catch (err) {
     res.status(500).json({ error: { message: `output 폴더를 읽을 수 없습니다: ${err.message}` } });
   }
@@ -190,6 +194,7 @@ app.post('/api/outputs/delete', express.json({ limit: '256kb' }), async (req, re
     }
     removeThumbCache(filename, subfolder, 'output');
   }
+  invalidateGallery(dir);
   res.json(result);
 });
 
@@ -241,7 +246,17 @@ app.post('/api/state', express.json({ limit: '8mb' }), (req, res) => {
     return res
       .status(400)
       .json({ error: { message: `저장할 수 없는 항목입니다: ${bad.join(', ')}` } });
-  res.json({ updatedAt: stateDb.write(values) });
+  const revisions = req.body?.revisions;
+  if (
+    !revisions ||
+    typeof revisions !== 'object' ||
+    Array.isArray(revisions) ||
+    Object.keys(values).some((key) => !Number.isSafeInteger(revisions[key]) || revisions[key] < 0)
+  ) {
+    return res.status(428).json({ error: { message: '저장 전에 최신 설정을 확인해 주세요' } });
+  }
+  const result = stateDb.compareAndWrite(values, revisions);
+  res.status(Object.keys(result.conflicts).length ? 409 : 200).json(result);
 });
 
 // Tests start each case from an empty database.
@@ -302,6 +317,7 @@ const downloadProxy = createProxyMiddleware({
     },
   },
 });
+app.use(objectInfoMiddleware(upstream, { prewarm: true }));
 app.use('/comfy', downloadProxy);
 app.use('/comfy', proxy);
 app.use(

@@ -631,6 +631,7 @@ const mock = createServer(async (req, res) => {
         start: Date.now(),
         prompt: data.prompt,
         pngInfo: data.extra_data?.extra_pnginfo || {},
+        extraData: data.extra_data || {},
         text,
         cancelled: false,
       });
@@ -694,7 +695,9 @@ const mock = createServer(async (req, res) => {
       }
       return send({});
     }
-    const previewMatch = url.pathname.match(/^\/api\/lm\/(checkpoints|loras)\/set-preview-from-url$/);
+    const previewMatch = url.pathname.match(
+      /^\/api\/lm\/(checkpoints|loras)\/set-preview-from-url$/,
+    );
     if (previewMatch) {
       const list = previewMatch[1] === 'loras' ? mockLoras : mockCheckpoints;
       const target = list.find((x) => x.file_path === data.model_path);
@@ -919,10 +922,10 @@ const mock = createServer(async (req, res) => {
             !j.text.includes('slow') &&
             (Date.now() - j.start < 2200 || !j.wsCompleted),
         )
-        .map(([id]) => [1, id, {}, {}]),
+        .map(([id, j]) => [1, id, j.prompt, j.extraData]),
       queue_pending: [...jobs]
         .filter(([, j]) => !j.cancelled && j.text.includes('slow'))
-        .map(([id]) => [1, id, {}, {}]),
+        .map(([id, j]) => [1, id, j.prompt, j.extraData]),
     });
   if (url.pathname.startsWith('/history/')) {
     const id = url.pathname.slice('/history/'.length),
