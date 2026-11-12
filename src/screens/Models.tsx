@@ -53,6 +53,7 @@ import {
 import { Empty, IconButton, Modal, MultiSelect, SelectControl, Spinner } from '../components/ui';
 import { DetailExamples } from '../components/ExampleGallery';
 import { HeaderActionButton, HeaderActions } from '../components/HeaderActions';
+import { DownloadLocation, orderDownloadRoots } from '../components/DownloadLocation';
 import { DownloadTray } from '../components/DownloadTray';
 
 export default function Models() {
@@ -107,10 +108,7 @@ export default function Models() {
 
   // Facets & Tag management states
   const [folders, setFolders] = useState<string[]>(['Flux1.D', 'Krea2', 'Qwen']);
-  const [roots, setRoots] = useState<string[]>([
-    'E:/ComfyUI/models/diffusion_models',
-    'E:/ComfyUI/models/checkpoints',
-  ]);
+  const [roots, setRoots] = useState<string[]>([]);
   const [topTags, setTopTags] = useState<{ tag: string; count: number }[]>([
     { tag: 'flux', count: 10 },
     { tag: 'photorealistic', count: 8 },
@@ -187,10 +185,9 @@ export default function Models() {
       ]);
       if (fList.length) setFolders(fList);
       if (rList.length) {
-        const primary = rList.find((r) => /[/\\]diffusion_models[/\\]?$/i.test(r));
-        const ordered = primary ? [primary, ...rList.filter((r) => r !== primary)] : rList;
+        const ordered = orderDownloadRoots(rList);
         setRoots(ordered);
-        setTargetRoot((prev) => prev || ordered[0]);
+        setTargetRoot((prev) => (ordered.includes(prev) ? prev : ordered[0]));
       }
       if (tList.length) setTopTags(tList);
     } catch {
@@ -837,6 +834,11 @@ export default function Models() {
       return;
     }
 
+    if (!roots.includes(targetRoot || roots[0])) {
+      notify('저장 위치를 확인해 주세요 목록을 새로고침하면 다시 불러와요');
+      return;
+    }
+
     const chosenFolder =
       opts?.folderOverride !== undefined
         ? opts.folderOverride
@@ -868,6 +870,7 @@ export default function Models() {
         model_root: targetRoot || roots[0] || undefined,
         relative_path: chosenFolder,
         use_default_paths: useDefault,
+        use_save_dir_as_root: true,
         ...(airFileId ? { file_params: { id: airFileId } } : {}),
       },
     );
@@ -1441,6 +1444,7 @@ export default function Models() {
 
               {remoteVersions.length > 0 ? (
                 <div className="flex flex-col gap-2 border-t border-line pt-3">
+                  <DownloadLocation roots={roots} value={targetRoot} onChange={setTargetRoot} />
                   {remoteVersions.map((ver) => (
                     <div
                       key={ver.id}
@@ -1660,22 +1664,7 @@ export default function Models() {
                   </SelectControl>
                 </label>
 
-                {roots.length > 1 ? (
-                  <label className="flex flex-col gap-1.5 text-xs font-semibold">
-                    루트 경로
-                    <SelectControl
-                      aria-label="루트 경로 선택"
-                      value={targetRoot || roots[0]}
-                      onChange={(e) => setTargetRoot(e.target.value)}
-                    >
-                      {roots.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </SelectControl>
-                  </label>
-                ) : null}
+                <DownloadLocation roots={roots} value={targetRoot} onChange={setTargetRoot} />
 
                 <label className="flex flex-col gap-1.5 text-xs font-semibold">
                   저장 폴더

@@ -337,7 +337,8 @@ export async function setPreviewFromUrl(
       nsfw_level: image.nsfwLevel || 0,
     }),
   });
-  if (!res.success || !res.preview_url) throw new Error(res.error || '기본 이미지를 바꾸지 못했어요');
+  if (!res.success || !res.preview_url)
+    throw new Error(res.error || '기본 이미지를 바꾸지 못했어요');
   return { preview_url: res.preview_url, preview_nsfw_level: res.preview_nsfw_level ?? 0 };
 }
 
@@ -726,6 +727,7 @@ export async function downloadCivitaiLora(
     model_root?: string;
     relative_path?: string;
     use_default_paths?: boolean;
+    use_save_dir_as_root?: boolean;
     download_id?: string;
     file_params?: { id: number };
   },

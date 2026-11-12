@@ -55,6 +55,7 @@ import {
 import { Empty, IconButton, Modal, MultiSelect, SelectControl, Spinner } from '../components/ui';
 import { DetailExamples } from '../components/ExampleGallery';
 import { HeaderActionButton, HeaderActions } from '../components/HeaderActions';
+import { DownloadLocation, orderDownloadRoots } from '../components/DownloadLocation';
 import { DownloadTray } from '../components/DownloadTray';
 
 export default function Loras() {
@@ -114,7 +115,7 @@ export default function Loras() {
     'Krea2',
     'Qwen',
   ]);
-  const [roots, setRoots] = useState<string[]>(['E:/ComfyUI/models/loras']);
+  const [roots, setRoots] = useState<string[]>([]);
   const [topTags, setTopTags] = useState<{ tag: string; count: number }[]>([
     { tag: 'concept', count: 25 },
     { tag: 'portrait', count: 15 },
@@ -200,8 +201,9 @@ export default function Loras() {
       ]);
       if (fList.length) setFolders(fList);
       if (rList.length) {
-        setRoots(rList);
-        setTargetRoot((prev) => prev || rList[0]);
+        const ordered = orderDownloadRoots(rList);
+        setRoots(ordered);
+        setTargetRoot((prev) => (ordered.includes(prev) ? prev : ordered[0]));
       }
       if (tList.length) setTopTags(tList);
     } catch {
@@ -887,6 +889,11 @@ export default function Loras() {
       return;
     }
 
+    if (!roots.includes(targetRoot || roots[0])) {
+      notify('저장 위치를 확인해 주세요 목록을 새로고침하면 다시 불러와요');
+      return;
+    }
+
     const chosenFolder =
       opts?.folderOverride !== undefined
         ? opts.folderOverride
@@ -918,6 +925,7 @@ export default function Loras() {
         model_root: targetRoot || roots[0] || undefined,
         relative_path: chosenFolder,
         use_default_paths: useDefault,
+        use_save_dir_as_root: true,
         ...(airFileId ? { file_params: { id: airFileId } } : {}),
       },
     );
@@ -1537,6 +1545,7 @@ export default function Loras() {
 
               {remoteVersions.length > 0 ? (
                 <div className="flex flex-col gap-2 border-t border-line pt-3">
+                  <DownloadLocation roots={roots} value={targetRoot} onChange={setTargetRoot} />
                   {remoteVersions.map((ver) => (
                     <div
                       key={ver.id}
@@ -1754,6 +1763,8 @@ export default function Loras() {
                     ))}
                   </SelectControl>
                 </label>
+
+                <DownloadLocation roots={roots} value={targetRoot} onChange={setTargetRoot} />
 
                 <label className="flex flex-col gap-1.5 text-xs font-semibold">
                   저장 폴더
