@@ -29,13 +29,19 @@ WORKDIR /app/ComfyUI
 
 # Install the locked Python environment for ComfyUI core and every custom node.
 # The lock was resolved for Linux/Python 3.11 with the original Windows .venv versions as constraints
-# (docker/comfyui/constraints-windows-venv.txt) while keeping the base image torch 2.6.0+cu124.
-COPY docker/comfyui/python-requirements.lock.txt /tmp/python-requirements.lock.txt
-RUN pip install --no-cache-dir cython==3.2.5 numpy==1.26.4 setuptools==75.8.0 wheel==0.45.1 \
+# (docker/comfyui/constraints-windows-venv.txt), including torch 2.9.1+cu130 as on the original install.
+# The base image's CUDA 12 wheels share directories (nvidia/cudnn, nvidia/nccl, ...) with the CUDA 13
+# wheels, so they are removed first; mixed files break cuDNN attention.
+# onnxruntime-gpu on PyPI targets CUDA 12, so the same version is taken from the official CUDA 13 feed.
+COPY docker/comfyui/python-requirements.lock.txt docker/comfyui/onnxruntime-cuda13.txt /tmp/
+RUN pip uninstall -y $(pip list --format=freeze | grep -E '^nvidia-.*-cu12==' | cut -d= -f1) \
+    && pip install --no-cache-dir cython==3.2.5 numpy==1.26.4 setuptools==75.8.0 wheel==0.45.1 \
     && SAM2_BUILD_CUDA=0 pip install --no-cache-dir --no-deps --no-build-isolation \
-       -r /tmp/python-requirements.lock.txt --extra-index-url https://download.pytorch.org/whl/cu124 \
-    && pip install --no-cache-dir --no-deps --force-reinstall onnxruntime-gpu==1.26.0 opencv-contrib-python==4.10.0.84 \
-    && rm /tmp/python-requirements.lock.txt
+       -r /tmp/python-requirements.lock.txt --extra-index-url https://download.pytorch.org/whl/cu130 \
+    && pip install --no-cache-dir --no-deps --force-reinstall --require-hashes -r /tmp/onnxruntime-cuda13.txt \
+       --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-13/pypi/simple/ \
+    && pip install --no-cache-dir --no-deps --force-reinstall opencv-contrib-python==4.10.0.84 \
+    && rm /tmp/python-requirements.lock.txt /tmp/onnxruntime-cuda13.txt
 
 # Fail the build on dependency conflicts. zhipuai declares the Python 3.6 dataclasses backport, which is stdlib on 3.11.
 RUN pip check > /tmp/pip-check.txt 2>&1 || true; \
@@ -43,10 +49,6 @@ RUN pip check > /tmp/pip-check.txt 2>&1 || true; \
       | grep -v -x -F "No broken requirements found." > /tmp/pip-check-bad.txt || true; \
     if [ -s /tmp/pip-check-bad.txt ]; then cat /tmp/pip-check-bad.txt; exit 1; fi; \
     rm -f /tmp/pip-check.txt /tmp/pip-check-bad.txt
-
-# Fix PyTorch 2.6 infer_schema typing compatibility for PEP 585/604 annotations (list[int], UnionType)
-COPY docker/comfyui/patch_torch.py /tmp/patch_torch.py
-RUN python /tmp/patch_torch.py && rm /tmp/patch_torch.py
 
 # Build the pinned custom node seed (ComfyUI Registry versions with SHA-256, Git commits and the local overlay).
 # The running tree lives in the comfy-data volume (/data/custom_nodes); the entrypoint seeds it from here when absent.

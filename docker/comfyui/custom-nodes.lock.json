@@ -12,7 +12,7 @@
     {
       "dir": "anylanguage",
       "source": "overlay",
-      "note": "Upstream https://github.com/ArataAI/anylanguage.git (commit e4cb6cb82cdaea8f0a92987c9f4525c19dcd396e) returned 404 on 2026-11-12; source vendored from the local install with its local edit. demo.gif (6.8 MB, documentation only) is not vendored; the full repository with history is kept in comfy-data:/data/legacy-comfyui/custom_nodes/anylanguage.",
+      "note": "Upstream https://github.com/ArataAI/anylanguage.git (commit e4cb6cb82cdaea8f0a92987c9f4525c19dcd396e) returned 404 on 2026-11-12; source vendored from the local install with its local edit. demo.gif (6.8 MB, documentation only) is not vendored; the repository history is kept in comfy-data:/data/custom_nodes/anylanguage/.git.",
       "overlay": [
         "LICENSE",
         "README.md",

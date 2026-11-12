@@ -18,6 +18,10 @@ mkdir -p /data/models/diffusion_models \
 
 echo "[ComfyUI Entrypoint] Initialized persistence directories in /data"
 
+# /data/models is the SFTP share (uid/gid 1000). ComfyUI runs as root, so files written there by nodes
+# (LoRA Manager metadata, ReActor's ../../models downloads, Manager downloads) are handed back to 1000:1000.
+find /data/models \( ! -user 1000 -o ! -group 1000 \) -exec chown -h 1000:1000 {} + 2>/dev/null || true
+
 # Custom nodes live in the volume so node settings, downloads and Manager installs survive image rebuilds.
 # A fresh volume is seeded from the pinned tree built from docker/comfyui/custom-nodes.lock.json.
 if [ ! -e /data/custom_nodes ]; then
@@ -50,7 +54,7 @@ if [ ! -e /data/models-view/configs ]; then ln -s /app/ComfyUI/models/configs /d
 
 # Port and arguments
 PORT="${COMFY_PORT:-8188}"
-EXTRA_ARGS="${COMFY_EXTRA_ARGS:---lowvram --reserve-vram 1}"
+EXTRA_ARGS="${COMFY_EXTRA_ARGS:---lowvram --reserve-vram 1 --preview-method auto}"
 
 echo "[ComfyUI Entrypoint] Starting ComfyUI on port ${PORT} with args: ${EXTRA_ARGS}"
 

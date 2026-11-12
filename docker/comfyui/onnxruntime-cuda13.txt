@@ -1,0 +1,1 @@
+onnxruntime-gpu==1.26.0 --hash=sha256:84adba2f90c34ac7c35ce1cfebaa677cd238d71bf187f25d943b8498be46c4d7
