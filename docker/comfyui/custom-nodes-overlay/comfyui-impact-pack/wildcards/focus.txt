@@ -1,0 +1,9 @@
+face
+portrait
+upper body
+lower body
+cowboy shot
+feet out of frame
+fullbody
+wide shot
+very wide shot

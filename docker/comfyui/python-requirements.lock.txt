@@ -1,0 +1,1410 @@
+absl-py==2.4.0
+    # via
+    #   -c constraints-win.txt
+    #   mediapipe
+accelerate==1.14.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   peft
+addict==2.4.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+aiofiles==24.1.0
+    # via
+    #   -c constraints-win.txt
+    #   matrix-nio
+aiohappyeyeballs==2.6.2
+    # via
+    #   -c constraints-win.txt
+    #   aiohttp
+aiohttp==3.14.1
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   aiohttp-socks
+    #   matrix-nio
+aiohttp-socks==0.11.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r requirements-custom.txt
+    #   matrix-nio
+aiosignal==1.4.0
+    # via
+    #   -c constraints-win.txt
+    #   aiohttp
+aiosqlite==0.22.1
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r requirements-custom.txt
+albucore==0.0.24
+    # via
+    #   -c constraints-win.txt
+    #   albumentations
+    #   transparent-background
+albumentations==2.0.8
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-advancedliveportrait.txt
+    #   -r node-reqs/comfyui-reactor.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   insightface
+    #   transparent-background
+alembic==1.18.4
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+annotated-doc==0.0.4
+    # via
+    #   -c constraints-win.txt
+    #   fastapi
+    #   typer
+annotated-types==0.7.0
+    # via
+    #   -c constraints-win.txt
+    #   pydantic
+antlr4-python3-runtime==4.9.3
+    # via
+    #   -c constraints-win.txt
+    #   hydra-core
+    #   omegaconf
+anyio==4.13.0
+    # via
+    #   -c constraints-win.txt
+    #   fastapi
+    #   google-genai
+    #   httpx
+    #   httpx2
+    #   openai
+    #   starlette
+attrs==26.1.0
+    # via
+    #   -c constraints-win.txt
+    #   aiohttp
+    #   jsonschema
+    #   psd-tools
+    #   referencing
+av==17.1.0
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+beautifulsoup4==4.15.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r requirements-custom.txt
+    #   gdown
+bitsandbytes==0.50.2
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+blake3==1.0.8
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+blend-modes==2.2.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+blind-watermark==0.4.4
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+brotli==1.2.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r requirements-custom.txt
+cachebox==5.2.3
+    # via
+    #   -c constraints-win.txt
+    #   deepdiff
+cachetools==8.0.0
+    # via zhipuai
+certifi==2026.5.20
+    # via
+    #   -c constraints-win.txt
+    #   httpcore
+    #   httpx
+    #   mediapipe
+    #   requests
+cffi==2.0.0
+    # via
+    #   -c constraints-win.txt
+    #   cryptography
+    #   pynacl
+    #   sounddevice
+chardet==7.4.3
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   comfyui-manager
+charset-normalizer==3.4.7
+    # via
+    #   -c constraints-win.txt
+    #   requests
+    #   trimesh
+click==8.4.1
+    # via
+    #   -c constraints-win.txt
+    #   typer
+cmake==4.4.4
+    # via -r node-reqs/was-ns.txt
+color-matcher==0.6.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-kjnodes.txt
+colorlog==6.10.1
+    # via
+    #   -c constraints-win.txt
+    #   trimesh
+colour-science==0.4.6
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/bilbox-comfyui.txt
+comfy-aimdo==0.6.0
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   unifiedefficientloader
+comfy-angle==0.1.0
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+comfy-kitchen==0.2.40
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+comfyui-embedded-docs==0.5.16
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+comfyui-frontend-package==1.57.6
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+comfyui-manager==4.2.2
+    # via -r manager-reqs.txt
+comfyui-workflow-templates==0.11.103
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+comfyui-workflow-templates-core==0.3.394
+    # via
+    #   -c constraints-win.txt
+    #   comfyui-workflow-templates
+comfyui-workflow-templates-json==0.1.129
+    # via
+    #   -c constraints-win.txt
+    #   comfyui-workflow-templates
+comfyui-workflow-templates-media-api==0.3.84
+    # via
+    #   -c constraints-win.txt
+    #   comfyui-workflow-templates
+comfyui-workflow-templates-media-assets-01==0.1.48
+    # via
+    #   -c constraints-win.txt
+    #   comfyui-workflow-templates
+comfyui-workflow-templates-media-assets-02==0.1.29
+    # via
+    #   -c constraints-win.txt
+    #   comfyui-workflow-templates
+comfyui-workflow-templates-media-image==0.3.160
+    # via
+    #   -c constraints-win.txt
+    #   comfyui-workflow-templates
+comfyui-workflow-templates-media-other==0.3.229
+    # via
+    #   -c constraints-win.txt
+    #   comfyui-workflow-templates
+comfyui-workflow-templates-media-video==0.3.101
+    # via
+    #   -c constraints-win.txt
+    #   comfyui-workflow-templates
+contourpy==1.3.3
+    # via
+    #   -c constraints-win.txt
+    #   matplotlib
+cryptography==49.0.0
+    # via
+    #   -c constraints-win.txt
+    #   google-auth
+    #   pyjwt
+cstr @ git+https://github.com/ltdrdata/cstr@0520c29a18a7a869a6e5983861d6f7a4c86f8e9b
+    # via -r node-reqs/was-ns.txt
+cycler==0.12.1
+    # via
+    #   -c constraints-win.txt
+    #   matplotlib
+cython==3.2.5
+    # via
+    #   -c constraints-win.txt
+    #   insightface
+ddt==1.7.2
+    # via
+    #   -c constraints-win.txt
+    #   color-matcher
+deepdiff==9.1.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI-Crystools.txt
+    #   -r requirements-custom.txt
+diffusers==0.38.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+dill==0.4.1
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-advancedliveportrait.txt
+    #   -r node-reqs/comfyui-impact-pack.txt
+distro==1.9.0
+    # via google-genai
+docstring-parser==0.18.0
+    # via tyro
+docutils==0.23
+    # via
+    #   -c constraints-win.txt
+    #   color-matcher
+easydict==1.13
+    # via
+    #   -c constraints-win.txt
+    #   insightface
+    #   transparent-background
+einops==0.8.2
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   spandrel
+embreex==4.4.0
+    # via
+    #   -c constraints-win.txt
+    #   trimesh
+fairscale==0.4.13
+    # via -r node-reqs/was-ns.txt
+fastapi==0.162.5
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+ffmpy @ git+https://github.com/ltdrdata/ffmpy.git@f000737698b387ffaeab7cd871b0e9185811230d
+    # via -r node-reqs/was-ns.txt
+filelock==3.29.0
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   diffusers
+    #   gdown
+    #   huggingface-hub
+    #   torch
+    #   transformers
+flatbuffers==25.12.19
+    # via
+    #   -c constraints-win.txt
+    #   mediapipe
+    #   onnxruntime
+    #   onnxruntime-gpu
+fonttools==4.63.0
+    # via
+    #   -c constraints-win.txt
+    #   matplotlib
+frozenlist==1.8.0
+    # via
+    #   -c constraints-win.txt
+    #   aiohttp
+    #   aiosignal
+fsspec==2026.4.0
+    # via
+    #   -c constraints-win.txt
+    #   huggingface-hub
+    #   torch
+ftfy==6.3.1
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+fvcore==0.1.5.post20221221
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+gdown==6.5.1
+    # via transparent-background
+gguf==0.19.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI-GGUF.txt
+    #   -r requirements-custom.txt
+gitdb==4.0.12
+    # via
+    #   -c constraints-win.txt
+    #   gitpython
+gitpython==3.1.50
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   -r node-reqs/was-ns.txt
+    #   -r requirements-custom.txt
+    #   comfyui-manager
+google-ai-generativelanguage==0.6.15
+    # via google-generativeai
+google-api-core==2.33.0
+    # via
+    #   google-ai-generativelanguage
+    #   google-api-python-client
+    #   google-generativeai
+google-api-python-client==2.202.0
+    # via google-generativeai
+google-auth==2.62.2
+    # via
+    #   google-ai-generativelanguage
+    #   google-api-core
+    #   google-api-python-client
+    #   google-auth-httplib2
+    #   google-genai
+    #   google-generativeai
+google-auth-httplib2==0.4.4
+    # via google-api-python-client
+google-genai==3.2.0
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+google-generativeai==0.8.6
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+googleapis-common-protos==1.75.0
+    # via
+    #   google-api-core
+    #   grpcio-status
+greenlet==3.5.1
+    # via
+    #   -c constraints-win.txt
+    #   sqlalchemy
+grpcio==1.85.1
+    # via
+    #   google-api-core
+    #   grpcio-status
+grpcio-status==1.71.2
+    # via google-api-core
+h11==0.16.0
+    # via
+    #   -c constraints-win.txt
+    #   httpcore
+    #   httpcore2
+    #   matrix-nio
+h2==4.3.0
+    # via
+    #   -c constraints-win.txt
+    #   matrix-nio
+hf-xet==1.5.1
+    # via
+    #   -c constraints-win.txt
+    #   huggingface-hub
+hpack==4.1.0
+    # via
+    #   -c constraints-win.txt
+    #   h2
+httpcore==1.0.9
+    # via
+    #   -c constraints-win.txt
+    #   httpx
+httpcore2==2.16.0
+    # via httpx2
+httplib2==0.32.1
+    # via
+    #   google-api-python-client
+    #   google-auth-httplib2
+httpx==0.28.1
+    # via
+    #   -c constraints-win.txt
+    #   diffusers
+    #   trimesh
+httpx2==2.16.0
+    # via
+    #   google-genai
+    #   openai
+huggingface-hub==0.36.2
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   accelerate
+    #   comfyui-manager
+    #   diffusers
+    #   peft
+    #   timm
+    #   tokenizers
+    #   transformers
+hydra-core==1.3.3
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   sam-2
+hyperframe==6.1.0
+    # via
+    #   -c constraints-win.txt
+    #   h2
+idna==3.18
+    # via
+    #   -c constraints-win.txt
+    #   anyio
+    #   httpx
+    #   httpx2
+    #   requests
+    #   yarl
+imageio==2.37.3
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/bilbox-comfyui.txt
+    #   -r node-reqs/was-ns.txt
+    #   color-matcher
+    #   colour-science
+    #   scikit-image
+imageio-ffmpeg==0.6.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-advancedliveportrait.txt
+    #   -r node-reqs/comfyui-videohelpersuite.txt
+img2texture @ git+https://github.com/ltdrdata/img2texture.git@d6159abea44a0b2cf77454d3d46962c8b21eb9d3
+    # via -r node-reqs/was-ns.txt
+importlib-metadata==9.0.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   diffusers
+insightface==0.7.3
+    # via -r node-reqs/comfyui-reactor.txt
+iopath==0.1.10
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   fvcore
+    #   sam-2
+jinja2==3.1.6
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r requirements-custom.txt
+    #   torch
+jiter==0.19.0
+    # via openai
+joblib==1.5.3
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/was-ns.txt
+    #   scikit-learn
+jsonschema==4.26.0
+    # via
+    #   -c constraints-win.txt
+    #   matrix-nio
+    #   rembg
+    #   trimesh
+jsonschema-specifications==2025.9.1
+    # via
+    #   -c constraints-win.txt
+    #   jsonschema
+kiwisolver==1.5.0
+    # via
+    #   -c constraints-win.txt
+    #   matplotlib
+kornia==0.8.3
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   transparent-background
+kornia-rs==0.1.14
+    # via
+    #   -c constraints-win.txt
+    #   kornia
+lazy-loader==0.5
+    # via
+    #   -c constraints-win.txt
+    #   scikit-image
+llvmlite==0.47.0
+    # via
+    #   -c constraints-win.txt
+    #   numba
+lmdb==3.0.0
+    # via -r node-reqs/comfyui-advancedliveportrait.txt
+loguru==0.8.0
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+lxml==6.1.1
+    # via
+    #   -c constraints-win.txt
+    #   trimesh
+mako==1.3.12
+    # via
+    #   -c constraints-win.txt
+    #   alembic
+manifold3d==3.5.1
+    # via
+    #   -c constraints-win.txt
+    #   trimesh
+mapbox-earcut==2.0.0
+    # via
+    #   -c constraints-win.txt
+    #   trimesh
+markdown-it-py==4.2.0
+    # via
+    #   -c constraints-win.txt
+    #   rich
+markupsafe==3.0.3
+    # via
+    #   -c constraints-win.txt
+    #   jinja2
+    #   mako
+matplotlib==3.11.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui-florence2.txt
+    #   -r node-reqs/comfyui-impact-pack.txt
+    #   -r node-reqs/comfyui-kjnodes.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   -r node-reqs/was-ns.txt
+    #   color-matcher
+    #   insightface
+    #   mediapipe
+    #   ultralytics
+matrix-nio==0.25.2
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   -r requirements-custom.txt
+mdurl==0.1.2
+    # via
+    #   -c constraints-win.txt
+    #   markdown-it-py
+mediapipe==0.10.35
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+ml-dtypes==0.5.4
+    # via
+    #   -c constraints-win.txt
+    #   onnx
+mpmath==1.3.0
+    # via
+    #   -c constraints-win.txt
+    #   sympy
+mss==10.2.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-kjnodes.txt
+multidict==6.7.1
+    # via
+    #   -c constraints-win.txt
+    #   aiohttp
+    #   yarl
+narwhals==2.22.1
+    # via
+    #   -c constraints-win.txt
+    #   scikit-learn
+natsort==8.4.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r requirements-custom.txt
+networkx==3.6.1
+    # via
+    #   -c constraints-win.txt
+    #   scikit-image
+    #   torch
+    #   trimesh
+nh3==0.3.7
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   -r requirements-custom.txt
+numba==0.65.1
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/was-ns.txt
+    #   pymatting
+numpy==1.26.4
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/ComfyUI-Crystools.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/bilbox-comfyui.txt
+    #   -r node-reqs/comfyui-advancedliveportrait.txt
+    #   -r node-reqs/comfyui-impact-pack.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r node-reqs/comfyui-reactor.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   -r node-reqs/was-ns.txt
+    #   accelerate
+    #   albucore
+    #   albumentations
+    #   bitsandbytes
+    #   blend-modes
+    #   blind-watermark
+    #   color-matcher
+    #   colour-science
+    #   contourpy
+    #   diffusers
+    #   embreex
+    #   fairscale
+    #   fvcore
+    #   gguf
+    #   imageio
+    #   insightface
+    #   manifold3d
+    #   mapbox-earcut
+    #   matplotlib
+    #   mediapipe
+    #   ml-dtypes
+    #   numba
+    #   onnx
+    #   onnxruntime
+    #   onnxruntime-gpu
+    #   opencv-contrib-python
+    #   opencv-python
+    #   opencv-python-headless
+    #   peft
+    #   pilgram
+    #   psd-tools
+    #   pycollada
+    #   pymatting
+    #   pywavelets
+    #   rembg
+    #   sam-2
+    #   scikit-image
+    #   scikit-learn
+    #   scipy
+    #   shapely
+    #   spandrel
+    #   tifffile
+    #   torchsde
+    #   torchvision
+    #   transformers
+    #   trimesh
+    #   ultralytics
+    #   ultralytics-thop
+    #   vhacdx
+nvidia-cublas-cu12==12.4.5.8
+    # via
+    #   nvidia-cudnn-cu12
+    #   nvidia-cusolver-cu12
+    #   torch
+nvidia-cuda-cupti-cu12==12.4.127
+    # via torch
+nvidia-cuda-nvrtc-cu12==12.4.127
+    # via torch
+nvidia-cuda-runtime-cu12==12.4.127
+    # via torch
+nvidia-cudnn-cu12==9.1.0.70
+    # via torch
+nvidia-cufft-cu12==11.2.1.3
+    # via torch
+nvidia-curand-cu12==10.3.5.147
+    # via torch
+nvidia-cusolver-cu12==11.6.1.9
+    # via torch
+nvidia-cusparse-cu12==12.3.1.170
+    # via
+    #   nvidia-cusolver-cu12
+    #   torch
+nvidia-cusparselt-cu12==0.6.2
+    # via torch
+nvidia-ml-py==13.610.43
+    # via
+    #   -c constraints-win.txt
+    #   pynvml
+    #   ultralytics
+nvidia-nccl-cu12==2.21.5
+    # via torch
+nvidia-nvjitlink-cu12==12.4.127
+    # via
+    #   nvidia-cusolver-cu12
+    #   nvidia-cusparse-cu12
+    #   torch
+nvidia-nvtx-cu12==12.4.127
+    # via torch
+olefile==0.47
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r requirements-custom.txt
+omegaconf==2.3.1
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   hydra-core
+onnx==1.21.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-reactor.txt
+    #   insightface
+onnxruntime==1.26.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+onnxruntime-gpu==1.26.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+openai==3.49.0
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+opencv-contrib-python==4.10.0.84
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   mediapipe
+opencv-python==4.10.0.84
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/bilbox-comfyui.txt
+    #   -r node-reqs/comfyui-reactor.txt
+    #   -r node-reqs/comfyui-videohelpersuite.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   blind-watermark
+    #   transparent-background
+    #   ultralytics
+opencv-python-headless==4.10.0.84
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-advancedliveportrait.txt
+    #   -r node-reqs/comfyui-impact-pack.txt
+    #   -r node-reqs/comfyui-kjnodes.txt
+    #   -r node-reqs/was-ns.txt
+    #   -r requirements-custom.txt
+    #   albucore
+    #   albumentations
+    #   rembg
+opentelemetry-api==1.45.2
+    # via fastapi
+orderly-set==5.5.0
+    # via
+    #   -c constraints-win.txt
+    #   deepdiff
+packaging==26.2
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   accelerate
+    #   bitsandbytes
+    #   color-matcher
+    #   huggingface-hub
+    #   hydra-core
+    #   kornia
+    #   lazy-loader
+    #   matplotlib
+    #   onnxruntime
+    #   onnxruntime-gpu
+    #   peft
+    #   pooch
+    #   scikit-image
+    #   transformers
+peft==0.19.1
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+piexif==1.1.3
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI-Crystools.txt
+    #   -r node-reqs/comfyui-impact-pack.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r requirements-custom.txt
+pilgram==2.0.0
+    # via -r node-reqs/was-ns.txt
+pillow==12.2.0
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/ComfyUI-Crystools.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui-florence2.txt
+    #   -r node-reqs/comfyui-kjnodes.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   diffusers
+    #   fvcore
+    #   imageio
+    #   img2texture
+    #   insightface
+    #   matplotlib
+    #   pilgram
+    #   psd-tools
+    #   pymatting
+    #   rembg
+    #   sam-2
+    #   scikit-image
+    #   torchvision
+    #   trimesh
+    #   ultralytics
+platformdirs==4.10.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r requirements-custom.txt
+    #   pooch
+    #   yapf
+polars==1.41.2
+    # via
+    #   -c constraints-win.txt
+    #   ultralytics
+polars-runtime-32==1.41.2
+    # via
+    #   -c constraints-win.txt
+    #   polars
+pooch==1.9.0
+    # via rembg
+portalocker==3.2.0
+    # via
+    #   -c constraints-win.txt
+    #   iopath
+prettytable==3.17.0
+    # via
+    #   -c constraints-win.txt
+    #   insightface
+propcache==0.5.2
+    # via
+    #   -c constraints-win.txt
+    #   aiohttp
+    #   yarl
+proto-plus==1.28.2
+    # via
+    #   google-ai-generativelanguage
+    #   google-api-core
+protobuf==5.29.6
+    # via
+    #   -r node-reqs/ComfyUI-GGUF.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r requirements-custom.txt
+    #   google-ai-generativelanguage
+    #   google-api-core
+    #   google-generativeai
+    #   googleapis-common-protos
+    #   grpcio-status
+    #   onnx
+    #   onnxruntime
+    #   onnxruntime-gpu
+    #   proto-plus
+psd-tools==1.26.1
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+psutil==7.2.2
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   accelerate
+    #   peft
+    #   ultralytics
+py-cpuinfo==9.0.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI-Crystools.txt
+pyasn1==0.6.5
+    # via pyasn1-modules
+pyasn1-modules==0.4.2
+    # via google-auth
+pycollada==0.9.3
+    # via
+    #   -c constraints-win.txt
+    #   trimesh
+pycparser==3.0
+    # via
+    #   -c constraints-win.txt
+    #   cffi
+pycryptodome==3.23.0
+    # via
+    #   -c constraints-win.txt
+    #   matrix-nio
+pydantic==2.13.4
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   albumentations
+    #   fastapi
+    #   google-genai
+    #   google-generativeai
+    #   openai
+    #   pydantic-settings
+pydantic-core==2.46.4
+    # via
+    #   -c constraints-win.txt
+    #   pydantic
+pydantic-settings==2.14.1
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+pygithub==2.9.1
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   -r requirements-custom.txt
+    #   comfyui-manager
+pygments==2.20.0
+    # via
+    #   -c constraints-win.txt
+    #   rich
+pyjwt==2.13.0
+    # via
+    #   -c constraints-win.txt
+    #   pygithub
+    #   zhipuai
+pymatting==1.1.16
+    # via
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   rembg
+    #   transparent-background
+pynacl==1.6.2
+    # via
+    #   -c constraints-win.txt
+    #   pygithub
+pynvml==13.0.1
+    # via -r node-reqs/ComfyUI-Crystools.txt
+pyopengl==3.1.10
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+pyparsing==3.3.2
+    # via
+    #   -c constraints-win.txt
+    #   httplib2
+    #   matplotlib
+pysocks==1.7.1
+    # via requests
+python-dateutil==2.9.0.post0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   matplotlib
+    #   pycollada
+python-dotenv==1.2.2
+    # via
+    #   -c constraints-win.txt
+    #   pydantic-settings
+python-socks==2.8.1
+    # via
+    #   -c constraints-win.txt
+    #   aiohttp-socks
+pywavelets==1.9.0
+    # via blind-watermark
+pyyaml==6.0.3
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   accelerate
+    #   albumentations
+    #   fvcore
+    #   gguf
+    #   huggingface-hub
+    #   omegaconf
+    #   peft
+    #   timm
+    #   transformers
+    #   transparent-background
+    #   ultralytics
+    #   yacs
+pyzbar==0.1.9
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+qrcode==8.2
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+referencing==0.37.0
+    # via
+    #   -c constraints-win.txt
+    #   jsonschema
+    #   jsonschema-specifications
+regex==2026.5.9
+    # via
+    #   -c constraints-win.txt
+    #   diffusers
+    #   transformers
+rembg==2.0.69
+    # via -r node-reqs/was-ns.txt
+requests==2.34.2
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   diffusers
+    #   gdown
+    #   gguf
+    #   google-api-core
+    #   google-auth
+    #   google-genai
+    #   huggingface-hub
+    #   insightface
+    #   pooch
+    #   pygithub
+    #   transformers
+    #   ultralytics
+    #   zhipuai
+rich==15.0.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui-advancedliveportrait.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   -r requirements-custom.txt
+    #   comfyui-manager
+    #   typer
+    #   tyro
+rpds-py==2026.5.1
+    # via
+    #   -c constraints-win.txt
+    #   jsonschema
+    #   referencing
+rtree==1.4.1
+    # via
+    #   -c constraints-win.txt
+    #   trimesh
+safetensors==0.8.0
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r requirements-custom.txt
+    #   accelerate
+    #   diffusers
+    #   peft
+    #   spandrel
+    #   timm
+    #   transformers
+sam-2 @ git+https://github.com/facebookresearch/sam2@2b90b9f5ceec907a1c18123530e92e794ad901a4
+    # via -r node-reqs/comfyui-impact-pack.txt
+scikit-image==0.26.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui-impact-pack.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   -r node-reqs/was-ns.txt
+    #   insightface
+    #   rembg
+scikit-learn==1.9.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   -r node-reqs/was-ns.txt
+    #   insightface
+scipy==1.17.1
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/comfyui-impact-pack.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   -r node-reqs/was-ns.txt
+    #   albumentations
+    #   colour-science
+    #   insightface
+    #   pymatting
+    #   rembg
+    #   scikit-image
+    #   scikit-learn
+    #   torchsde
+    #   trimesh
+    #   ultralytics
+segment-anything==1.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui-impact-pack.txt
+    #   -r node-reqs/comfyui-reactor.txt
+    #   -r requirements-custom.txt
+sentencepiece==0.2.1
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/ComfyUI-GGUF.txt
+    #   -r requirements-custom.txt
+shapely==2.1.2
+    # via
+    #   -c constraints-win.txt
+    #   trimesh
+shellingham==1.5.4
+    # via
+    #   -c constraints-win.txt
+    #   typer
+shtab==1.13.0
+    # via tyro
+simpleeval==1.0.7
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+simsimd==6.5.16
+    # via
+    #   -c constraints-win.txt
+    #   albucore
+six==1.17.0
+    # via
+    #   -c constraints-win.txt
+    #   python-dateutil
+smmap==5.0.3
+    # via
+    #   -c constraints-win.txt
+    #   gitdb
+sniffio==1.3.1
+    # via
+    #   google-genai
+    #   openai
+sounddevice==0.5.5
+    # via
+    #   -c constraints-win.txt
+    #   mediapipe
+soupsieve==2.8.4
+    # via
+    #   -c constraints-win.txt
+    #   beautifulsoup4
+spandrel==0.4.2
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+sqlalchemy==2.0.50
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   alembic
+starlette==1.10.0
+    # via fastapi
+stringzilla==4.6.2
+    # via
+    #   -c constraints-win.txt
+    #   albucore
+svg-path==7.0
+    # via
+    #   -c constraints-win.txt
+    #   trimesh
+sympy==1.13.1
+    # via torch
+tabulate==0.10.0
+    # via
+    #   -c constraints-win.txt
+    #   fvcore
+tenacity==9.1.4
+    # via google-genai
+termcolor==3.3.0
+    # via
+    #   -c constraints-win.txt
+    #   fvcore
+threadpoolctl==3.6.0
+    # via
+    #   -c constraints-win.txt
+    #   scikit-learn
+tifffile==2025.12.20
+    # via
+    #   -c constraints-win.txt
+    #   scikit-image
+timm==1.0.27
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui-advancedliveportrait.txt
+    #   -r node-reqs/was-ns.txt
+    #   transparent-background
+tokenizers==0.22.2
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/comfyui-florence2.txt
+    #   transformers
+toml==0.10.2
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-lora-manager.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   -r requirements-custom.txt
+    #   comfyui-manager
+torch==2.6.0+cu124
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/ComfyUI-Crystools.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   accelerate
+    #   bitsandbytes
+    #   fairscale
+    #   kornia
+    #   peft
+    #   sam-2
+    #   spandrel
+    #   timm
+    #   torchsde
+    #   torchvision
+    #   transparent-background
+    #   ultralytics
+    #   ultralytics-thop
+torchsde==0.2.6
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+torchvision==0.21.0+cu124
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   sam-2
+    #   spandrel
+    #   timm
+    #   transparent-background
+    #   ultralytics
+tqdm==4.68.2
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/was-ns.txt
+    #   fvcore
+    #   gdown
+    #   gguf
+    #   google-generativeai
+    #   huggingface-hub
+    #   insightface
+    #   iopath
+    #   peft
+    #   rembg
+    #   sam-2
+    #   transformers
+    #   transparent-background
+trampoline==0.1.2
+    # via
+    #   -c constraints-win.txt
+    #   torchsde
+transformers==4.56.2
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui-impact-pack.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   -r node-reqs/was-ns.txt
+    #   comfyui-manager
+    #   peft
+transparent-background==1.3.4
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+trimesh==4.12.2
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+triton==3.2.0
+    # via torch
+truststore==0.10.5
+    # via
+    #   httpcore2
+    #   httpx2
+typer==0.25.1
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   -r requirements-custom.txt
+    #   comfyui-manager
+    #   typer-config
+typer-config==1.5.1
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+typing-extensions==4.15.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui-manager.txt
+    #   aiohttp
+    #   aiosignal
+    #   alembic
+    #   anyio
+    #   beautifulsoup4
+    #   blake3
+    #   colour-science
+    #   comfyui-manager
+    #   fastapi
+    #   gdown
+    #   google-genai
+    #   google-generativeai
+    #   grpcio
+    #   httpx2
+    #   huggingface-hub
+    #   iopath
+    #   onnx
+    #   openai
+    #   opentelemetry-api
+    #   pydantic
+    #   pydantic-core
+    #   pygithub
+    #   referencing
+    #   spandrel
+    #   sqlalchemy
+    #   starlette
+    #   torch
+    #   typing-inspection
+    #   tyro
+typing-inspection==0.4.2
+    # via
+    #   -c constraints-win.txt
+    #   fastapi
+    #   pydantic
+    #   pydantic-settings
+tyro==0.8.5
+    # via -r node-reqs/comfyui-advancedliveportrait.txt
+ultralytics==8.4.67
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui-advancedliveportrait.txt
+    #   -r node-reqs/comfyui-reactor.txt
+ultralytics-thop==2.0.20
+    # via
+    #   -c constraints-win.txt
+    #   ultralytics
+unifiedefficientloader==0.5.4
+    # via -r node-reqs/ComfyUI-QuantOps.txt
+unpaddedbase64==2.1.0
+    # via
+    #   -c constraints-win.txt
+    #   matrix-nio
+uritemplate==4.2.0
+    # via google-api-python-client
+urllib3==2.7.0
+    # via
+    #   -c constraints-win.txt
+    #   gdown
+    #   pygithub
+    #   requests
+uv==0.13.7
+    # via
+    #   -r node-reqs/comfyui-manager.txt
+    #   comfyui-manager
+vhacdx==0.0.10
+    # via
+    #   -c constraints-win.txt
+    #   trimesh
+wcwidth==0.8.1
+    # via
+    #   -c constraints-win.txt
+    #   ftfy
+    #   prettytable
+websockets==17.4
+    # via google-genai
+wget==3.2
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   transparent-background
+xxhash==3.7.0
+    # via
+    #   -c constraints-win.txt
+    #   trimesh
+yacs==0.1.8
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+    #   fvcore
+yapf==0.43.0
+    # via
+    #   -c constraints-win.txt
+    #   -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+    #   -r node-reqs/comfyui_controlnet_aux.txt
+yarl==1.24.2
+    # via
+    #   -c constraints-win.txt
+    #   -r comfy-reqs.txt
+    #   aiohttp
+zhipuai==1.0.7
+    # via -r node-reqs/ComfyUI_LayerStyle_Advance.txt
+zipp==4.1.0
+    # via
+    #   -c constraints-win.txt
+    #   importlib-metadata
+
+# The following packages were excluded from the output:
+# dataclasses

@@ -1,0 +1,12 @@
+node_modules
+.cache
+.git
+.github
+.worktrees
+%programdata%
+dist
+test-results
+docs
+*.log
+data/*.db-wal
+data/*.db-shm

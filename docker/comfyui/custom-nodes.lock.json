@@ -1,0 +1,412 @@
+{
+  "comfyui": {
+    "repo": "https://github.com/comfyanonymous/ComfyUI.git",
+    "tag": "v0.44.2",
+    "commit": "e6515b16ed360b01bd6548bffaca193f88f181fb"
+  },
+  "root_files_from_comfyui": [
+    "websocket_image_save.py",
+    "example_node.py.example"
+  ],
+  "nodes": [
+    {
+      "dir": "anylanguage",
+      "source": "overlay",
+      "note": "Upstream https://github.com/ArataAI/anylanguage.git (commit e4cb6cb82cdaea8f0a92987c9f4525c19dcd396e) returned 404 on 2026-11-12; source vendored from the local install with its local edit. demo.gif (6.8 MB, documentation only) is not vendored; the full repository with history is kept in comfy-data:/data/legacy-comfyui/custom_nodes/anylanguage.",
+      "overlay": [
+        "LICENSE",
+        "README.md",
+        "UI.png",
+        "__init__.py",
+        "anylanguage.py"
+      ]
+    },
+    {
+      "dir": "bilbox-comfyui",
+      "source": "registry",
+      "node_id": "bilbox-comfyui",
+      "version": "1.0.1",
+      "url": "https://cdn.comfy.org/bilbox/bilbox-comfyui/1.0.1/node.tar.gz",
+      "sha256": "66d69dc0861c9ab436ab12ce0beeb29a5696aa266cfbd1f5e5a8a1170d4e3c01",
+      "overlay": [
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "cg-use-everywhere",
+      "source": "registry",
+      "node_id": "cg-use-everywhere",
+      "version": "7.8.0",
+      "url": "https://cdn.comfy.org/chrisgoringe/cg-use-everywhere/7.8.0/node.zip",
+      "sha256": "d9a9c15cf9855dba95a69e067a9eb162990c98286b245b60846a93b2fd9a3754",
+      "overlay": [
+        "docs/116.png",
+        "docs/auto.gif",
+        "docs/bypass_catch1.png",
+        "docs/bypass_catch2.png",
+        "docs/clashes.png",
+        "docs/ComfyUI_temp_zbfdv_00012_.png",
+        "docs/connected.png",
+        "docs/connection-ui.png",
+        "docs/deprecated.md",
+        "docs/group.png",
+        "docs/highway.png",
+        "docs/image.png",
+        "docs/imagex.png",
+        "docs/kSampler.png",
+        "docs/mouseOver.gif",
+        "docs/off.png",
+        "docs/on.png",
+        "docs/options116.png",
+        "docs/portrait.png",
+        "docs/priority.gif",
+        "docs/regex.png",
+        "docs/run.png",
+        "docs/sampler and sigma.png",
+        "docs/separate.png",
+        "docs/showlinks.png",
+        "docs/test-workflow-screenshot.png",
+        "docs/test-workflow.json",
+        "docs/test-workflow.png",
+        "docs/UE3.png",
+        "docs/UEQ.png",
+        "docs/UEQportrait.png",
+        "docs/unconnected.png",
+        "docs/workflow.png",
+        "js/ue_debug.js",
+        "js/use_everywhere_nodes.js",
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "comfyui-advanced-controlnet",
+      "source": "registry",
+      "node_id": "comfyui-advanced-controlnet",
+      "version": "1.6.0",
+      "url": "https://cdn.comfy.org/kosinkadink/comfyui-advanced-controlnet/1.6.0/node.zip",
+      "sha256": "408b551b3c118f71e9a7cf1a678595e4653f16c4c012bcff8425a0a6e0dbb5be",
+      "overlay": [
+        "adv_control/documentation.py",
+        "web/js/autosize.js",
+        "web/js/documentation.js",
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "comfyui-advancedliveportrait",
+      "source": "registry",
+      "node_id": "comfyui-advancedliveportrait",
+      "version": "1.0.0",
+      "url": "https://cdn.comfy.org/starmapking/comfyui-advancedliveportrait/1.0.0/node.tar.gz",
+      "sha256": "353feec7fc2def88a75b4ea350b67b8b39b200c29d66b363a71907718f2c9afc",
+      "overlay": [
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "ComfyUI-Crystools",
+      "source": "registry",
+      "node_id": "ComfyUI-Crystools",
+      "version": "1.27.4",
+      "url": "https://cdn.comfy.org/crystian/ComfyUI-Crystools/1.27.4/node.zip",
+      "sha256": "8b2256109d15fcbf027b99a24bfbd5ea4554591ddb6655442dbdf2db017657b6",
+      "overlay": [
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "comfyui-custom-scripts",
+      "source": "registry",
+      "node_id": "comfyui-custom-scripts",
+      "version": "1.2.5",
+      "url": "https://cdn.comfy.org/pythongosssss/comfyui-custom-scripts/1.2.5/node.zip",
+      "sha256": "d01092bf97a983dd85dd3f7268893383ea036347c27005dedd9a758a953dc5fe",
+      "overlay": [
+        "pysssss.json",
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "comfyui-florence2",
+      "source": "registry",
+      "node_id": "comfyui-florence2",
+      "version": "1.1.0",
+      "url": "https://cdn.comfy.org/kijai/comfyui-florence2/1.1.0/node.zip",
+      "sha256": "b6e2cf01c9c05cdf6b652019e24c7136d89cba88180656a6fc7fc8e6d2c97f53",
+      "overlay": [
+        "configuration_florence2.py",
+        "modeling_florence2.py",
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "ComfyUI-GGUF",
+      "source": "registry",
+      "node_id": "ComfyUI-GGUF",
+      "version": "1.1.10",
+      "url": "https://cdn.comfy.org/city96/ComfyUI-GGUF/1.1.10/node.zip",
+      "sha256": "20bf8136b42a970242e0ee7069f0ba70350184da1305c212882fd89534dd328b",
+      "overlay": [
+        "loader.py",
+        "nodes.py",
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "ComfyUI-GhostAssetCleanup",
+      "source": "overlay",
+      "overlay": [
+        "__init__.py"
+      ]
+    },
+    {
+      "dir": "comfyui-impact-pack",
+      "source": "registry",
+      "node_id": "comfyui-impact-pack",
+      "version": "8.28.3",
+      "url": "https://cdn.comfy.org/drltdata/comfyui-impact-pack/8.28.3/node.zip",
+      "sha256": "12f9c7e8181a79d1f3b6d61f23cd71e49bfaffb04918e5d38a7cd4937e76e2ee",
+      "overlay": [
+        "impact-pack.ini",
+        "test/advanced-sampler.json",
+        "test/detailer-pipe-test-sdxl.json",
+        "test/detailer-pipe-test.json",
+        "test/impactwildcardprocessor_separate_tests.json",
+        "test/impactwildcardprocessor_yaml_tests.json",
+        "test/loop-test.json",
+        "test/masks.json",
+        "test/regional_prompt.json",
+        "wildcards/accear.txt",
+        "wildcards/accface.txt",
+        "wildcards/acchair.txt",
+        "wildcards/acchand.txt",
+        "wildcards/accneck.txt",
+        "wildcards/action.txt",
+        "wildcards/age1.txt",
+        "wildcards/age2.txt",
+        "wildcards/animalears.txt",
+        "wildcards/bangs.txt",
+        "wildcards/body.txt",
+        "wildcards/body2.txt",
+        "wildcards/bottoms.txt",
+        "wildcards/breasts.txt",
+        "wildcards/color.txt",
+        "wildcards/costume.txt",
+        "wildcards/ears.txt",
+        "wildcards/eyecolor.txt",
+        "wildcards/eyescolor.txt",
+        "wildcards/flower.txt",
+        "wildcards/focus.txt",
+        "wildcards/furry.txt",
+        "wildcards/haircolor.txt",
+        "wildcards/hairlength.txt",
+        "wildcards/hairstyle.txt",
+        "wildcards/hairstyle2.txt",
+        "wildcards/humans.txt",
+        "wildcards/jewel.txt",
+        "wildcards/jobs.txt",
+        "wildcards/my_bottom.txt",
+        "wildcards/my_hairstyle.txt",
+        "wildcards/my_hairstyle2.txt",
+        "wildcards/my_top.txt",
+        "wildcards/nsfw.txt",
+        "wildcards/pierce.txt",
+        "wildcards/place.txt",
+        "wildcards/posture.txt",
+        "wildcards/posture2.txt",
+        "wildcards/shoes.txt",
+        "wildcards/sight.txt",
+        "wildcards/skin.txt",
+        "wildcards/species.txt",
+        "wildcards/tail.txt",
+        "wildcards/tail2.txt",
+        "wildcards/theme.txt",
+        "wildcards/tops.txt",
+        "wildcards/underwear.txt",
+        "wildcards/wings.txt",
+        "wildcards/wings2.txt",
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "comfyui-kjnodes",
+      "source": "registry",
+      "node_id": "comfyui-kjnodes",
+      "version": "1.4.9",
+      "url": "https://cdn.comfy.org/kijai/comfyui-kjnodes/1.4.9/node.zip",
+      "sha256": "c1f1657fdf263c7f58b4adb2f6f0c414f7659731988ae8b3345088a9719171f2",
+      "overlay": [
+        ".github/FUNDING.yml",
+        "intrinsic_loras/intrinsic_loras.txt",
+        "kjweb_async/protovis.min.js",
+        "kjweb_async/svg-path-properties.min.js",
+        "nodes/intrinsic_lora_nodes.py",
+        "web/green.png",
+        "web/red.png",
+        "web/js/browserstatus.js",
+        "web/js/point_editor.js",
+        "web/js/spline_editor.js",
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "comfyui-lora-manager",
+      "source": "git",
+      "url": "https://github.com/willmiao/ComfyUI-Lora-Manager",
+      "commit": "afa82bc7207422ec43a2740584026b7a143500e1",
+      "branch": "main",
+      "overlay": []
+    },
+    {
+      "dir": "comfyui-manager",
+      "source": "git",
+      "url": "https://github.com/ltdrdata/ComfyUI-Manager",
+      "commit": "4c50a2bc8b9e684d8a85930567957470b952bebe",
+      "branch": "main",
+      "overlay": []
+    },
+    {
+      "dir": "ComfyUI-QuantOps",
+      "source": "registry",
+      "node_id": "ComfyUI-QuantOps",
+      "version": "1.9.7",
+      "url": "https://cdn.comfy.org/silveroxides/ComfyUI-QuantOps/1.9.7/node.zip",
+      "sha256": "d17626f2bb28d7d2481ce03bbfa3eea3ee0d403339c5ee95889cb764c75bd8ae",
+      "overlay": [
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "comfyui-reactor",
+      "source": "registry",
+      "node_id": "comfyui-reactor",
+      "version": "0.6.1-b3",
+      "url": "https://cdn.comfy.org/gourieff/comfyui-reactor/0.6.1-b3/node.zip",
+      "sha256": "cae73405df0c60c57f7e66c3fc1bb3648ccd3bf7e30c9c5c9c194a1da14b2890",
+      "overlay": [
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "comfyui-videohelpersuite",
+      "source": "registry",
+      "node_id": "comfyui-videohelpersuite",
+      "version": "1.7.9",
+      "url": "https://cdn.comfy.org/kosinkadink/comfyui-videohelpersuite/1.7.9/node.zip",
+      "sha256": "ac63991d8b237afe5b2cd2b287a14b4a4d40ff203c0f2ee9d5fe61059f57cdf8",
+      "overlay": [
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "ComfyUI_ADV_CLIP_emb",
+      "source": "git",
+      "url": "https://github.com/BlenderNeko/ComfyUI_ADV_CLIP_emb",
+      "commit": "63984deefb005da1ba90a1175e21d91040da38ab",
+      "branch": "master",
+      "overlay": []
+    },
+    {
+      "dir": "ComfyUI_Comfyroll_CustomNodes",
+      "source": "git",
+      "url": "https://github.com/Suzie1/ComfyUI_Comfyroll_CustomNodes",
+      "commit": "d78b780ae43fcf8c6b7c6505e6ffb4584281ceca",
+      "branch": "main",
+      "overlay": []
+    },
+    {
+      "dir": "comfyui_controlnet_aux",
+      "source": "registry",
+      "node_id": "comfyui_controlnet_aux",
+      "version": "1.1.5",
+      "url": "https://cdn.comfy.org/fannovel16/comfyui_controlnet_aux/1.1.5/node.zip",
+      "sha256": "c8b3c719e0dd44aded4c581906a68f0a7b397fc51ad95404a0cdc205ee4f8422",
+      "overlay": [
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "ComfyUI_LayerStyle_Advance",
+      "source": "git",
+      "url": "https://github.com/chflame163/ComfyUI_LayerStyle_Advance",
+      "commit": "51ee6a999bb0f3bb0ab488f5a37dbbd28d3c60b1",
+      "branch": "main",
+      "overlay": []
+    },
+    {
+      "dir": "comfyui_ultimatesdupscale",
+      "source": "registry",
+      "node_id": "comfyui_ultimatesdupscale",
+      "version": "1.7.2",
+      "url": "https://cdn.comfy.org/ssit/comfyui_ultimatesdupscale/1.7.2/node.zip",
+      "sha256": "da26f141f1c6632176036778a0df81017e6be19525bc3345ab78a700b372192e",
+      "overlay": [
+        "config.json",
+        "nodes.py",
+        "utils.py",
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "derfuu_comfyui_moddednodes",
+      "source": "registry",
+      "node_id": "derfuu_comfyui_moddednodes",
+      "version": "1.0.1",
+      "url": "https://cdn.comfy.org/derfuu/derfuu_comfyui_moddednodes/1.0.1/node.tar.gz",
+      "sha256": "08314c8c9dced778c386ac1510c120e6e52a092b373d6fb5bf21bf6a4ef15579",
+      "overlay": [
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "flux-prompt-generator",
+      "source": "registry",
+      "node_id": "flux-prompt-generator",
+      "version": "1.0.5",
+      "url": "https://cdn.comfy.org/fairy-root/flux-prompt-generator/1.0.5/node.zip",
+      "sha256": "83d0b73cd216aead09e80878f629529cea94ff916904e55472859ccf6197c525",
+      "overlay": [
+        "data/ethnicity.json",
+        "flux_prompt_generator.py",
+        "CLAUDE.md",
+        "data/nudity.json",
+        "data/persona.json",
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "rgthree-comfy",
+      "source": "registry",
+      "node_id": "rgthree-comfy",
+      "version": "1.0.2607232129",
+      "url": "https://cdn.comfy.org/rgthree/rgthree-comfy/1.0.2607232129/node.zip",
+      "sha256": "319b72929cea08d3b322e30af2c4e57930906b57db0812e6ba29ea52d35b5757",
+      "overlay": [
+        "rgthree_config.json",
+        "src_web/scripts_comfy/ui/components/button.ts",
+        "src_web/scripts_comfy/ui/components/buttonGroup.ts",
+        "src_web/scripts_comfy/ui/components/popup.ts",
+        ".tracking"
+      ]
+    },
+    {
+      "dir": "was-ns",
+      "source": "registry",
+      "node_id": "was-ns",
+      "version": "3.0.1",
+      "url": "https://cdn.comfy.org/drltdata/was-ns/3.0.1/node.zip",
+      "sha256": "5fea76bd408e649dfc521ffeccd75bd60d82589074dffe0d0fa5b2d0370faf9f",
+      "overlay": [
+        "was_suite_config.json",
+        ".tracking"
+      ]
+    }
+  ],
+  "excluded_large_stale_files": [
+    "comfyui-kjnodes/intrinsic_loras/intrinsic_lora_sd15_albedo.safetensors",
+    "comfyui-kjnodes/intrinsic_loras/intrinsic_lora_sd15_depth.safetensors",
+    "comfyui-kjnodes/intrinsic_loras/intrinsic_lora_sd15_normal.safetensors",
+    "comfyui-kjnodes/intrinsic_loras/intrinsic_lora_sd15_shading.safetensors",
+    "anylanguage/demo.gif"
+  ]
+}

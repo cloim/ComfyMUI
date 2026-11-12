@@ -1,0 +1,6 @@
+tail ring
+tail bow
+tail ribbon
+tail ornament
+tail bell
+tail piercing

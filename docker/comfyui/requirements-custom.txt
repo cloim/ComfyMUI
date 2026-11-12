@@ -1,0 +1,24 @@
+# Requirements for ComfyUI custom nodes (GGUF, LoRA Manager, Manager, etc.)
+gguf>=0.13.0
+sentencepiece
+protobuf
+aiohttp-socks
+jinja2
+safetensors
+piexif
+olefile
+toml
+natsort
+GitPython
+aiosqlite
+beautifulsoup4
+platformdirs
+brotli>=1.2.0
+PyGithub
+matrix-nio
+typer
+rich
+nh3>=0.3.7
+opencv-python-headless
+deepdiff
+segment-anything

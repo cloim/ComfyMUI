@@ -1,0 +1,31 @@
+shirt
+t-shirt
+frilled shirt
+collared shirt
+dress shirt
+striped shirt
+sleeveless shirt
+compression shirt
+off-shoulder shirt
+unbuttoned white shirt
+tank top
+tube top
+crop top
+blouse
+downblouse
+halterneck
+sweater
+pullover
+turtleneck
+sweater vest
+sweater dress
+ribbed sweater
+aran sweater
+hoodie
+cropped hoodie
+polka dot hoodie
+print hoodie
+sleeveless hoodie
+striped hoodie
+capelet
+open robe

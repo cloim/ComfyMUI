@@ -1,0 +1,69 @@
+jeans
+cutoff jeans
+chaps
+tight pants
+bell-bottoms
+capri pants
+downpants
+lowleg pants
+pants rolled up
+shorts
+denim shorts
+bike shorts
+gym shorts
+buruma
+bloomers
+short shorts
+lowleg shorts
+micro shorts
+shorts under skirt
+long skirt
+miniskirt
+lowleg skirt
+micro skirt
+high-waist skirt
+high-low skirt
+wrap skirt
+layered skirt
+mermaid skirt
+overall skirt
+overall skirt
+suspender skirt
+skirt pants
+tight skirt
+tulip skirt
+pannier skirt
+flared skirt
+pleated skirt
+bell-bottoms
+bike_shorts
+bloomers
+bubble_skirt
+buruma
+capri_pants
+chaps
+cutoff_jeans
+denim_shorts
+dolphin_shorts
+gym_shorts
+high-low_skirt
+high-waist_skirt
+jeans
+long_skirt
+lowleg_pants
+lowleg_shorts
+lowleg_skirt
+micro_shorts
+microskirt
+miniskirt
+overall_skirt
+pants_rolled_up
+plaid_skirt
+pleated_skirt
+sarong
+short_shorts
+shorts
+shorts_under_skirt
+skirt
+suspender_skirt
+tight_pants

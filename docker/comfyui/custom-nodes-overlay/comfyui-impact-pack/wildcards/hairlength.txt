@@ -1,0 +1,7 @@
+short
+very short
+absurdly short
+medium
+long
+very long
+absurdly long

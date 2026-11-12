@@ -12,7 +12,7 @@ import { objectInfoMiddleware } from './object-info.mjs';
 const app = express();
 const upstream = process.env.COMFY_URL || 'http://127.0.0.1:8188';
 const stateDb = openStateDb(process.env.STATE_DB || resolve('data/comfymui.db'));
-const thumbCacheDir = resolve('.cache/thumbnails');
+const thumbCacheDir = resolve(process.env.THUMB_CACHE_DIR || '.cache/thumbnails');
 mkdirSync(thumbCacheDir, { recursive: true });
 
 function sameOrigin(req) {

@@ -32,6 +32,64 @@ npm start
 
 PowerShell 예: `$env:COMFY_URL='http://127.0.0.1:8188'; npm start`
 
+### Docker Compose 실행
+
+Docker Compose를 사용하면 ComfyUI GPU 서비스와 ComfyMUI Node.js 서비스를 컨테이너 환경으로 분리하여 안전하게 실행할 수 있습니다.
+
+- **Named Volume (2개)**:
+  - `comfy-data`: ComfyUI 영속 데이터 (`models/`, `output/`, `input/`, `user/`, `temp/`)
+  - `comfymui-data`: ComfyMUI 영속 데이터 (SQLite DB 및 썸네일 캐시)
+- **로컬 모델 연결**: 호스트의 기존 모델 폴더(`HOST_MODELS_DIR`, 기본값: `E:/Models`)를 읽기·쓰기 bind mount로 연결하며, `extra_model_paths.yaml`을 통해 `comfy-data/models`와 함께 검색합니다. 신규 모델 다운로드는 `comfy-data/models`에 기본 저장됩니다. 모델과 LoRA의 CivitAI 다운로드에서 저장 위치를 Docker 볼륨 또는 로컬 모델 폴더로 선택할 수 있으며, 자동 분류는 선택한 저장 위치 아래에 적용됩니다.
+- **출력 폴더 공유**: `comfy-data` 볼륨이 ComfyMUI에도 공유되어 갤러리 조회와 이미지 삭제 쓰기 권한이 유지됩니다.
+
+#### 1. 환경 설정
+
+`.env.example`을 복사하여 `.env`를 생성하고 필요한 경로와 포트를 조정합니다:
+
+```sh
+cp .env.example .env
+```
+
+주요 설정값:
+- `HOST_MODELS_DIR`: 기존 로컬 Windows 모델 폴더 경로 (기본값: `E:/Models`)
+- `COMFY_PORT`: 호스트 ComfyUI 포트 (기본값: `8188`)
+- `PORT`: 호스트 ComfyMUI 앱 포트 (기본값: `4173`)
+- `COMFY_EXTRA_ARGS`: ComfyUI 시작 추가 옵션 (기본값: `--lowvram --reserve-vram 1`)
+
+#### 2. 데이터 이전 (비파괴적)
+
+기존 로컬의 SQLite 설정 DB와 출력 이미지를 Docker 볼륨으로 안전하게 이전합니다. 원본 파일은 그대로 보존됩니다:
+
+```sh
+node scripts/migrate-data.mjs
+```
+
+이 스크립트는 SQLite WAL 체크포인트를 수행한 후 `data/backups/`에 타임스탬프 백업을 남기고 `comfymui-data` 및 `comfy-data` 볼륨으로 복사합니다.
+
+#### 3. 서비스 빌드 및 기동
+
+```sh
+# 이미지 빌드
+docker compose build
+
+# 서비스 백그라운드 기동
+docker compose up -d
+
+# 실행 상태 및 로그 확인
+docker compose ps
+docker compose logs -f
+```
+
+기동 후 브라우저에서 `http://localhost:4173`으로 접속할 수 있습니다.
+
+#### 4. 서비스 종료
+
+```sh
+docker compose down
+```
+*(주의: `docker compose down -v`나 Docker 시스템 prune 등 볼륨 삭제 옵션은 사용하지 마세요.)*
+
+
 ## 사용 흐름
 
 1. 연결 설정에서 서버 주소를 저장하고 연결을 확인합니다. 미리보기 모드는 샘플 일러스트로 UI만 체험합니다. 실제 GPU 작업을 요청하지 않습니다.

@@ -1,0 +1,90 @@
+services:
+  models-sftp:
+    image: atmoz/sftp:alpine@sha256:c5fb9e4beb8b7054a4c0b65c5e11df47cc20da95ad6002e88aecff62bab06372
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:2222:22"
+    entrypoint: ["/bin/sh", "-c", "cp /config/host_key /etc/ssh/ssh_host_ed25519_key && chmod 600 /etc/ssh/ssh_host_ed25519_key && exec /entrypoint models::1000:1000"]
+    command: models::1000:1000
+    volumes:
+      - type: volume
+        source: comfy-data
+        target: /home/models/models
+        volume:
+          subpath: models
+      - ./data/sftp/client_key.pub:/home/models/.ssh/keys/client_ed25519.pub:ro
+      - ./data/sftp/host_key:/config/host_key:ro
+
+  comfyui:
+    build:
+      context: .
+      dockerfile: docker/comfyui/Dockerfile
+    image: comfymui-comfyui:latest
+    container_name: comfymui-comfyui
+    restart: unless-stopped
+    ports:
+      - "${COMFY_PORT:-8188}:8188"
+    environment:
+      - COMFY_PORT=8188
+      - COMFY_EXTRA_ARGS=${COMFY_EXTRA_ARGS:---lowvram --reserve-vram 1}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      # Named volume for all persistent ComfyUI data (models, output, input, user, temp)
+      - comfy-data:/data
+      # Local models can also be selected as a download destination
+      - ${HOST_MODELS_DIR:-E:/Models}:/host-models:rw
+      # ComfyUI extra model paths configuration
+      - ./docker/comfyui/extra_model_paths.yaml:/etc/comfyui/extra_model_paths.yaml:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8188/system_stats || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  comfymui:
+    build:
+      context: .
+      dockerfile: docker/comfymui/Dockerfile
+    image: comfymui-app:latest
+    container_name: comfymui-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-4173}:4173"
+    environment:
+      - NODE_ENV=production
+      - PORT=4173
+      - HOST=0.0.0.0
+      - COMFY_URL=http://comfyui:8188
+      - COMFY_OUTPUT_DIR=/comfy-data/output
+      - STATE_DB=/data/comfymui.db
+      - THUMB_CACHE_DIR=/data/thumbnails
+    volumes:
+      # Named volume for ComfyMUI persistence (SQLite state DB & thumbnail cache)
+      - comfymui-data:/data
+      # Shared named volume to access ComfyUI's output directory with write permission for deletion
+      - comfy-data:/comfy-data:rw
+    depends_on:
+      comfyui:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:4173/api/state || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+volumes:
+  # Exactly 2 named volumes as agreed in specification
+  comfy-data:
+    name: comfy-data
+  comfymui-data:
+    name: comfymui-data

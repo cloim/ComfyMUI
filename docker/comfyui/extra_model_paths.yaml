@@ -1,0 +1,33 @@
+# ComfyUI Extra Model Paths Configuration for Docker Environment
+# Maps host models directory (mounted read-only at /host-models) alongside named volume models (/data/models)
+
+host_models:
+  base_path: /host-models
+  is_default: false
+  checkpoints: checkpoints
+  clip: clip
+  clip_vision: clip_vision
+  configs: configs
+  controlnet: controlnet
+  diffusion_models: diffusion_models
+  embeddings: embeddings
+  gligen: gligen
+  hypernetworks: hypernetworks
+  loras: loras
+  photomaker: photomaker
+  style_models: style_models
+  text_encoders: text_encoders
+  unet: unet
+  unet_gguf: diffusion_models
+  upscale_models: upscale_models
+  vae: vae
+  vae_approx: vae_approx
+
+# Preserves existing Windows extra_model_paths.yaml unified_image_models structure
+# (Keep image model weights together while retaining existing workflow loaders)
+host_unified_image_models:
+  base_path: /host-models
+  is_default: false
+  checkpoints: diffusion_models
+  diffusion_models: diffusion_models
+  unet_gguf: diffusion_models

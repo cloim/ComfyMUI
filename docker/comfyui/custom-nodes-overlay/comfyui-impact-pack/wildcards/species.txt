@@ -1,0 +1,14 @@
+goblin
+slime
+elf
+dark elf
+high elf
+orc
+monster
+fairy
+dragon
+ghost
+spirit
+angel
+devil
+vampire
