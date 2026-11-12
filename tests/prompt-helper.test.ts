@@ -7,7 +7,6 @@ function makeJobWithPrompt(prompt: string): Job {
     id: 'job-' + Math.random(),
     createdAt: Date.now(),
     base: 'http://localhost:8188',
-    preview: false,
     status: 'complete',
     progress: 100,
     images: [],

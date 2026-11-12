@@ -11,8 +11,7 @@ import {
   Share2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { type Generation, type Job } from '../domain';
-import { makeFinalSettings, reusableSettings } from '../creation-tools';
+import { type Generation, type Job, reusableSettings } from '../domain';
 import { classifyJobError, jobStageLabel, lowerMemorySettings } from '../job-recovery';
 import { imageUrl } from '../api';
 import { useStudio } from '../studio';
@@ -83,12 +82,13 @@ export function Result({
       setRegenerating(false);
     }
   }
-  const previewImg = active && job?.status === 'running' ? job.livePreview || livePreviewUrl : null;
+  const previewImg = active ? job?.livePreview || livePreviewUrl || null : null;
   const hasImage = (j?: Job): j is Job => j?.status === 'complete' && Boolean(j.images[0]);
   const shown = hasImage(job) ? job : hasImage(fallback) ? fallback : undefined;
   const showingFallback = Boolean(shown && shown !== job);
-  const source = shown && !shown.preview ? imageUrl(shown.base, shown.images[0]) : '/sample.svg';
-  const generatedImage = Boolean(shown && !shown.preview);
+  const source = shown ? imageUrl(shown.base, shown.images[0]) : '';
+  const generatedImage = Boolean(shown);
+  const canExpand = !active && !imageFailed && generatedImage;
   const frameRatio = shown
     ? `${shown.settings.width} / ${shown.settings.height}`
     : compact
@@ -112,7 +112,7 @@ export function Result({
     <div className={`flex min-w-0 flex-col ${compact ? '' : 'gap-3.5'}`}>
       {!compact && (
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold">{job ? '최근 생성' : '결과 미리보기'}</h2>
+          <h2 className="text-sm font-bold">{job ? '최근 생성' : '생성 결과'}</h2>
           <span className="flex items-center gap-1.5 text-xs text-muted">
             <Clock3 size={13} />
             {job
@@ -126,51 +126,56 @@ export function Result({
       )}
       <div
         style={{ aspectRatio: frameRatio }}
-        className={`group relative overflow-hidden rounded-xl bg-[#d9dfd3] ${compact ? '' : 'max-h-[480px]'} ${!active && !imageFailed ? 'cursor-zoom-in' : ''}`}
+        className={`group relative overflow-hidden rounded-xl bg-[#d9dfd3] ${compact ? '' : 'max-h-[480px]'} ${canExpand ? 'cursor-zoom-in' : ''}`}
         onClick={() => {
-          if (!active && !imageFailed) setExpanded(true);
+          if (canExpand) setExpanded(true);
         }}
         onKeyDown={(e) => {
-          if (!active && !imageFailed && (e.key === 'Enter' || e.key === ' ')) {
+          if (canExpand && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
             setExpanded(true);
           }
         }}
-        role={!active && !imageFailed ? 'button' : undefined}
-        tabIndex={!active && !imageFailed ? 0 : undefined}
-        aria-label={!active && !imageFailed ? '이미지 크게 보기' : undefined}
+        role={canExpand ? 'button' : undefined}
+        tabIndex={canExpand ? 0 : undefined}
+        aria-label={canExpand ? '이미지 크게 보기' : undefined}
       >
-        <img
-          key={previewImg ? 'live-preview' : `${source}-${imageRetry}`}
-          src={
-            previewImg ||
-            source + (imageRetry ? `${source.includes('?') ? '&' : '?'}retry=${imageRetry}` : '')
-          }
-          alt={
-            previewImg
-              ? '실시간 생성 미리보기'
-              : generatedImage
-                ? showingFallback
+        {!previewImg && !source && (
+          <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-muted">
+            아직 생성한 이미지가 없어요
+          </div>
+        )}
+        {(previewImg || source) && (
+          <img
+            key={previewImg ? 'live-preview' : `${source}-${imageRetry}`}
+            src={
+              previewImg ||
+              source + (imageRetry ? `${source.includes('?') ? '&' : '?'}retry=${imageRetry}` : '')
+            }
+            alt={
+              previewImg
+                ? '실시간 생성 미리보기'
+                : showingFallback
                   ? '직전에 생성한 이미지'
                   : '생성한 이미지'
-                : '우아한 성인 여성 인물을 담은 샘플 일러스트'
-          }
-          onError={() => {
-            if (!previewImg) setImageFailed(true);
-          }}
-          onLoad={() => setImageFailed(false)}
-          className={`h-full w-full object-contain transition-opacity duration-700 ${
-            previewImg ? 'opacity-95' : active ? 'opacity-35 blur-sm' : ''
-          }`}
-        />
+            }
+            onError={() => {
+              if (!previewImg) setImageFailed(true);
+            }}
+            onLoad={() => setImageFailed(false)}
+            className={`h-full w-full object-contain transition-opacity duration-700 ${
+              previewImg ? 'opacity-95' : active ? 'opacity-35 blur-sm' : ''
+            }`}
+          />
+        )}
         {previewImg && (
           <span className="absolute left-3 top-3 rounded-full bg-olive px-2.5 py-1 text-2xs font-semibold text-white shadow-sm animate-pulse">
             실시간 생성 중
           </span>
         )}
-        {!previewImg && !active && (!shown || shown.preview || showingFallback) && (
+        {!previewImg && !active && showingFallback && (
           <span className="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-2xs font-semibold text-ink shadow-sm">
-            {showingFallback ? '직전 생성 이미지' : shown ? '미리보기 체험' : '샘플 일러스트'}
+            직전 생성 이미지
           </span>
         )}
         {active && (
@@ -220,7 +225,7 @@ export function Result({
                 </span>
               )}
             </div>
-            {(job!.status === 'queued' || job!.preview) && (
+            {job!.status === 'queued' && (
               <button
                 disabled={cancelling}
                 className="btn-secondary mt-1"
@@ -356,31 +361,6 @@ export function Result({
           )}
           {job.status === 'complete' && (
             <>
-              {job.settings.draftTarget && (
-                <button
-                  className="btn-primary"
-                  disabled={busy || regenerating}
-                  onClick={() => {
-                    try {
-                      setPlan({
-                        title: '시안에서 최종 생성',
-                        settings: makeFinalSettings(job.settings),
-                        warning:
-                          '같은 Seed·프롬프트·LoRA를 유지하고 원래 해상도와 Steps로 생성해요. 해상도가 달라지면 구도가 달라질 수 있어요',
-                      });
-                    } catch (error) {
-                      notify((error as Error).message);
-                    }
-                  }}
-                >
-                  이 시안으로 최종 생성
-                </button>
-              )}
-              {job.settings.experiment && (
-                <p className="text-xs font-semibold text-olive">
-                  실험 조건 · {job.settings.experiment.label}
-                </p>
-              )}
               <div className="flex flex-wrap gap-1.5">
                 <Link to="/create" onClick={reuse} className="btn-secondary flex-1 min-w-[112px]">
                   <RotateCcw size={14} />
@@ -416,7 +396,7 @@ export function Result({
                 <a
                   className="btn-secondary flex-1 min-w-[112px]"
                   href={source}
-                  download={job.preview ? 'sample.svg' : job.images[0]?.filename}
+                  download={job.images[0]?.filename}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -429,7 +409,7 @@ export function Result({
                   {job.images.map((im, i) => (
                     <a
                       key={`${im.filename}-${i}`}
-                      href={job.preview ? '/sample.svg' : imageUrl(job.base, im)}
+                      href={imageUrl(job.base, im)}
                       target="_blank"
                       rel="noreferrer"
                       className="btn-secondary text-xs"
@@ -514,7 +494,7 @@ export function Result({
       </Modal>
       <ImageViewer
         src={source}
-        alt={generatedImage ? '생성한 이미지' : '우아한 성인 여성 인물을 담은 샘플 일러스트'}
+        alt="생성한 이미지"
         open={expanded}
         onClose={() => setExpanded(false)}
       />

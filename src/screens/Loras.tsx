@@ -22,7 +22,6 @@ import { useStudioSelector } from '../studio';
 import { options } from '../domain';
 import { assetFamily, type ModelFamily } from '../models';
 import {
-  DEMO_LORAS,
   addLoraTags,
   appendTriggerWords,
   deleteLoraFile,
@@ -88,8 +87,8 @@ export default function Loras() {
   }));
   const navigate = useNavigate();
 
-  const [items, setItems] = useState<LoraItem[]>(connection.preview ? DEMO_LORAS : []);
-  const [total, setTotal] = useState<number>(connection.preview ? DEMO_LORAS.length : 0);
+  const [items, setItems] = useState<LoraItem[]>([]);
+  const [total, setTotal] = useState<number>(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -180,19 +179,6 @@ export default function Loras() {
   }, [search]);
 
   async function loadFacets() {
-    if (connection.preview) {
-      setFolders(['Flux1.D/commons', 'Flux1.D/illust', 'Krea2', 'Qwen']);
-      setRoots(['E:/ComfyUI/models/loras']);
-      setTopTags([
-        { tag: 'portrait', count: 2 },
-        { tag: 'detail', count: 2 },
-        { tag: 'style', count: 2 },
-        { tag: 'concept', count: 1 },
-        { tag: 'editorial', count: 1 },
-        { tag: 'photorealistic', count: 1 },
-      ]);
-      return;
-    }
     try {
       const [fList, rList, tList] = await Promise.all([
         fetchLoraFolders(connection.base).catch(() => []),
@@ -212,43 +198,6 @@ export default function Loras() {
   }
 
   async function loadLoras(targetPage = 1, append = false) {
-    if (connection.preview) {
-      setApiError('');
-      let filtered = [...DEMO_LORAS];
-      if (debouncedSearch.trim()) {
-        const q = debouncedSearch.trim().toLowerCase();
-        filtered = filtered.filter(
-          (item) =>
-            item.model_name.toLowerCase().includes(q) ||
-            item.file_name.toLowerCase().includes(q) ||
-            item.tags.some((t) => t.toLowerCase().includes(q)) ||
-            (item.civitai?.trainedWords || []).some((w) => w.toLowerCase().includes(q)),
-        );
-      }
-      if (folder !== 'all') {
-        filtered = filtered.filter((item) => item.folder === folder);
-      }
-      if (selectedTags.length > 0) {
-        filtered = filtered.filter((item) => {
-          const itemTags = item.tags.map((t) => t.toLowerCase());
-          if (tagLogic === 'all') {
-            return selectedTags.every((st) => itemTags.includes(st.toLowerCase()));
-          }
-          return selectedTags.some((st) => itemTags.includes(st.toLowerCase()));
-        });
-      }
-      if (favoritesOnly) {
-        filtered = filtered.filter((item) => item.favorite);
-      }
-      if (updatesOnly) {
-        filtered = filtered.filter((item) => item.update_available);
-      }
-      setItems(filtered);
-      setTotal(filtered.length);
-      setPage(1);
-      return;
-    }
-
     if (append) {
       setLoadingMore(true);
     } else {
@@ -289,7 +238,6 @@ export default function Loras() {
     void loadLoras(1, false);
   }, [
     connection.base,
-    connection.preview,
     debouncedSearch,
     folder,
     selectedTags,
@@ -300,7 +248,7 @@ export default function Loras() {
 
   useEffect(() => {
     void loadFacets();
-  }, [connection.base, connection.preview]);
+  }, [connection.base]);
 
   // Reload the library when a background download lands.
   const libraryRevisionRef = useRef(libraryRevision);
@@ -318,7 +266,7 @@ export default function Loras() {
   const hasMore = items.length < total;
 
   function handleScroll(e: UIEvent<HTMLDivElement>) {
-    if (loading || loadingMore || !hasMore || connection.preview) return;
+    if (loading || loadingMore || !hasMore) return;
     const el = e.currentTarget;
     const nearBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 280;
     if (nearBottom) {
@@ -427,10 +375,6 @@ export default function Loras() {
     if (activeLora?.file_path === item.file_path) {
       setActiveLora((prev) => (prev ? { ...prev, favorite: nextFav } : null));
     }
-    if (connection.preview) {
-      notify(nextFav ? '즐겨찾기에 등록했어요' : '즐겨찾기에서 해제했어요');
-      return;
-    }
     try {
       await saveLoraMetadata(connection.base, {
         file_path: item.file_path,
@@ -444,10 +388,6 @@ export default function Loras() {
   }
 
   async function handleScanLoras() {
-    if (connection.preview) {
-      notify('미리보기 모드에서는 데모 LoRA 목록을 유지해요');
-      return;
-    }
     setScanning(true);
     try {
       await scanLoras(connection.base, false);
@@ -462,10 +402,6 @@ export default function Loras() {
   }
 
   async function handleRefreshUpdates() {
-    if (connection.preview) {
-      notify('미리보기 모드에서 1개의 업데이트 가능 LoRA를 확인했어요');
-      return;
-    }
     setCheckingUpdates(true);
     try {
       const res = await refreshLoraUpdates(connection.base);
@@ -495,24 +431,6 @@ export default function Loras() {
       .split(',')
       .map((w) => w.trim())
       .filter(Boolean);
-
-    if (connection.preview) {
-      const updated: LoraItem = {
-        ...activeLora,
-        model_name: editModelName.trim() || activeLora.file_name,
-        base_model: editBaseModel.trim() || activeLora.base_model,
-        usage_tips: usageTipsJson,
-        notes: editNotes,
-        civitai: {
-          ...activeLora.civitai,
-          trainedWords: words,
-        },
-      };
-      setItems((prev) => prev.map((x) => (x.file_path === activeLora.file_path ? updated : x)));
-      setActiveLora(updated);
-      notify('LoRA 메타데이터와 권장 강도를 저장했어요');
-      return;
-    }
 
     setSavingDetail(true);
     try {
@@ -553,17 +471,6 @@ export default function Loras() {
       .filter(Boolean);
     if (!newTags.length) return;
 
-    if (connection.preview) {
-      const merged = [...new Set([...(activeLora.tags || []), ...newTags])];
-      setActiveLora({ ...activeLora, tags: merged });
-      setItems((prev) =>
-        prev.map((x) => (x.file_path === activeLora.file_path ? { ...x, tags: merged } : x)),
-      );
-      setEditTagInput('');
-      notify('태그를 추가했어요');
-      return;
-    }
-
     try {
       const res = await addLoraTags(connection.base, activeLora.file_path, newTags);
       const merged = res.tags || [...new Set([...(activeLora.tags || []), ...newTags])];
@@ -580,15 +487,6 @@ export default function Loras() {
   async function handleRemoveTag(tagToRemove: string) {
     if (!activeLora) return;
     const remaining = (activeLora.tags || []).filter((t) => t !== tagToRemove);
-
-    if (connection.preview) {
-      setActiveLora({ ...activeLora, tags: remaining });
-      setItems((prev) =>
-        prev.map((x) => (x.file_path === activeLora.file_path ? { ...x, tags: remaining } : x)),
-      );
-      notify(`#${tagToRemove} 태그를 삭제했어요`);
-      return;
-    }
 
     try {
       await saveLoraMetadata(connection.base, {
@@ -608,10 +506,6 @@ export default function Loras() {
 
   async function handleSyncCivitaiSingle() {
     if (!activeLora) return;
-    if (connection.preview) {
-      notify('미리보기 모드에서 CivitAI 메타데이터 동기화를 완료했어요');
-      return;
-    }
     setSavingDetail(true);
     try {
       const res = await fetchLoraCivitaiMetadata(connection.base, activeLora.file_path);
@@ -632,10 +526,6 @@ export default function Loras() {
     const vid = relinkVersionId.trim() ? Number(relinkVersionId.trim()) : undefined;
     if (!Number.isInteger(mid) || mid <= 0) {
       notify('올바른 CivitAI 모델 ID 숫자를 입력해 주세요');
-      return;
-    }
-    if (connection.preview) {
-      notify(`CivitAI 모델 #${mid}로 연결을 갱신했어요`);
       return;
     }
     setSavingDetail(true);
@@ -661,29 +551,6 @@ export default function Loras() {
       notify('연결된 CivitAI 모델 ID가 없습니다');
       return;
     }
-    if (connection.preview) {
-      setRemoteVersions([
-        {
-          id: 940211,
-          modelId: mid,
-          name: 'v1.2 Studio',
-          baseModel: 'Flux.1 D',
-          existsLocally: true,
-          modelSizeKB: 150585,
-          trainedWords: ['detailed skin texture', 'soft studio rim light'],
-        },
-        {
-          id: 988500,
-          modelId: mid,
-          name: 'v2.0 Pro (최신 업데이트)',
-          baseModel: 'Flux.1 D',
-          existsLocally: false,
-          modelSizeKB: 154200,
-          trainedWords: ['detailed skin texture', 'studio lighting v2'],
-        },
-      ]);
-      return;
-    }
     setLoadingVersions(true);
     try {
       const versions = await fetchCivitaiModelVersions(connection.base, mid);
@@ -702,14 +569,6 @@ export default function Loras() {
     if (!activeLora) return;
     const clean = editRenameInput.trim().replace(/\.safetensors$/i, '');
     if (!clean || clean === activeLora.file_name) return;
-    if (connection.preview) {
-      setActiveLora({ ...activeLora, file_name: clean });
-      setItems((prev) =>
-        prev.map((x) => (x.file_path === activeLora.file_path ? { ...x, file_name: clean } : x)),
-      );
-      notify(`파일명을 ${clean}으로 변경했어요`);
-      return;
-    }
     setSavingDetail(true);
     try {
       await renameLoraFile(connection.base, activeLora.file_path, clean);
@@ -726,20 +585,14 @@ export default function Loras() {
 
   async function handleMoveLora() {
     if (!activeLora) return;
-    const root = roots[0] || 'E:/ComfyUI/models/loras';
+    const root = roots[0];
+    if (!root) {
+      notify('LoRA 저장 위치를 불러오지 못했어요. 잠시 후 다시 시도해 주세요');
+      return;
+    }
     const targetDir = editMoveFolder
       ? `${root.replace(/\/+$/, '')}/${editMoveFolder.replace(/^\/+|\/+$/g, '')}`
       : root.replace(/\/+$/, '');
-    if (connection.preview) {
-      setActiveLora({ ...activeLora, folder: editMoveFolder });
-      setItems((prev) =>
-        prev.map((x) =>
-          x.file_path === activeLora.file_path ? { ...x, folder: editMoveFolder } : x,
-        ),
-      );
-      notify(`폴더를 ${editMoveFolder || '루트'}로 이동했어요`);
-      return;
-    }
     setSavingDetail(true);
     try {
       await moveLoraFile(connection.base, activeLora.file_path, targetDir);
@@ -756,13 +609,6 @@ export default function Loras() {
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
-    if (connection.preview) {
-      setItems((prev) => prev.filter((x) => x.file_path !== deleteTarget.file_path));
-      setDeleteTarget(null);
-      setActiveLora(null);
-      notify('선택한 LoRA를 삭제했어요');
-      return;
-    }
     try {
       await deleteLoraFile(connection.base, deleteTarget.file_path);
       refreshModels();
@@ -783,22 +629,6 @@ export default function Loras() {
     }
     const parsed = parseCivitaiAir(civitaiQuery)!;
     setLookupAir(parsed);
-    if (connection.preview) {
-      const mockVersion: CivitaiVersion = {
-        id: parsed.modelVersionId || 988500,
-        modelId: parsed.modelId || 840370,
-        name: 'v2.0 Studio Realism',
-        baseModel: 'Flux.1 D',
-        existsLocally: false,
-        modelSizeKB: 158400,
-        trainedWords: ['studio portrait', 'natural skin texture'],
-        model: { name: 'Flux Realism Enhancer v2', type: 'LORA' },
-        images: [{ url: '/sample.svg', nsfwLevel: 1 }],
-      };
-      setLookupVersions([mockVersion]);
-      setSelectedVersionId(mockVersion.id);
-      return;
-    }
 
     setLookupLoading(true);
     setLookupVersions([]);
@@ -844,48 +674,6 @@ export default function Loras() {
     const modelId = opts?.modelId || selectedVer?.modelId;
     if (!versionId) {
       notify('다운로드할 버전을 선택해 주세요');
-      return;
-    }
-
-    if (connection.preview) {
-      const newItem: LoraItem = {
-        model_name: selectedVer?.model?.name || selectedVer?.name || `CivitAI LoRA #${versionId}`,
-        file_name: `civitai_${versionId}`,
-        preview_url: '/sample.svg',
-        preview_nsfw_level: 1,
-        base_model: selectedVer?.baseModel || 'Flux.1 D',
-        folder:
-          opts?.folderOverride ??
-          (targetFolder === 'auto'
-            ? 'Flux1.D/commons'
-            : targetFolder === 'custom'
-              ? customSubfolder.trim()
-              : targetFolder),
-        sha256: String(versionId).padStart(64, '0'),
-        file_path: `E:/ComfyUI/models/loras/civitai_${versionId}.safetensors`,
-        file_size: (selectedVer?.modelSizeKB || 150000) * 1024,
-        modified: Math.floor(Date.now() / 1000),
-        tags: ['civitai', 'downloaded'],
-        from_civitai: true,
-        usage_tips: '{"strength":0.8,"clipStrength":0.8}',
-        notes: 'CivitAI에서 다운로드한 LoRA',
-        favorite: false,
-        update_available: false,
-        civitai: {
-          id: versionId,
-          modelId: modelId || 840370,
-          name: selectedVer?.name || 'v1.0',
-          trainedWords: selectedVer?.trainedWords || ['studio quality'],
-        },
-      };
-      setItems((prev) => [
-        newItem,
-        ...prev.map((x) =>
-          modelId && x.civitai?.modelId === modelId ? { ...x, update_available: false } : x,
-        ),
-      ]);
-      setDownloadModalOpen(false);
-      notify('CivitAI LoRA 다운로드를 완료했어요');
       return;
     }
 

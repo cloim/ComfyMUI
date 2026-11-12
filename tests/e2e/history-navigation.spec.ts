@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
         route.request().method() === 'GET'
           ? {
               entries: {
-                'cm-connection': { value: { base: '/comfy', preview: false }, updatedAt: 1 },
+                'cm-connection': { value: { base: '/comfy' }, updatedAt: 1 },
               },
             }
           : { updatedAt: {} },

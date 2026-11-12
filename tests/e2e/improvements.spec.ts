@@ -14,37 +14,6 @@ async function connect(page: Page) {
   await expect(page.getByTestId('generate')).toBeEnabled();
 }
 
-test('a draft restores the original target and keeps its actual seed for final generation', async ({
-  page,
-}) => {
-  await page.goto('/create');
-  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('cm-settings')!));
-  await page.getByRole('button', { name: '빠른 시안', exact: true }).click();
-  await expect(page.getByRole('dialog').getByLabel('시안 설정 미리보기')).toBeVisible();
-  await page.getByRole('button', { name: '시안 1장 생성', exact: true }).click();
-  await expect(page.getByText('생성 완료', { exact: true })).toBeVisible({ timeout: 15000 });
-  const draft = await page.evaluate(() => JSON.parse(localStorage.getItem('cm-jobs')!)[0].settings);
-  await page.getByRole('button', { name: '이 시안으로 최종 생성', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '시안에서 최종 생성' });
-  await expect(dialog).toContainText('구도가 달라질 수');
-  // Opening the review must not start another generation.
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('cm-jobs')!).length)).toBe(1);
-  await dialog.getByRole('button', { name: '확인하고 생성', exact: true }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(page.getByText('생성 완료', { exact: true })).toBeVisible({ timeout: 15000 });
-  const final = await page.evaluate(() => JSON.parse(localStorage.getItem('cm-jobs')!)[0].settings);
-  expect([final.width, final.height, final.steps]).toEqual([
-    before.width,
-    before.height,
-    before.steps,
-  ]);
-  expect(final.seed).toBe(draft.seed);
-  expect(final.positive).toBe(draft.positive);
-  expect(final.loras).toEqual(draft.loras);
-  expect(final.random).toBe(false);
-  expect(final.draftTarget).toBeUndefined();
-});
-
 test('memory recovery previews a lower pixel budget before retrying', async ({ page }) => {
   await connect(page);
   await page.getByLabel('그리고 싶은 장면', { exact: true }).fill('execution-error portrait');

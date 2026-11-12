@@ -68,7 +68,6 @@ export default defineConfig({
           '/icon.svg',
           '/icon-192.png',
           '/icon-512.png',
-          '/sample.svg',
           '/manifest.webmanifest',
           ...Object.keys(bundle)
             .filter((p) => p.startsWith('assets/'))

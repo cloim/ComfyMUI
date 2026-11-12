@@ -13,7 +13,6 @@ import {
   defaults,
   DEFAULT_PROMPTS,
   DEFAULT_PROMPT_ASSEMBLE,
-  demoInfo,
   readStored,
   newId,
   randomSeed,
@@ -23,6 +22,7 @@ import {
   isLegacyDefaultPrompt,
   migrateGenerationSettings,
   baseSettings,
+  reusableSettings,
   upscaleSettings,
   type DefaultPrompts,
   type PromptAssembleElement,
@@ -57,7 +57,6 @@ import { parseBinaryPreview } from './preview';
 import { useDownloadTracker } from './downloads';
 import { deleteOutputFiles, outputKey } from './outputs';
 import { backgroundKeepAlive } from './keep-alive';
-import { reusableSettings } from './creation-tools';
 import {
   deferredWriter,
   defaultPower,
@@ -271,17 +270,20 @@ function useStudioState() {
   const [jobs, setJobs, historyError, setSilentJobs] = usePersisted<Job[]>('cm-jobs', [], {
     useIDB: true,
     debounceMs: 1000,
+    // Records left by the removed sample mode are dropped; they never reached a server.
     migrate: (list) =>
-      list.map((job) =>
-        job.status === 'submitting'
-          ? {
-              ...job,
-              status: 'error',
-              submissionUncertain: true,
-              error: '전송 중 화면이 다시 열렸습니다. 서버 큐를 확인한 후 다시 생성해 주세요',
-            }
-          : job,
-      ),
+      list
+        .filter((job) => !(job as Job & { preview?: boolean }).preview)
+        .map((job) =>
+          job.status === 'submitting'
+            ? {
+                ...job,
+                status: 'error',
+                submissionUncertain: true,
+                error: '전송 중 화면이 다시 열렸습니다. 서버 큐를 확인한 후 다시 생성해 주세요',
+              }
+            : job,
+        ),
   });
   const [clientQueue, setClientQueue, queueError] = usePersisted<QueueItem[]>(
     'cm-client-queue',
@@ -290,11 +292,8 @@ function useStudioState() {
   );
   const [connection, setConnection] = usePersisted(
     'cm-connection',
-    {
-      base: '/comfy',
-      preview: true,
-    },
-    { shared: true },
+    { base: '/comfy' },
+    { shared: true, migrate: (c) => ({ base: c.base || '/comfy' }) },
   );
   const connectionRef = useRef(connection);
   connectionRef.current = connection;
@@ -309,14 +308,14 @@ function useStudioState() {
   }, [reconnect]);
   const [remoteHydrated, setRemoteHydrated] = useState(false);
   // The ComfyUI output folder is the history. null means it is not available
-  // (preview mode or a direct ComfyUI address) and local records are shown instead.
+  // (a direct ComfyUI address) and local records are shown instead.
   const [gallery, setGallery] = useState<GalleryIndex | null>(null);
   // Bumped when a model or LoRA download lands so library screens reload.
   const [libraryRevision, setLibraryRevision] = useState(0);
-  const [info, setInfo] = useState<ObjectInfo | null>(connection.preview ? demoInfo : null);
-  const [connectionState, setConnectionState] = useState<
-    'preview' | 'connecting' | 'connected' | 'error'
-  >(connection.preview ? 'preview' : 'connecting');
+  const [info, setInfo] = useState<ObjectInfo | null>(null);
+  const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'error'>(
+    'connecting',
+  );
   const [connectionError, setConnectionError] = useState('');
   const [notice, setNotice] = useState('');
   const [online, setOnline] = useState(navigator.onLine);
@@ -373,9 +372,7 @@ function useStudioState() {
     void pull();
     const onResume = () => {
       void pull();
-      if (!connectionRef.current.preview) {
-        reconnect();
-      }
+      reconnect();
     };
     const onVisibility = () => {
       if (document.visibilityState === 'visible') onResume();
@@ -437,11 +434,6 @@ function useStudioState() {
     };
   }, []);
   useEffect(() => {
-    if (connection.preview) {
-      setInfo(demoInfo);
-      setConnectionState('preview');
-      return;
-    }
     setInfo(null);
     setConnectionState('connecting');
     setConnectionError('');
@@ -462,19 +454,18 @@ function useStudioState() {
       },
       refresh,
     );
-  }, [connection.base, connection.preview, online, reconnectSeq]);
+  }, [connection.base, online, reconnectSeq]);
   useEffect(() => {
-    if (connection.preview || !online || connectionState !== 'error') return;
+    if (!online || connectionState !== 'error') return;
     const timer = setInterval(() => {
       if (document.visibilityState !== 'hidden') {
         reconnect();
       }
     }, 5000);
     return () => clearInterval(timer);
-  }, [connection.preview, online, connectionState, reconnect]);
+  }, [online, connectionState, reconnect]);
   useEffect(() => {
     if (!info || !remoteHydrated) return;
-    if (!connection.preview && info === demoInfo) return;
     setSilentSettings((s) => {
       if (s.workflow) return s;
       const list = catalog(info, familyAssignments, modelOrder);
@@ -489,14 +480,7 @@ function useStudioState() {
       const aligned = selectModel(s, entry, info, familyAssignments);
       return JSON.stringify(aligned) === JSON.stringify(s) ? s : aligned;
     });
-  }, [
-    info,
-    connection.preview,
-    familyAssignments,
-    modelOrder,
-    settings.architecture,
-    remoteHydrated,
-  ]);
+  }, [info, familyAssignments, modelOrder, settings.architecture, remoteHydrated]);
   useEffect(() => {
     // A reload during HTTP submission cannot safely resubmit the same job.
     setSilentJobs((all) =>
@@ -542,7 +526,7 @@ function useStudioState() {
     });
   }
   useEffect(() => {
-    if (connection.preview || !online) return;
+    if (!online) return;
     let stopped = false,
       socket: WebSocket,
       timer: ReturnType<typeof setTimeout>,
@@ -613,14 +597,17 @@ function useStudioState() {
               return;
             const parsed = parseBinaryPreview(event.data);
             if (parsed) {
-              const runningJob = jobRef.current.find((j) => !j.preview && j.status === 'running');
+              const runningJob = jobRef.current.find((j) =>
+                ['running', 'queued', 'submitting'].includes(j.status),
+              );
               if (runningJob) {
                 lastPreviewAt.current = now;
                 const url = URL.createObjectURL(parsed.blob);
-                if (activePreviewBlobRef.current) URL.revokeObjectURL(activePreviewBlobRef.current);
+                const prevUrl = activePreviewBlobRef.current;
+                if (prevUrl) setTimeout(() => URL.revokeObjectURL(prevUrl), 1000);
                 activePreviewBlobRef.current = url;
                 setLivePreviewUrl(url);
-                updateJob(runningJob.id, { livePreview: url });
+                updateJob(runningJob.id, { livePreview: url, status: 'running' });
               }
             }
           } catch {
@@ -632,14 +619,12 @@ function useStudioState() {
         try {
           const { type, data } = JSON.parse(event.data);
           let j = data?.prompt_id
-            ? jobRef.current.find(
-                (j) => j.id === data.prompt_id && j.base === connection.base && !j.preview,
-              )
+            ? jobRef.current.find((j) => j.id === data.prompt_id && j.base === connection.base)
             : undefined;
 
           // Some ComfyUI versions send executing { node: null } or status without prompt_id when done
           if (!j && data && (data.node === null || type === 'executing')) {
-            j = jobRef.current.find((item) => !item.preview && item.status === 'running');
+            j = jobRef.current.find((item) => item.status === 'running');
           }
 
           if (!j || ['complete', 'error', 'cancelled'].includes(j.status)) return;
@@ -688,7 +673,7 @@ function useStudioState() {
       clearTimeout(timer);
       socket?.close();
     };
-  }, [connection.base, connection.preview, clientId, online]);
+  }, [connection.base, clientId, online]);
   useEffect(() => {
     let stopped = false,
       polling = false,
@@ -698,9 +683,7 @@ function useStudioState() {
       polling = true;
       try {
         const queues = new Map<string, Queue>();
-        for (const j of jobRef.current.filter(
-          (j) => !j.preview && ['queued', 'running'].includes(j.status),
-        )) {
+        for (const j of jobRef.current.filter((j) => ['queued', 'running'].includes(j.status))) {
           try {
             const h = await request<Record<string, HistoryItem>>(
               j.base,
@@ -759,9 +742,7 @@ function useStudioState() {
     }
     function schedulePoll() {
       if (stopped) return;
-      const hasPendingJob = jobRef.current.some(
-        (j) => !j.preview && ['queued', 'running'].includes(j.status),
-      );
+      const hasPendingJob = jobRef.current.some((j) => ['queued', 'running'].includes(j.status));
       const delay =
         document.hidden && powerRef.current.saving
           ? 30000
@@ -781,49 +762,18 @@ function useStudioState() {
       clearTimeout(pollTimer);
     };
   }, []);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      // Find the currently running or earliest queued preview job to run one by one
-      const activePreview =
-        jobRef.current.find((j) => j.preview && j.status === 'running') ||
-        jobRef.current
-          .filter((j) => j.preview && j.status === 'queued')
-          .sort((a, b) => a.createdAt - b.createdAt)[0];
-
-      if (!activePreview) return;
-
-      setJobs((all) =>
-        all.map((j) => {
-          if (j.id !== activePreview.id) return j;
-          const startedAt = j.startedAt || Date.now();
-          const progress = Math.min(100, Math.round((Date.now() - startedAt) / 45));
-          const isDone = progress === 100;
-          return {
-            ...j,
-            progress,
-            status: isDone ? 'complete' : 'running',
-            startedAt,
-            completedAt: isDone ? j.completedAt || Date.now() : undefined,
-            images: isDone ? [{ filename: 'sample.svg', subfolder: '', type: 'output' }] : [],
-          };
-        }),
-      );
-    }, 300);
-    return () => clearInterval(timer);
-  }, [setJobs]);
-
   async function submitSingleJob(input: Generation, isBatch = false): Promise<boolean> {
-    if (!online && !connection.preview) {
+    if (!online) {
       notify('네트워크 연결 후 다시 생성해 주세요');
       return false;
     }
-    if (!connection.preview && connectionState !== 'connected') {
+    if (connectionState !== 'connected') {
       notify('연결 설정에서 서버를 확인해 주세요');
       return false;
     }
     const snapshot = structuredClone(input);
     const usesModel = !snapshot.upscale || snapshot.upscale.refine > 0;
-    if (!connection.preview && usesModel) {
+    if (usesModel) {
       try {
         validateSelection(snapshot, info!, familyAssignments);
       } catch (e) {
@@ -833,58 +783,52 @@ function useStudioState() {
     }
     if (snapshot.random && !snapshot.workflow) snapshot.seed = randomSeed();
     const workflow = buildWorkflow(snapshot);
-    if (!connection.preview) {
-      try {
-        validateAgainstServer(workflow, info!);
-      } catch (e) {
-        notify((e as Error).message);
-        return false;
-      }
+    try {
+      validateAgainstServer(workflow, info!);
+    } catch (e) {
+      notify((e as Error).message);
+      return false;
     }
-    if (!snapshot.upscale && !snapshot.draftTarget && !isBatch)
-      setSettings(reusableSettings(snapshot));
+    if (!snapshot.upscale && !isBatch) setSettings(reusableSettings(snapshot));
+    setLivePreviewUrl('');
+    lastPreviewAt.current = 0;
     const tempId = newId();
     const job: Job = {
       id: tempId,
       createdAt: Date.now(),
       settings: snapshot,
       base: connection.base,
-      preview: connection.preview,
-      status: connection.preview ? 'queued' : 'submitting',
-      startedAt: connection.preview ? Date.now() : undefined,
+      status: 'submitting',
       progress: 0,
       images: [],
       requestToken: tempId,
     };
     setJobs((all) => trimJobsPreservingFavorites([job, ...all], 500));
 
-    if (!connection.preview) {
-      try {
-        const response = await submit(
-          connection.base,
-          workflow,
-          clientId,
-          {
-            comfymui: { ...snapshot, workflow: null },
-            comfymui_request_id: tempId,
-          },
-          tempId,
-        );
-        if (!response.prompt_id) throw new Error('서버의 작업 번호를 확인할 수 없습니다');
-        updateJob(tempId, { id: response.prompt_id, status: 'queued' });
-        return true;
-      } catch (e) {
-        const message = (e as Error).message;
-        updateJob(tempId, {
-          status: 'error',
-          error: message + '\n서버 큐를 확인한 뒤 재시도해 주세요',
-          submissionUncertain: !(e instanceof ApiError) || e.status === 0 || e.status >= 500,
-        });
-        notify(message);
-        return false;
-      }
+    try {
+      const response = await submit(
+        connection.base,
+        workflow,
+        clientId,
+        {
+          comfymui: { ...snapshot, workflow: null },
+          comfymui_request_id: tempId,
+        },
+        tempId,
+      );
+      if (!response.prompt_id) throw new Error('서버의 작업 번호를 확인할 수 없습니다');
+      updateJob(tempId, { id: response.prompt_id, status: 'queued' });
+      return true;
+    } catch (e) {
+      const message = (e as Error).message;
+      updateJob(tempId, {
+        status: 'error',
+        error: message + '\n서버 큐를 확인한 뒤 재시도해 주세요',
+        submissionUncertain: !(e instanceof ApiError) || e.status === 0 || e.status >= 500,
+      });
+      notify(message);
+      return false;
     }
-    return true;
   }
 
   async function generate(input = settings) {
@@ -894,7 +838,7 @@ function useStudioState() {
     try {
       const ok = await submitSingleJob(input);
       if (ok) {
-        notify(connection.preview ? '미리보기 체험을 시작했어요' : '생성 요청을 서버에 보냈어요');
+        notify('생성 요청을 서버에 보냈어요');
       }
     } finally {
       submitLock.current = false;
@@ -919,8 +863,7 @@ function useStudioState() {
       notify('대기 중인 작업이 없어요');
       return;
     }
-    const realServerJobs = pendingJobs.filter((j) => !j.preview);
-    const idsToDelete = realServerJobs.map((j) => j.id);
+    const idsToDelete = pendingJobs.map((j) => j.id);
 
     if (idsToDelete.length > 0) {
       try {
@@ -959,35 +902,8 @@ function useStudioState() {
         }
       }
       if (successCount > 0) {
-        notify(
-          connection.preview
-            ? `${successCount}회 연속 생성을 시작했어요`
-            : `ComfyUI 서버 대기열에 ${successCount}건을 일괄 등록했어요`,
-        );
+        notify(`ComfyUI 서버 대기열에 ${successCount}건을 일괄 등록했어요`);
       }
-    } finally {
-      submitLock.current = false;
-      setBusy(false);
-    }
-  }
-
-  async function enqueueExperiment(inputs: Generation[]) {
-    if (submitLock.current) return;
-    if (inputs.length < 2 || inputs.length > 6) {
-      notify('실험은 2~6개 조건으로 실행해 주세요');
-      return;
-    }
-    submitLock.current = true;
-    setBusy(true);
-    let sent = 0;
-    try {
-      for (const input of inputs) {
-        if (!(await submitSingleJob(input, true))) break;
-        sent++;
-      }
-      notify(
-        `실험 ${sent}/${inputs.length}개 조건을 ${connection.preview ? '미리보기' : '서버 대기열'}에 등록했어요`,
-      );
     } finally {
       submitLock.current = false;
       setBusy(false);
@@ -995,7 +911,7 @@ function useStudioState() {
   }
 
   async function checkSubmission(job: Job): Promise<boolean> {
-    if (job.preview || !job.submissionUncertain) return false;
+    if (!job.submissionUncertain) return false;
     try {
       const queue = await request<Queue>(job.base, '/queue');
       const match = [...queue.queue_running, ...queue.queue_pending].find((row) => {
@@ -1068,8 +984,6 @@ function useStudioState() {
 
   function generateVariation(baseJob: Job) {
     const next = baseSettings(structuredClone(baseJob.settings));
-    delete next.experiment;
-    delete next.draftTarget;
     next.seed = randomSeed();
     next.random = true;
     void generate(next);
@@ -1079,15 +993,13 @@ function useStudioState() {
     const source = baseJob.images[0];
     if (!source) return;
     const next = upscaleSettings(structuredClone(baseJob.settings), source, model, scale, refine);
-    delete next.experiment;
-    delete next.draftTarget;
     void generate(next);
     notify(`${next.width} × ${next.height}로 업스케일을 등록했어요`);
   }
 
   async function shareImage(job: Job) {
     if (!job.images[0]) return;
-    const url = job.preview ? '/sample.svg' : imageUrl(job.base, job.images[0]);
+    const url = imageUrl(job.base, job.images[0]);
     try {
       const res = await fetch(url);
       const blob = await res.blob();
@@ -1133,16 +1045,12 @@ function useStudioState() {
   });
 
   async function refreshGallery(force = false) {
-    if (connection.preview) {
-      setGallery(null);
-      return;
-    }
     const next = await fetchGallery(force);
     if (next) setGallery(next.available ? next : null);
   }
 
-  // Gallery items are files: deleting one deletes the file. Local records (preview mode,
-  // direct connections, failed jobs) are only removed from this device.
+  // Gallery items are files: deleting one deletes the file. Local records (direct
+  // connections, failed jobs) are only removed from this device.
   async function deleteJobs(ids: string[]): Promise<boolean> {
     if (ids.length === 0) return true;
     const fileIds = new Set(ids.filter((id) => id.startsWith('file:')));
@@ -1165,9 +1073,7 @@ function useStudioState() {
         setJobs((all) =>
           all.filter(
             (j) =>
-              j.preview ||
-              j.base !== GALLERY_BASE ||
-              !j.images.some((image) => removed.has(outputKey(image))),
+              j.base !== GALLERY_BASE || !j.images.some((image) => removed.has(outputKey(image))),
           ),
         );
       } catch (e) {
@@ -1187,10 +1093,6 @@ function useStudioState() {
     return failed === 0;
   }
   async function cancel(j: Job) {
-    if (j.preview) {
-      updateJob(j.id, { status: 'cancelled' });
-      return;
-    }
     try {
       const q = await request<Queue>(j.base, '/queue');
       if (q.queue_running.some((row) => row[1] === j.id)) {
@@ -1330,14 +1232,14 @@ function useStudioState() {
   const completedJobCount = jobs.filter((j) => j.status === 'complete').length;
   useEffect(() => {
     void refreshGallery(true);
-  }, [connection.preview, connection.base, completedJobCount]);
+  }, [connection.base, completedJobCount]);
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') void refreshGallery();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [connection.preview]);
+  }, []);
 
   async function toggleNotifications(enable?: boolean) {
     const next = enable !== undefined ? enable : !notificationsEnabled;
@@ -1382,7 +1284,7 @@ function useStudioState() {
 
   function connect(base: string) {
     const normalized = normalizeBase(base);
-    setConnection({ base: normalized, preview: false });
+    setConnection({ base: normalized });
     reconnect();
   }
   const runningJob = jobs.find((j) => ['submitting', 'running'].includes(j.status));
@@ -1417,13 +1319,11 @@ function useStudioState() {
     reconnect,
     refreshModels,
     connect,
-    preview: () => setConnection({ ...connection, preview: true }),
     notice,
     notify,
     online,
     socketState,
     generate,
-    enqueueExperiment,
     checkSubmission,
     busy,
     active,

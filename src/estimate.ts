@@ -22,7 +22,6 @@ export function jobsAhead(jobs: Job[], current: Job): Job[] {
     (job) =>
       job.id !== current.id &&
       job.base === current.base &&
-      job.preview === current.preview &&
       (job.status === 'running' || (job.status === 'queued' && job.createdAt < current.createdAt)),
   );
 }
@@ -46,7 +45,6 @@ export function calculateRemainingEstimate(
       return (
         job.id !== currentJob.id &&
         job.base === currentJob.base &&
-        job.preview === currentJob.preview &&
         !s.workflow &&
         !s.upscale &&
         s.architecture === target.architecture &&

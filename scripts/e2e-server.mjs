@@ -1,6 +1,6 @@
 // Isolated ComfyUI protocol fixture, used only by npm run test:e2e.
 import { createServer } from 'node:http';
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { crc32, deflateSync } from 'node:zlib';
 import { join } from 'node:path';
@@ -153,6 +153,8 @@ const dummyPng = Buffer.from(
   '89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000A49444154789C63000100000500010D0A2DB40000000049454E44AE426082',
   'hex',
 );
+const MOCK_IMAGE_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024"><rect width="768" height="1024" fill="#d9dfd3"/><circle cx="384" cy="420" r="160" fill="#8a9a7b"/></svg>';
 const previewPacket = Buffer.alloc(8 + dummyPng.length);
 previewPacket.writeUInt32BE(1, 0); // BinaryEventTypes.PREVIEW_IMAGE = 1
 previewPacket.writeUInt32BE(2, 4); // PNG = 2
@@ -324,7 +326,7 @@ const mock = createServer(async (req, res) => {
   if (url.pathname === '/object_info') return send(schema);
   if (url.pathname === '/view' || url.pathname === '/api/lm/previews') {
     res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' });
-    return res.end(readFileSync('public/sample.svg'));
+    return res.end(MOCK_IMAGE_SVG);
   }
   if (req.method === 'GET' && url.pathname === '/api/lm/loras/list') {
     let items = [...mockLoras];

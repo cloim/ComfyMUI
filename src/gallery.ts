@@ -110,7 +110,6 @@ export function galleryJob(file: GalleryFile, fallbackNegative: string): Job {
     requestToken: file.requestToken,
     settings: gallerySettings(file, fallbackNegative),
     base: GALLERY_BASE,
-    preview: false,
     status: 'complete',
     progress: 100,
     images: [{ filename: file.filename, subfolder: file.subfolder, type: 'output', v: file.mtime }],

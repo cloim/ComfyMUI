@@ -4,9 +4,7 @@ import { useStudioSelector } from '../studio';
 import { compatibleAssets } from '../models';
 import { options } from '../domain';
 import {
-  DEMO_LORAS,
   fetchLoraList,
-  inferFamilyFromLoraItem,
   isVideoPreview,
   loraPreviewUrl,
   resolveComfyLoraName,
@@ -41,19 +39,15 @@ export function LoraPicker({ open, onClose }: { open: boolean; onClose: () => vo
     async function load() {
       try {
         const loaded: LoraItem[] = [];
-        if (connection.preview) {
-          loaded.push(...DEMO_LORAS);
-        } else {
-          let page = 1;
-          let totalPages = 1;
-          do {
-            const result = await fetchLoraList(connection.base, { page, pageSize: 100 });
-            if (cancelled) return;
-            loaded.push(...result.items);
-            totalPages = result.total_pages;
-            page++;
-          } while (page <= totalPages);
-        }
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const result = await fetchLoraList(connection.base, { page, pageSize: 100 });
+          if (cancelled) return;
+          loaded.push(...result.items);
+          totalPages = result.total_pages;
+          page++;
+        } while (page <= totalPages);
         if (!cancelled) setItems(loaded);
       } catch {
         if (!cancelled) setError(true);
@@ -65,17 +59,13 @@ export function LoraPicker({ open, onClose }: { open: boolean; onClose: () => vo
     return () => {
       cancelled = true;
     };
-  }, [open, connection.base, connection.preview, retry]);
+  }, [open, connection.base, retry]);
 
   const names = compatibleAssets(info, 'lora', settings.architecture, familyAssignments);
   const allNames = options(info, 'LoraLoaderModelOnly', 'lora_name').concat(
     options(info, 'LoraLoader', 'lora_name'),
   );
   const metadata = new Map(items.map((item) => [resolveComfyLoraName(item, allNames), item]));
-  if (connection.preview) {
-    const demo = items.find((item) => inferFamilyFromLoraItem(item) === settings.architecture);
-    if (demo) names.forEach((name) => metadata.set(name, demo));
-  }
   const available = names.filter((name) => !settings.loras.some((lora) => lora.name === name));
   const query = search.trim().toLowerCase();
   const visible = available.filter((name) => {

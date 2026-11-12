@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { demoInfo } from '../src/domain';
+import type { ObjectInfo } from '../src/domain';
 import {
   formatModelSubType,
   inferFamilyFromModelItem,
@@ -7,6 +7,15 @@ import {
   resolveComfyModelEntry,
   resolveComfyModelName,
 } from '../src/model-manager';
+
+const modelInfo: ObjectInfo = {
+  CheckpointLoaderSimple: {
+    input: { required: { ckpt_name: [['Flux1.D/flux-test.safetensors']] } },
+  },
+  UNETLoader: {
+    input: { required: { unet_name: [['Krea2/krea2-test.safetensors']] } },
+  },
+};
 
 describe('Model Manager domain helpers', () => {
   it('infers ComfyMUI family from model base_model and path', () => {
@@ -88,28 +97,28 @@ describe('Model Manager domain helpers', () => {
       resolveComfyModelName(
         {
           folder: 'Flux1.D',
-          file_name: '미리보기 Flux1.d',
-          file_path: 'E:/ComfyUI/models/checkpoints/Flux1.D/미리보기 Flux1.d.safetensors',
+          file_name: 'flux-test',
+          file_path: '/data/models-view/checkpoints/Flux1.D/flux-test.safetensors',
           sub_type: 'checkpoint',
         },
-        demoInfo,
+        modelInfo,
       ),
-    ).toBe('Flux1.D/미리보기 Flux1.d.safetensors');
+    ).toBe('Flux1.D/flux-test.safetensors');
 
     const kreaEntry = resolveComfyModelEntry(
       {
         base_model: 'Krea2',
         folder: 'Krea2',
-        file_name: '미리보기 krea2',
-        file_path: 'E:/ComfyUI/models/diffusion_models/Krea2/미리보기 krea2.safetensors',
+        file_name: 'krea2-test',
+        file_path: '/data/models-view/diffusion_models/Krea2/krea2-test.safetensors',
         sub_type: 'diffusion_model',
       },
-      demoInfo,
+      modelInfo,
       {},
     );
     expect(kreaEntry).toEqual({
-      id: 'UNETLoader:Krea2/미리보기 krea2.safetensors',
-      name: 'Krea2/미리보기 krea2.safetensors',
+      id: 'UNETLoader:Krea2/krea2-test.safetensors',
+      name: 'Krea2/krea2-test.safetensors',
       loader: 'UNETLoader',
       family: 'krea2',
       format: 'Diffusion',

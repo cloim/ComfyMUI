@@ -22,14 +22,8 @@ export function CompareViewer({ leftJob, rightJob, onClose }: CompareViewerProps
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const leftSrc =
-    leftJob.images[0] && !leftJob.preview
-      ? imageUrl(leftJob.base, leftJob.images[0])
-      : '/sample.svg';
-  const rightSrc =
-    rightJob.images[0] && !rightJob.preview
-      ? imageUrl(rightJob.base, rightJob.images[0])
-      : '/sample.svg';
+  const leftSrc = leftJob.images[0] ? imageUrl(leftJob.base, leftJob.images[0]) : '';
+  const rightSrc = rightJob.images[0] ? imageUrl(rightJob.base, rightJob.images[0]) : '';
 
   // Keyboard navigation & ESC to close
   useEffect(() => {
@@ -173,7 +167,7 @@ export function CompareViewer({ leftJob, rightJob, onClose }: CompareViewerProps
         >
           {/* Right Image (Background) */}
           <img
-            src={rightSrc}
+            src={rightSrc || undefined}
             alt="비교 대상 B 이미지"
             className="absolute inset-0 w-full h-full object-contain pointer-events-none"
           />
@@ -184,7 +178,7 @@ export function CompareViewer({ leftJob, rightJob, onClose }: CompareViewerProps
             style={{ width: `${sliderPos}%` }}
           >
             <img
-              src={leftSrc}
+              src={leftSrc || undefined}
               alt="비교 대상 A 이미지"
               className="absolute inset-0 w-full h-full object-contain pointer-events-none"
               style={{

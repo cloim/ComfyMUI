@@ -20,7 +20,6 @@ import {
 import { useStudioSelector } from '../studio';
 import { assetFamily, families, selectModel, type ModelEntry, type ModelFamily } from '../models';
 import {
-  DEMO_MODELS,
   addModelTags,
   deleteModelFile,
   fetchModelCivitaiMetadata,
@@ -86,8 +85,8 @@ export default function Models() {
   }));
   const navigate = useNavigate();
 
-  const [items, setItems] = useState<ModelManagerItem[]>(connection.preview ? DEMO_MODELS : []);
-  const [total, setTotal] = useState<number>(connection.preview ? DEMO_MODELS.length : 0);
+  const [items, setItems] = useState<ModelManagerItem[]>([]);
+  const [total, setTotal] = useState<number>(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -164,19 +163,6 @@ export default function Models() {
   }, [search]);
 
   async function loadFacets() {
-    if (connection.preview) {
-      setFolders(['Flux1.D', 'Krea2', 'Qwen']);
-      setRoots(['E:/ComfyUI/models/diffusion_models', 'E:/ComfyUI/models/checkpoints']);
-      setTopTags([
-        { tag: 'flux', count: 1 },
-        { tag: 'photorealistic', count: 1 },
-        { tag: 'portrait', count: 1 },
-        { tag: 'krea2', count: 1 },
-        { tag: 'moss', count: 1 },
-        { tag: 'qwen', count: 1 },
-      ]);
-      return;
-    }
     try {
       const [fList, rList, tList] = await Promise.all([
         fetchModelFolders(connection.base).catch(() => []),
@@ -196,43 +182,6 @@ export default function Models() {
   }
 
   async function loadModels(targetPage = 1, append = false) {
-    if (connection.preview) {
-      setApiError('');
-      let filtered = [...DEMO_MODELS];
-      if (debouncedSearch.trim()) {
-        const q = debouncedSearch.trim().toLowerCase();
-        filtered = filtered.filter(
-          (item) =>
-            item.model_name.toLowerCase().includes(q) ||
-            item.file_name.toLowerCase().includes(q) ||
-            (item.base_model || '').toLowerCase().includes(q) ||
-            item.tags.some((t) => t.toLowerCase().includes(q)),
-        );
-      }
-      if (folder !== 'all') {
-        filtered = filtered.filter((item) => item.folder === folder);
-      }
-      if (selectedTags.length > 0) {
-        filtered = filtered.filter((item) => {
-          const itemTags = item.tags.map((t) => t.toLowerCase());
-          if (tagLogic === 'all') {
-            return selectedTags.every((st) => itemTags.includes(st.toLowerCase()));
-          }
-          return selectedTags.some((st) => itemTags.includes(st.toLowerCase()));
-        });
-      }
-      if (favoritesOnly) {
-        filtered = filtered.filter((item) => item.favorite);
-      }
-      if (updatesOnly) {
-        filtered = filtered.filter((item) => item.update_available);
-      }
-      setItems(filtered);
-      setTotal(filtered.length);
-      setPage(1);
-      return;
-    }
-
     if (append) {
       setLoadingMore(true);
     } else {
@@ -272,7 +221,6 @@ export default function Models() {
     void loadModels(1, false);
   }, [
     connection.base,
-    connection.preview,
     debouncedSearch,
     folder,
     selectedTags,
@@ -283,7 +231,7 @@ export default function Models() {
 
   useEffect(() => {
     void loadFacets();
-  }, [connection.base, connection.preview]);
+  }, [connection.base]);
 
   // Reload the library when a background download lands.
   const libraryRevisionRef = useRef(libraryRevision);
@@ -301,7 +249,7 @@ export default function Models() {
   const hasMore = items.length < total;
 
   function handleScroll(e: UIEvent<HTMLDivElement>) {
-    if (loading || loadingMore || !hasMore || connection.preview) return;
+    if (loading || loadingMore || !hasMore) return;
     const el = e.currentTarget;
     const nearBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 280;
     if (nearBottom) {
@@ -377,10 +325,6 @@ export default function Models() {
     if (activeModel?.file_path === item.file_path) {
       setActiveModel((prev) => (prev ? { ...prev, favorite: nextFav } : null));
     }
-    if (connection.preview) {
-      notify(nextFav ? '즐겨찾기에 등록했어요' : '즐겨찾기에서 해제했어요');
-      return;
-    }
     try {
       await saveModelMetadata(connection.base, {
         file_path: item.file_path,
@@ -394,10 +338,6 @@ export default function Models() {
   }
 
   async function handleScanModels() {
-    if (connection.preview) {
-      notify('미리보기 모드에서는 데모 모델 목록을 유지해요');
-      return;
-    }
     setScanning(true);
     try {
       await scanModels(connection.base, false);
@@ -412,10 +352,6 @@ export default function Models() {
   }
 
   async function handleRefreshUpdates() {
-    if (connection.preview) {
-      notify('미리보기 모드에서 1개의 업데이트 가능 모델을 확인했어요');
-      return;
-    }
     setCheckingUpdates(true);
     try {
       const res = await refreshModelUpdates(connection.base);
@@ -441,19 +377,6 @@ export default function Models() {
         ...prev,
         [`model:${comfyName}`]: editFamily,
       }));
-    }
-
-    if (connection.preview) {
-      const updated: ModelManagerItem = {
-        ...activeModel,
-        model_name: editModelName.trim() || activeModel.file_name,
-        base_model: editBaseModel.trim() || activeModel.base_model,
-        notes: editNotes,
-      };
-      setItems((prev) => prev.map((x) => (x.file_path === activeModel.file_path ? updated : x)));
-      setActiveModel(updated);
-      notify('모델 메타데이터와 계열 분류를 저장했어요');
-      return;
     }
 
     setSavingDetail(true);
@@ -491,17 +414,6 @@ export default function Models() {
       .filter(Boolean);
     if (!newTags.length) return;
 
-    if (connection.preview) {
-      const merged = [...new Set([...(activeModel.tags || []), ...newTags])];
-      setActiveModel({ ...activeModel, tags: merged });
-      setItems((prev) =>
-        prev.map((x) => (x.file_path === activeModel.file_path ? { ...x, tags: merged } : x)),
-      );
-      setEditTagInput('');
-      notify('태그를 추가했어요');
-      return;
-    }
-
     try {
       const res = await addModelTags(connection.base, activeModel.file_path, newTags);
       const merged = res.tags || [...new Set([...(activeModel.tags || []), ...newTags])];
@@ -518,15 +430,6 @@ export default function Models() {
   async function handleRemoveTag(tagToRemove: string) {
     if (!activeModel) return;
     const remaining = (activeModel.tags || []).filter((t) => t !== tagToRemove);
-
-    if (connection.preview) {
-      setActiveModel({ ...activeModel, tags: remaining });
-      setItems((prev) =>
-        prev.map((x) => (x.file_path === activeModel.file_path ? { ...x, tags: remaining } : x)),
-      );
-      notify(`#${tagToRemove} 태그를 삭제했어요`);
-      return;
-    }
 
     try {
       await saveModelMetadata(connection.base, {
@@ -546,10 +449,6 @@ export default function Models() {
 
   async function handleSyncCivitaiSingle() {
     if (!activeModel) return;
-    if (connection.preview) {
-      notify('미리보기 모드에서 CivitAI 메타데이터 동기화를 완료했어요');
-      return;
-    }
     setSavingDetail(true);
     try {
       const res = await fetchModelCivitaiMetadata(connection.base, activeModel.file_path);
@@ -571,10 +470,6 @@ export default function Models() {
     const vid = relinkVersionId.trim() ? Number(relinkVersionId.trim()) : undefined;
     if (!Number.isInteger(mid) || mid <= 0) {
       notify('올바른 CivitAI 모델 ID 숫자를 입력해 주세요');
-      return;
-    }
-    if (connection.preview) {
-      notify(`CivitAI 모델 #${mid}로 연결을 갱신했어요`);
       return;
     }
     setSavingDetail(true);
@@ -600,27 +495,6 @@ export default function Models() {
       notify('연결된 CivitAI 모델 ID가 없습니다');
       return;
     }
-    if (connection.preview) {
-      setRemoteVersions([
-        {
-          id: 852897,
-          modelId: mid,
-          name: 'v2.0 FP8',
-          baseModel: 'Flux.1 D',
-          existsLocally: true,
-          modelSizeKB: 11_622_555,
-        },
-        {
-          id: 992100,
-          modelId: mid,
-          name: 'v3.0 Studio FP8 (최신 업데이트)',
-          baseModel: 'Flux.1 D',
-          existsLocally: false,
-          modelSizeKB: 11_840_000,
-        },
-      ]);
-      return;
-    }
     setLoadingVersions(true);
     try {
       const versions = await fetchModelCivitaiVersions(connection.base, mid);
@@ -639,14 +513,6 @@ export default function Models() {
     if (!activeModel) return;
     const clean = editRenameInput.trim().replace(/\.(safetensors|sft|gguf|ckpt|pt|pth|bin)$/i, '');
     if (!clean || clean === activeModel.file_name) return;
-    if (connection.preview) {
-      setActiveModel({ ...activeModel, file_name: clean });
-      setItems((prev) =>
-        prev.map((x) => (x.file_path === activeModel.file_path ? { ...x, file_name: clean } : x)),
-      );
-      notify(`파일명을 ${clean}으로 변경했어요`);
-      return;
-    }
     setSavingDetail(true);
     try {
       await renameModelFile(connection.base, activeModel.file_path, clean);
@@ -669,22 +535,14 @@ export default function Models() {
           .replaceAll('\\', '/')
           .toLowerCase()
           .startsWith(r.replaceAll('\\', '/').toLowerCase()),
-      ) ||
-      roots[0] ||
-      'E:/ComfyUI/models/diffusion_models';
+      ) || roots[0];
+    if (!matchedRoot) {
+      notify('모델 저장 위치를 불러오지 못했어요. 잠시 후 다시 시도해 주세요');
+      return;
+    }
     const targetDir = editMoveFolder
       ? `${matchedRoot.replace(/\/+$/, '')}/${editMoveFolder.replace(/^\/+|\/+$/g, '')}`
       : matchedRoot.replace(/\/+$/, '');
-    if (connection.preview) {
-      setActiveModel({ ...activeModel, folder: editMoveFolder });
-      setItems((prev) =>
-        prev.map((x) =>
-          x.file_path === activeModel.file_path ? { ...x, folder: editMoveFolder } : x,
-        ),
-      );
-      notify(`폴더를 ${editMoveFolder || '루트'}로 이동했어요`);
-      return;
-    }
     setSavingDetail(true);
     try {
       await moveModelFile(connection.base, activeModel.file_path, targetDir);
@@ -701,13 +559,6 @@ export default function Models() {
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
-    if (connection.preview) {
-      setItems((prev) => prev.filter((x) => x.file_path !== deleteTarget.file_path));
-      setDeleteTarget(null);
-      setActiveModel(null);
-      notify('선택한 모델을 삭제했어요');
-      return;
-    }
     try {
       await deleteModelFile(connection.base, deleteTarget.file_path);
       refreshModels();
@@ -728,21 +579,6 @@ export default function Models() {
     }
     const parsed = parseCivitaiAir(civitaiQuery)!;
     setLookupAir(parsed);
-    if (connection.preview) {
-      const mockVersion: CivitaiVersion = {
-        id: parsed.modelVersionId || 992100,
-        modelId: parsed.modelId || 705606,
-        name: 'v3.0 Studio FP8',
-        baseModel: 'Flux.1 D',
-        existsLocally: false,
-        modelSizeKB: 11_840_000,
-        model: { name: 'Flux Studio Realism v3', type: 'Checkpoint' },
-        images: [{ url: '/sample.svg', nsfwLevel: 1 }],
-      };
-      setLookupVersions([mockVersion]);
-      setSelectedVersionId(mockVersion.id);
-      return;
-    }
 
     setLookupLoading(true);
     setLookupVersions([]);
@@ -788,49 +624,6 @@ export default function Models() {
     const modelId = opts?.modelId || selectedVer?.modelId;
     if (!versionId) {
       notify('다운로드할 버전을 선택해 주세요');
-      return;
-    }
-
-    if (connection.preview) {
-      const newItem: ModelManagerItem = {
-        model_name: selectedVer?.model?.name || selectedVer?.name || `CivitAI Model #${versionId}`,
-        file_name: `civitai_model_${versionId}`,
-        preview_url: '/sample.svg',
-        preview_nsfw_level: 1,
-        base_model: selectedVer?.baseModel || 'Flux.1 D',
-        folder:
-          opts?.folderOverride ??
-          (targetFolder === 'auto'
-            ? 'Flux1.D'
-            : targetFolder === 'custom'
-              ? customSubfolder.trim()
-              : targetFolder),
-        sha256: String(versionId).padStart(64, '0'),
-        hash_status: 'completed',
-        quantization: 'FP8',
-        file_path: `E:/ComfyUI/models/checkpoints/civitai_model_${versionId}.safetensors`,
-        file_size: (selectedVer?.modelSizeKB || 11_800_000) * 1024,
-        modified: Math.floor(Date.now() / 1000),
-        tags: ['civitai', 'checkpoint'],
-        from_civitai: true,
-        notes: 'CivitAI에서 다운로드한 모델',
-        sub_type: 'checkpoint',
-        favorite: false,
-        update_available: false,
-        civitai: {
-          id: versionId,
-          modelId: modelId || 705606,
-          name: selectedVer?.name || 'v1.0',
-        },
-      };
-      setItems((prev) => [
-        newItem,
-        ...prev.map((x) =>
-          modelId && x.civitai?.modelId === modelId ? { ...x, update_available: false } : x,
-        ),
-      ]);
-      setDownloadModalOpen(false);
-      notify('CivitAI 모델 다운로드를 완료했어요');
       return;
     }
 

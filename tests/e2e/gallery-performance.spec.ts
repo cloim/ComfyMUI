@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
           ? {
               entries: {
                 'cm-connection': {
-                  value: { base: '/comfy', preview: false },
+                  value: { base: '/comfy' },
                   updatedAt: 1,
                   revision: 1,
                 },
@@ -34,9 +34,6 @@ test.beforeEach(async ({ page }) => {
             architecture: 'flux',
             width: 512,
             height: 768,
-            ...(i < 3
-              ? { experiment: { id: 'experiment-demo', label: `LoRA ${[0.4, 0.7, 1][i]}` } }
-              : {}),
           },
         })),
       },
@@ -70,7 +67,7 @@ test('5000 records render only viewport cards and still reach the final image', 
   await expect(page.getByRole('img', { name: '장면 04999', exact: true })).toBeVisible();
 });
 
-test('search, scroll and experiment filters survive returning from another screen', async ({
+test('search and scroll filters survive returning from another screen', async ({
   page,
 }) => {
   await page.goto('/gallery');
@@ -93,15 +90,9 @@ test('search, scroll and experiment filters survive returning from another scree
   await expect
     .poll(() => page.getByLabel('기록 목록', { exact: true }).evaluate((el) => el.scrollTop))
     .toBe(2000);
-  await page.getByLabel('기록 검색', { exact: true }).fill('');
-  await page.getByLabel('실험 묶음 필터', { exact: true }).selectOption('experiment-demo');
-  await expect(page.getByText('표시 3 / 5000개', { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: '실험 묶음 보기: LoRA 0.7', exact: true }),
-  ).toBeVisible();
   await page.getByRole('checkbox', { name: '이미지 선택' }).first().click();
   await page.getByRole('button', { name: '전체 선택', exact: true }).click();
-  await expect(page.getByText('3개 선택', { exact: true })).toBeVisible();
+  await expect(page.getByText('500개 선택', { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 325, height: 667 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

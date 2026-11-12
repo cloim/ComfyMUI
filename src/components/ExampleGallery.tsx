@@ -53,7 +53,7 @@ export function DetailExamples({
       defaultUrl={ex.defaultUrl}
       settingUrl={ex.settingUrl}
       onSetDefault={(im) => void ex.setDefault(im)}
-      canSetDefault={(im) => canBecomeDefault(im, ex.preview)}
+      canSetDefault={canBecomeDefault}
       emptyText={
         ex.error
           ? `예시 이미지를 불러오지 못했어요 | ${ex.error}`
@@ -139,7 +139,10 @@ export function ExampleGallery({
         )}
       </div>
       {loading ? (
-        <div className="flex h-56 gap-2 overflow-hidden sm:h-72" aria-label="예시 이미지를 불러오는 중">
+        <div
+          className="flex h-56 gap-2 overflow-hidden sm:h-72"
+          aria-label="예시 이미지를 불러오는 중"
+        >
           {[0.78, 0.66, 1].map((r) => (
             <div
               key={r}
@@ -166,76 +169,84 @@ export function ExampleGallery({
                 className="group relative h-full max-w-[85%] shrink-0 snap-start overflow-hidden rounded-xl bg-stone"
                 style={{ aspectRatio: `${im.width || 1} / ${im.height || 1}` }}
               >
-              <button
-                type="button"
-                aria-label={isHidden ? `예시 이미지 ${i + 1} 민감한 이미지 보기` : `예시 이미지 ${i + 1} 크게 보기`}
-                onClick={() => (isHidden ? reveal(i) : setViewing(i))}
-                className="absolute inset-0 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-olive"
-              >
-                {video ? (
-                  <video
-                    src={src}
-                    muted
-                    loop
-                    autoPlay={!isHidden}
-                    playsInline
-                    preload="metadata"
-                    className={`h-full w-full object-contain ${isHidden ? 'blur-2xl' : ''}`}
-                  />
-                ) : (
-                  <img
-                    src={src}
-                    alt=""
-                    loading="lazy"
-                    draggable={false}
-                    className={`h-full w-full object-contain ${isHidden ? 'blur-2xl' : ''}`}
-                  />
-                )}
-                {isHidden ? (
-                  <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/30 text-white">
-                    <EyeOff size={18} aria-hidden="true" />
-                    <span className="rounded-full bg-black/50 px-3 py-1 text-2xs font-semibold">
-                      보기
-                    </span>
-                  </span>
-                ) : (
-                  <>
-                    {video && (
-                      <span className="absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white">
-                        <Play size={11} aria-hidden="true" />
-                      </span>
-                    )}
-                    {hasGenerationData(im.meta) && (
-                      <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white">
-                        <Info size={12} aria-hidden="true" />
-                      </span>
-                    )}
-                  </>
-                )}
-              </button>
-              {onSetDefault && !isHidden && canSetDefault?.(im) !== false && (
                 <button
                   type="button"
-                  role="checkbox"
-                  aria-checked={isDefault}
-                  aria-busy={isSetting || undefined}
-                  aria-label={`예시 이미지 ${i + 1} 기본 이미지로 설정`}
-                  disabled={Boolean(settingUrl) && !isSetting}
-                  onClick={() => onSetDefault(im)}
-                  className={`absolute bottom-2 left-2 flex min-h-7 items-center gap-1.5 rounded-full py-1 pl-1.5 pr-2.5 text-2xs font-semibold text-white backdrop-blur-sm transition disabled:opacity-60 ${isDefault ? 'bg-olive' : 'bg-black/55 hover:bg-black/70'}`}
+                  aria-label={
+                    isHidden
+                      ? `예시 이미지 ${i + 1} 민감한 이미지 보기`
+                      : `예시 이미지 ${i + 1} 크게 보기`
+                  }
+                  onClick={() => (isHidden ? reveal(i) : setViewing(i))}
+                  className="absolute inset-0 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-olive"
                 >
-                  <span
-                    className={`flex h-4 w-4 items-center justify-center rounded border-[1.5px] ${isDefault ? 'border-white bg-white text-olive' : 'border-white/90 text-transparent'}`}
-                  >
-                    {isSetting ? (
-                      <LoaderCircle size={11} className="animate-spin text-white" aria-hidden="true" />
-                    ) : (
-                      <Check size={11} strokeWidth={3.5} aria-hidden="true" />
-                    )}
-                  </span>
-                  기본 이미지로 설정
+                  {video ? (
+                    <video
+                      src={src}
+                      muted
+                      loop
+                      autoPlay={!isHidden}
+                      playsInline
+                      preload="metadata"
+                      className={`h-full w-full object-contain ${isHidden ? 'blur-2xl' : ''}`}
+                    />
+                  ) : (
+                    <img
+                      src={src}
+                      alt=""
+                      loading="lazy"
+                      draggable={false}
+                      className={`h-full w-full object-contain ${isHidden ? 'blur-2xl' : ''}`}
+                    />
+                  )}
+                  {isHidden ? (
+                    <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/30 text-white">
+                      <EyeOff size={18} aria-hidden="true" />
+                      <span className="rounded-full bg-black/50 px-3 py-1 text-2xs font-semibold">
+                        보기
+                      </span>
+                    </span>
+                  ) : (
+                    <>
+                      {video && (
+                        <span className="absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white">
+                          <Play size={11} aria-hidden="true" />
+                        </span>
+                      )}
+                      {hasGenerationData(im.meta) && (
+                        <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/55 text-white">
+                          <Info size={12} aria-hidden="true" />
+                        </span>
+                      )}
+                    </>
+                  )}
                 </button>
-              )}
+                {onSetDefault && !isHidden && canSetDefault?.(im) !== false && (
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={isDefault}
+                    aria-busy={isSetting || undefined}
+                    aria-label={`예시 이미지 ${i + 1} 기본 이미지로 설정`}
+                    disabled={Boolean(settingUrl) && !isSetting}
+                    onClick={() => onSetDefault(im)}
+                    className={`absolute bottom-2 left-2 flex min-h-7 items-center gap-1.5 rounded-full py-1 pl-1.5 pr-2.5 text-2xs font-semibold text-white backdrop-blur-sm transition disabled:opacity-60 ${isDefault ? 'bg-olive' : 'bg-black/55 hover:bg-black/70'}`}
+                  >
+                    <span
+                      className={`flex h-4 w-4 items-center justify-center rounded border-[1.5px] ${isDefault ? 'border-white bg-white text-olive' : 'border-white/90 text-transparent'}`}
+                    >
+                      {isSetting ? (
+                        <LoaderCircle
+                          size={11}
+                          className="animate-spin text-white"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Check size={11} strokeWidth={3.5} aria-hidden="true" />
+                      )}
+                    </span>
+                    기본 이미지로 설정
+                  </button>
+                )}
               </div>
             );
           })}
@@ -442,8 +453,7 @@ function GenerationData({
         <h3 className="text-sm font-semibold">생성 정보</h3>
         {prompt && (
           <button type="button" className="btn-primary" onClick={onRemix}>
-            <Wand2 size={14} aria-hidden="true" />
-            이 설정으로 만들기
+            <Wand2 size={14} aria-hidden="true" />이 설정으로 만들기
           </button>
         )}
       </div>
@@ -491,7 +501,15 @@ function GenerationData({
   );
 }
 
-function Block({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+function Block({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex min-h-8 items-center justify-between gap-2">

@@ -342,29 +342,6 @@ export async function setPreviewFromUrl(
   return { preview_url: res.preview_url, preview_nsfw_level: res.preview_nsfw_level ?? 0 };
 }
 
-export const DEMO_EXAMPLE_IMAGES: CivitaiImage[] = [
-  {
-    url: '/sample.svg',
-    width: 832,
-    height: 1216,
-    nsfwLevel: 1,
-    type: 'image',
-    meta: {
-      prompt: 'portrait of an elegant adult woman, soft window light, film grain, 85mm',
-      negativePrompt: 'blurry, lowres',
-      sampler: 'euler',
-      steps: 24,
-      cfgScale: 1,
-      seed: 4123,
-      Size: '832x1216',
-      'Distilled CFG Scale': '3.5',
-      resources: [{ name: 'Flux 1.D Studio', type: 'model' }],
-    },
-  },
-  { url: '/sample.svg', width: 1216, height: 832, nsfwLevel: 1, type: 'image', meta: null },
-  { url: '/sample.svg', width: 1024, height: 1024, nsfwLevel: 8, type: 'image', meta: null },
-];
-
 // CivitAI CDN paths are /{key}/{uuid}/{options}/{name}; the options segment picks the
 // rendition. Thumbnails ask for a narrow copy, the viewer asks for the full image.
 export function civitaiMediaUrl(
@@ -414,109 +391,6 @@ export function formatBytes(bytes?: number): string {
   }
   return `${val.toFixed(idx >= 2 ? 1 : 0)} ${units[idx]}`;
 }
-
-export const DEMO_LORAS: LoraItem[] = [
-  {
-    model_name: 'Flux Detail Enhancer Studio',
-    file_name: 'flux-detail',
-    preview_url: '/sample.svg',
-    preview_nsfw_level: 1,
-    base_model: 'Flux.1 D',
-    folder: 'Flux1.D/commons',
-    sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90',
-    file_path: 'E:/ComfyUI/models/loras/Flux1.D/commons/flux-detail.safetensors',
-    file_size: 154_200_000,
-    modified: 1762000000,
-    tags: ['detail', 'lighting', 'portrait'],
-    from_civitai: true,
-    usage_count: 12,
-    usage_tips: '{"strength":0.75,"clipStrength":0.75}',
-    notes: '인물 피부 디테일과 자연광 하이라이트 보강용 기본 LoRA',
-    favorite: true,
-    update_available: true,
-    civitai: {
-      id: 940211,
-      modelId: 840370,
-      name: 'v1.2 Studio',
-      trainedWords: ['detailed skin texture', 'soft studio rim light'],
-    },
-  },
-  {
-    model_name: 'Krea2 Editorial Portrait Tone',
-    file_name: 'krea2-style',
-    preview_url: '/sample.svg',
-    preview_nsfw_level: 1,
-    base_model: 'Krea2',
-    folder: 'Krea2',
-    sha256: 'b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1',
-    file_path: 'E:/ComfyUI/models/loras/Krea2/krea2-style.safetensors',
-    file_size: 92_400_000,
-    modified: 1761900000,
-    tags: ['editorial', 'fashion', 'film'],
-    from_civitai: true,
-    usage_count: 6,
-    usage_tips: '{"strength":0.8,"clipStrength":0.8}',
-    notes: '8스텝 Krea2 매거진 화보 톤앤매너 보정',
-    favorite: false,
-    update_available: false,
-    civitai: {
-      id: 951102,
-      modelId: 851000,
-      name: 'v1.0',
-      trainedWords: ['editorial portrait', 'kodak portra 400'],
-    },
-  },
-  {
-    model_name: 'MOSS Soft Film Grain',
-    file_name: 'moss-tone',
-    preview_url: '/sample.svg',
-    preview_nsfw_level: 1,
-    base_model: 'MOSS',
-    folder: 'Flux1.D/illust',
-    sha256: 'c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2',
-    file_path: 'E:/ComfyUI/models/loras/Flux1.D/illust/moss-tone.safetensors',
-    file_size: 118_000_000,
-    modified: 1761800000,
-    tags: ['cinema', 'colorgrading'],
-    from_civitai: false,
-    usage_count: 3,
-    usage_tips: '{"strength":0.65,"clipStrength":0.65}',
-    notes: '부드러운 필름 입자감과 시네마틱 색감 연출',
-    favorite: false,
-    update_available: false,
-    civitai: {
-      id: 0,
-      modelId: 0,
-      name: 'Local v1',
-      trainedWords: ['cinematic color grading'],
-    },
-  },
-  {
-    model_name: 'Qwen 2.1 Realism Enhancer',
-    file_name: 'qwen_image_2_1-detail',
-    preview_url: '/sample.svg',
-    preview_nsfw_level: 1,
-    base_model: 'Qwen',
-    folder: 'Qwen',
-    sha256: 'd4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3',
-    file_path: 'E:/ComfyUI/models/loras/Qwen/qwen_image_2_1-detail.safetensors',
-    file_size: 210_500_000,
-    modified: 1761700000,
-    tags: ['realism', 'qwen', 'highres'],
-    from_civitai: true,
-    usage_count: 9,
-    usage_tips: '{"strength":0.85,"clipStrength":0.85}',
-    notes: 'Qwen 2.1 VL 멀티모달 선명도 및 홍채 디테일 향상',
-    favorite: true,
-    update_available: false,
-    civitai: {
-      id: 962001,
-      modelId: 862000,
-      name: 'v2.0',
-      trainedWords: ['ultra sharp focus', 'natural catchlight'],
-    },
-  },
-];
 
 export async function fetchLoraList(
   base: string,

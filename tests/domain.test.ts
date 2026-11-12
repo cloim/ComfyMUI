@@ -202,7 +202,6 @@ describe('portable presets', () => {
       id: `job-${i}`,
       createdAt: i * 1000,
       base: 'http://localhost:8188',
-      preview: false,
       status: 'complete' as const,
       progress: 100,
       images: [],

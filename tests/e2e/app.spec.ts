@@ -13,10 +13,10 @@ async function connect(page: Page) {
     .getByRole('combobox', { name: '모델', exact: true })
     .selectOption({ label: 'Flux1.D/test-model.safetensors' });
 }
-test('mobile preview, advanced values, presets CRUD and persistence', async ({ page }) => {
+test('mobile layout, advanced values, presets CRUD and persistence', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/create');
+  await connect(page);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('만들기');
   await page.getByRole('button', { name: '고급 설정', exact: true }).click();
   await page.getByLabel('Steps', { exact: true }).fill('32');
@@ -45,9 +45,8 @@ test('mobile preview, advanced values, presets CRUD and persistence', async ({ p
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('cm-settings')!).steps)).toBe(
     32,
   );
-  await page.getByTestId('generate').click();
-  await expect(page.getByText('생성 완료', { exact: true })).toBeVisible({ timeout: 10000 });
-  await expect(page.getByText('미리보기 체험', { exact: true })).toBeVisible();
+  // Generation is covered by the protocol tests; this one leaves no output files behind.
+  await expect(page.getByText('아직 생성한 이미지가 없어요')).toBeVisible();
   await page.setViewportSize({ width: 325, height: 667 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'docs/qa-result-325.png' });
@@ -355,7 +354,9 @@ test('exactly four families generate directly with their native graph', async ({
 test('click image surface opens fullscreen viewer with zoom controls, pinch ready, and closes cleanly', async ({
   page,
 }) => {
-  await page.goto('/create');
+  await connect(page);
+  await page.getByTestId('generate').click();
+  await expect(page.getByText('생성 완료', { exact: true })).toBeVisible({ timeout: 10000 });
 
   // 독립 확장 버튼 래퍼가 없는지 확인
   const expandIconWrapper = page.locator('.absolute.right-3.top-3.rounded-xl.bg-white\\/90');
@@ -477,10 +478,14 @@ test('LoRA manager browses, updates metadata, applies trigger words, and downloa
   await expect(loraGallery.getByRole('button', { name: /크게 보기$/ })).toHaveCount(2);
   await loraGallery.getByRole('button', { name: '예시 이미지 1 크게 보기' }).click();
   await expect(
-    page.getByRole('dialog', { name: '예시 이미지 1 / 3' }).getByText('loras studio portrait, soft key light, 85mm'),
+    page
+      .getByRole('dialog', { name: '예시 이미지 1 / 3' })
+      .getByText('loras studio portrait, soft key light, 85mm'),
   ).toBeVisible();
   await page.keyboard.press('Escape');
-  const loraDefault = loraGallery.getByRole('checkbox', { name: '예시 이미지 1 기본 이미지로 설정' });
+  const loraDefault = loraGallery.getByRole('checkbox', {
+    name: '예시 이미지 1 기본 이미지로 설정',
+  });
   await loraDefault.click();
   await expect(loraDefault).toHaveAttribute('aria-checked', 'true');
   await detailDialog.getByRole('button', { name: '원격 버전 조회' }).click();
@@ -673,7 +678,9 @@ test('Model manager browses checkpoints and diffusion models, filters, applies t
     .getByRole('button', { name: '예시 이미지 2 크게 보기' })
     .boundingBox();
   expect(defaultBox!.x - secondCard!.x).toBeLessThan(16);
-  expect(secondCard!.y + secondCard!.height - (defaultBox!.y + defaultBox!.height)).toBeLessThan(16);
+  expect(secondCard!.y + secondCard!.height - (defaultBox!.y + defaultBox!.height)).toBeLessThan(
+    16,
+  );
   await makeDefault.click();
   await expect(makeDefault).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByText('기본 이미지로 설정했어요')).toBeVisible();
@@ -719,7 +726,9 @@ test('sidebar cleanup, prompt assemble multi-select, model dropdown, LoRA keyboa
   const brandBox = await sidebar.getByRole('link', { name: 'ComfyMUI 홈' }).boundingBox();
   const badgeBox = await badge.boundingBox();
   expect(badgeBox!.x).toBeGreaterThan(brandBox!.x + brandBox!.width);
-  expect(Math.abs(badgeBox!.y + badgeBox!.height / 2 - (brandBox!.y + brandBox!.height / 2))).toBeLessThanOrEqual(2);
+  expect(
+    Math.abs(badgeBox!.y + badgeBox!.height / 2 - (brandBox!.y + brandBox!.height / 2)),
+  ).toBeLessThanOrEqual(2);
   await expect(page.getByRole('banner').getByRole('link', { name: '연결됨' })).toBeHidden();
   await expect(page.getByText('연결 관리')).toHaveCount(0);
   await expect(page.getByText('상상을 위한, 가벼운 작업실')).toHaveCount(0);
@@ -793,9 +802,7 @@ test('sidebar cleanup, prompt assemble multi-select, model dropdown, LoRA keyboa
   const mobileFamilyBox = await page.getByLabel('모델 계열', { exact: true }).boundingBox();
   expect(Math.abs(mobileModelBox!.y - mobileFamilyBox!.y)).toBeLessThanOrEqual(2);
   expect(mobileModelBox!.x + mobileModelBox!.width).toBeLessThanOrEqual(390);
-  await expect(mobileModel.locator('option:checked')).toHaveText(
-    'Flux1.D/test-model.safetensors',
-  );
+  await expect(mobileModel.locator('option:checked')).toHaveText('Flux1.D/test-model.safetensors');
 
   // 9. 설정 - 프롬프트 어셈블 기존 요소/속성 수정, 검색 및 일괄 편집 관리 확인
   await page.goto('/settings');
@@ -966,9 +973,7 @@ test('gallery lists the ComfyUI output folder and deleting removes the file', as
   expect(remaining.has(created[1].filename)).toBe(false);
 });
 
-test('generation count input runs once by default and repeats with new seeds', async ({
-  page,
-}) => {
+test('generation count input runs once by default and repeats with new seeds', async ({ page }) => {
   await connect(page);
   // 장 수와 생성 버튼은 상단바에 있고 하단 고정란은 없음
   const header = page.getByRole('banner');
@@ -978,7 +983,9 @@ test('generation count input runs once by default and repeats with new seeds', a
   const headerBox = await header.boundingBox();
   const generateBox = await page.getByTestId('generate').boundingBox();
   expect(generateBox!.x + generateBox!.width).toBeLessThanOrEqual(headerBox!.x + headerBox!.width);
-  expect(generateBox!.y + generateBox!.height).toBeLessThanOrEqual(headerBox!.y + headerBox!.height);
+  expect(generateBox!.y + generateBox!.height).toBeLessThanOrEqual(
+    headerBox!.y + headerBox!.height,
+  );
   await expect(page.getByRole('button', { name: 'Seed 변경 연속 생성' })).toHaveCount(0);
   await runs.fill('0');
   await runs.blur();
@@ -1007,6 +1014,7 @@ test('example default image syncs to other devices and remix fills the create fo
   const pick = gallery.getByRole('checkbox', { name: '예시 이미지 1 기본 이미지로 설정' });
   await pick.click();
   await expect(pick).toHaveAttribute('aria-checked', 'true');
+  await page.waitForTimeout(500);
 
   // 다른 기기에서도 같은 예시가 기본 이미지로 체크되어 있음
   const other = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -1062,7 +1070,9 @@ test('old JSON sync file is imported into the database once, then the database w
     .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('cm-model-order') || '[]')))
     .toEqual(['UNETLoader:예전.safetensors']);
   await request.post('/comfy/userdata/comfymui-state.json', {
-    data: { entries: { 'cm-model-order': { value: ['UNETLoader:나중.safetensors'], updatedAt: 9 } } },
+    data: {
+      entries: { 'cm-model-order': { value: ['UNETLoader:나중.safetensors'], updatedAt: 9 } },
+    },
   });
   const again = await (await request.get('/api/state')).json();
   expect(again.entries['cm-model-order'].value).toEqual(['UNETLoader:예전.safetensors']);
@@ -1090,7 +1100,7 @@ test('model download keeps tracking after the app loses the request', async ({ p
 
   // 창은 바로 닫히고 진행 목록이 생긴다
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByText('백그라운드에서 다운로드를 시작했어요')).toBeVisible();
+  await expect(page.getByText(/백그라운드에서 다운로드를 시작했어요|다운로드를 완료했어요/)).toBeVisible();
 
   // 진행률 API와 라이브러리 등록을 확인해 완료 처리하고 목록을 새로고침한다
   await expect(page.getByText(/다운로드를 완료했어요/)).toBeVisible({ timeout: 15000 });

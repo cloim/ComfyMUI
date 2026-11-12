@@ -42,8 +42,6 @@ export type Generation = {
   denoise: number;
   workflow: Workflow | null;
   upscale?: UpscaleSpec | null;
-  draftTarget?: { width: number; height: number; steps: number };
-  experiment?: { id: string; label: string };
 };
 // Upscales an existing output image with an upscale model, then optionally re-samples it
 // at low denoise with the original model and prompt to restore fine detail.
@@ -93,6 +91,9 @@ export function baseSettings(s: Generation): Generation {
   if (!s.upscale) return { ...s, upscale: null };
   return { ...s, width: s.upscale.sourceWidth, height: s.upscale.sourceHeight, upscale: null };
 }
+export function reusableSettings(input: Generation): Generation {
+  return baseSettings(structuredClone(input));
+}
 // LoadImage resolves "path [output]" from ComfyUI's output folder without uploading.
 export function annotatedImage(ref: ImageRef) {
   const path = ref.subfolder ? `${ref.subfolder}/${ref.filename}` : ref.filename;
@@ -129,7 +130,6 @@ export type Job = {
   createdAt: number;
   settings: Generation;
   base: string;
-  preview: boolean;
   status: 'submitting' | 'queued' | 'running' | 'complete' | 'error' | 'cancelled';
   progress: number;
   images: ImageRef[];
@@ -290,72 +290,6 @@ export const defaults: Generation = {
 export const DEFAULT_PROMPTS: DefaultPrompts = {
   positive: defaults.positive,
   negative: defaults.negative,
-};
-export const demoInfo: ObjectInfo = {
-  CheckpointLoaderSimple: {
-    input: {
-      required: { ckpt_name: [['Flux1.D/미리보기 Flux1.d.safetensors']] },
-    },
-  },
-  LoraLoader: {
-    input: {
-      required: {
-        lora_name: [
-          ['Flux1.D/미리보기 Soft light.safetensors', 'Krea2/미리보기 Film grain.safetensors'],
-        ],
-      },
-    },
-  },
-  KSampler: {
-    input: {
-      required: {
-        sampler_name: [['euler', 'euler_ancestral', 'dpmpp_2m']],
-        scheduler: [['normal', 'karras', 'simple']],
-      },
-    },
-  },
-  UNETLoader: {
-    input: {
-      required: {
-        unet_name: [
-          [
-            'Krea2/미리보기 krea2.safetensors',
-            'moss_image_preview.safetensors',
-            'qwen_image_2.1_preview.safetensors',
-          ],
-        ],
-      },
-    },
-  },
-  DualCLIPLoader: {
-    input: {
-      required: {
-        clip_name1: [['Flux1.D/clip_l.safetensors', 'Flux1.D/t5xxl_fp8.safetensors']],
-        clip_name2: [['Flux1.D/clip_l.safetensors', 'Flux1.D/t5xxl_fp8.safetensors']],
-      },
-    },
-  },
-  CLIPLoader: {
-    input: {
-      required: {
-        clip_name: [['qwen3vl_4b.safetensors', 'qwen3.5_9b.safetensors', 'qwen3vl_8b.safetensors']],
-      },
-    },
-  },
-  VAELoader: {
-    input: {
-      required: {
-        vae_name: [
-          [
-            'Flux1.D/ae.safetensors',
-            'qwen_image_vae.safetensors',
-            'flux2-vae_small.safetensors',
-            'qwen_image_2.1_vae.safetensors',
-          ],
-        ],
-      },
-    },
-  },
 };
 export function options(info: ObjectInfo | null, node: string, field: string): string[] {
   return comboOptions(info, node, field);

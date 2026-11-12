@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStudio } from './studio';
 import {
-  DEMO_EXAMPLE_IMAGES,
   fetchExampleImages,
   setPreviewFromUrl,
   type CivitaiImage,
@@ -12,8 +11,8 @@ type Target = { file_path: string; sha256?: string };
 // The hash keeps the record valid after a rename or move and matches across devices.
 const keyOf = (t: Target) => t.sha256 || t.file_path;
 
-export function canBecomeDefault(image: CivitaiImage, preview: boolean): boolean {
-  return preview || /^https?:\/\//i.test(image.url);
+export function canBecomeDefault(image: CivitaiImage): boolean {
+  return /^https?:\/\//i.test(image.url);
 }
 
 export function useExampleImages(
@@ -34,10 +33,6 @@ export function useExampleImages(
     setImages([]);
     setError('');
     if (!path) return;
-    if (connection.preview) {
-      setImages(DEMO_EXAMPLE_IMAGES);
-      return;
-    }
     let alive = true;
     setLoading(true);
     fetchExampleImages(connection.base, kind, path)
@@ -48,7 +43,7 @@ export function useExampleImages(
       alive = false;
       setLoading(false);
     };
-  }, [kind, path, revision, connection.base, connection.preview]);
+  }, [kind, path, revision, connection.base]);
 
   async function setDefault(image: CivitaiImage) {
     if (!target || settingUrl) return;
@@ -56,12 +51,10 @@ export function useExampleImages(
     if (exampleDefaults[key] === image.url) return;
     setSettingUrl(image.url);
     try {
-      if (!connection.preview) {
-        const res = await setPreviewFromUrl(connection.base, kind, target.file_path, image);
-        // Same file name as before, so bust the browser cache for the card image.
-        const bust = `${res.preview_url}${res.preview_url.includes('?') ? '&' : '?'}v=${Date.now()}`;
-        onPreviewChanged(target.file_path, bust, res.preview_nsfw_level);
-      }
+      const res = await setPreviewFromUrl(connection.base, kind, target.file_path, image);
+      // Same file name as before, so bust the browser cache for the card image.
+      const bust = `${res.preview_url}${res.preview_url.includes('?') ? '&' : '?'}v=${Date.now()}`;
+      onPreviewChanged(target.file_path, bust, res.preview_nsfw_level);
       setExampleDefaults((prev) => ({ ...prev, [key]: image.url }));
       notify('기본 이미지로 설정했어요');
     } catch (e) {
@@ -78,6 +71,5 @@ export function useExampleImages(
     defaultUrl: target ? exampleDefaults[keyOf(target)] || '' : '',
     settingUrl,
     setDefault,
-    preview: connection.preview,
   };
 }

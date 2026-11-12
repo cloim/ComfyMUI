@@ -54,7 +54,6 @@ export default function Settings() {
     connect,
     connectionState,
     connectionError,
-    preview,
     info,
     notify,
     socketState,
@@ -75,7 +74,6 @@ export default function Settings() {
     connect: s.connect,
     connectionState: s.connectionState,
     connectionError: s.connectionError,
-    preview: s.preview,
     info: s.info,
     notify: s.notify,
     socketState: s.socketState,
@@ -452,15 +450,13 @@ export default function Settings() {
                 <div className="-my-1 flex items-center">
                   <Status>
                     <span
-                      className={`h-1.5 w-1.5 rounded-full ${connectionState === 'connected' ? 'bg-olive' : connectionState === 'preview' ? 'bg-amber-600' : 'bg-red-600'}`}
+                      className={`h-1.5 w-1.5 rounded-full ${connectionState === 'connected' ? 'bg-olive' : 'bg-red-600'}`}
                     />
                     {connectionState === 'connected'
                       ? '연결됨'
-                      : connectionState === 'preview'
-                        ? '미리보기'
-                        : busy
-                          ? '연결 확인 중'
-                          : '연결 확인 필요'}
+                      : busy
+                        ? '연결 확인 중'
+                        : '연결 확인 필요'}
                   </Status>
                 </div>
               }
@@ -501,17 +497,6 @@ export default function Settings() {
                     className="btn-primary"
                   >
                     {busy ? <Spinner /> : <Wifi size={16} />}저장하고 연결 확인
-                  </button>
-                  <button
-                    disabled={busy}
-                    className="btn-secondary"
-                    onClick={() => {
-                      preview();
-                      setLocalError('');
-                      notify('미리보기 모드로 전환했어요');
-                    }}
-                  >
-                    미리보기 모드
                   </button>
                 </div>
                 <FieldError anchor={addressInput} message={errorMessage} id="connection-error" />
@@ -997,7 +982,7 @@ export default function Settings() {
                   />
                 </label>
                 <p className="text-xs leading-relaxed text-muted">
-                  절전 중에는 화면 유지와 백그라운드 오디오를 끄고 미리보기·진행 확인 빈도를 줄여요
+                  절전 중에는 화면 유지와 백그라운드 오디오를 끄고 실시간 생성 미리보기와 진행 확인 빈도를 줄여요
                 </p>
                 <label className="flex min-h-11 items-center justify-between gap-3 text-xs font-semibold">
                   생성 중 화면 유지
@@ -1025,7 +1010,7 @@ export default function Settings() {
                 </label>
                 <p className="text-xs leading-relaxed text-muted">
                   오디오는 선택 사항이며 배터리를 더 사용할 수 있어요. 느린 통신에서는 절전 설정과
-                  관계없이 미리보기 빈도를 낮춰요
+                  관계없이 실시간 생성 미리보기 빈도를 낮춰요
                 </p>
                 <div data-ui-audit-row className="flex flex-wrap items-center gap-2">
                   <button

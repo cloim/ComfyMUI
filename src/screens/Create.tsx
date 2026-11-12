@@ -50,7 +50,6 @@ import { Result } from '../components/Result';
 import { PromptHelper } from '../components/PromptHelper';
 import ModelPanel from '../components/ModelPanel';
 import { LoraPicker } from '../components/LoraPicker';
-import { CreationTools } from '../components/CreationTools';
 import {
   compatibleAssets,
   selectedEntry,
@@ -332,7 +331,6 @@ export default function Create() {
             </div>
           </Section>
         </fieldset>
-        <CreationTools />
         <button
           aria-label="고급 설정"
           onClick={() => openAdvanced()}
@@ -555,7 +553,6 @@ export function GenerateControls() {
     generate,
     active,
     busy,
-    connection,
     online,
     jobs,
     info,
@@ -572,7 +569,7 @@ export function GenerateControls() {
   const count = clampRuns(Number(countText));
   const entry = selectedEntry(s, info, familyAssignments);
   const unavailable = !s.workflow && (!entry || entry.family !== s.architecture);
-  const disabled = busy || unavailable || (!online && !connection.preview);
+  const disabled = busy || unavailable || !online;
   function run() {
     if (disabled) return;
     if (count > 1) enqueueBatch(count);
@@ -625,12 +622,8 @@ export function GenerateControls() {
         >
           <span className="flex items-center gap-1.5">
             {busy ? <Spinner /> : <Sparkles size={15} />}
-            <span className="sm:hidden">
-              {active ? '추가' : connection.preview ? '체험' : '생성'}
-            </span>
-            <span className="hidden sm:inline">
-              {active ? '대기열에 추가' : connection.preview ? '미리보기 체험하기' : '이미지 생성'}
-            </span>
+            <span className="sm:hidden">{active ? '추가' : '생성'}</span>
+            <span className="hidden sm:inline">{active ? '대기열에 추가' : '이미지 생성'}</span>
           </span>
           <span className="hidden rounded bg-white/15 px-1.5 py-0.5 text-2xs font-normal sm:inline">
             {active

@@ -55,7 +55,7 @@ export default function Gallery() {
     return times;
   }, [gallery]);
   // History is the ComfyUI output folder. Generations still running are shown first.
-  // Without the folder (preview mode, direct ComfyUI address) the local records are used.
+  // Without the folder (direct ComfyUI address) the local records are used.
   const jobs = useMemo(() => {
     if (!gallery) return localJobs;
     // A running job whose image is already in the folder is shown only once, as the file.
@@ -72,7 +72,6 @@ export default function Gallery() {
   const [search, setSearch] = useState(savedView.search);
   const [familyFilter, setFamilyFilter] = useState(savedView.family);
   const [loraFilter, setLoraFilter] = useState(savedView.lora);
-  const [experimentFilter, setExperimentFilter] = useState(savedView.experiment);
   const [refreshing, setRefreshing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const restorePending = useRef(true);
@@ -85,7 +84,6 @@ export default function Gallery() {
     search,
     family: familyFilter,
     lora: loraFilter,
-    experiment: experimentFilter,
     scrollTop: viewRef.current.scrollTop,
   };
   const persistView = () => {
@@ -142,7 +140,7 @@ export default function Gallery() {
   }, []);
   useEffect(() => {
     persistView();
-  }, [search, familyFilter, loraFilter, experimentFilter]);
+  }, [search, familyFilter, loraFilter]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [comparingPair, setComparingPair] = useState<[Job, Job] | null>(null);
@@ -162,13 +160,6 @@ export default function Gallery() {
     void refreshGallery();
   }, []);
 
-  const experiments = useMemo(() => {
-    const result = new Map<string, string>();
-    for (const job of jobs)
-      if (job.settings.experiment)
-        result.set(job.settings.experiment.id, job.settings.experiment.label);
-    return [...result];
-  }, [jobs]);
   const shown = useMemo(
     () =>
       jobs.filter((j) => {
@@ -182,12 +173,10 @@ export default function Gallery() {
           return false;
         if (loraFilter === 'without_lora' && j.settings.loras && j.settings.loras.length > 0)
           return false;
-        if (experimentFilter !== 'all' && j.settings.experiment?.id !== experimentFilter)
-          return false;
 
         return true;
       }),
-    [jobs, search, familyFilter, loraFilter, experimentFilter],
+    [jobs, search, familyFilter, loraFilter],
   );
   const rowHeight = galleryRowHeight(viewport.width, viewport.columns);
   const windowed = galleryWindow(
@@ -260,7 +249,7 @@ export default function Gallery() {
     if (targets.length === 0) return;
     notify(`${targets.length}개 이미지 다운로드를 시작했어요`);
     for (const j of targets) {
-      const url = j.preview ? '/sample.svg' : imageUrl(j.base, j.images[0]);
+      const url = imageUrl(j.base, j.images[0]);
       const a = document.createElement('a');
       a.href = url;
       a.download = j.images[0].filename || 'image.png';
@@ -364,29 +353,6 @@ export default function Gallery() {
             </SelectControl>
           </div>
         </div>
-        {(experiments.length > 0 || experimentFilter !== 'all') && (
-          <div className="w-40 max-w-full">
-            <SelectControl
-              aria-label="실험 묶음 필터"
-              value={experimentFilter}
-              onChange={(e) => {
-                resetScroll();
-                setExperimentFilter(e.target.value);
-              }}
-            >
-              <option value="all">실험 전체</option>
-              {experiments.map(([id], i) => (
-                <option key={id} value={id}>
-                  실험 {experiments.length - i} · {id.slice(-5)}
-                </option>
-              ))}
-              {experimentFilter !== 'all' &&
-                !experiments.some(([id]) => id === experimentFilter) && (
-                  <option value={experimentFilter}>이전 실험</option>
-                )}
-            </SelectControl>
-          </div>
-        )}
         <span className="ml-auto shrink-0 font-mono text-2xs text-muted">
           표시 {shown.length} / {jobs.length}개
         </span>
@@ -462,8 +428,8 @@ export default function Gallery() {
                         <img
                           loading="lazy"
                           className="h-full w-full object-contain"
-                          src={j.preview ? '/sample.svg' : thumbnailUrl(j.base, j.images[0])}
-                          alt={j.preview ? '미리보기 샘플' : j.settings.positive.slice(0, 100)}
+                          src={thumbnailUrl(j.base, j.images[0])}
+                          alt={j.settings.positive.slice(0, 100)}
                           onError={(e) => {
                             const original = imageUrl(j.base, j.images[0]);
                             if (e.currentTarget.src !== original) {
@@ -481,11 +447,6 @@ export default function Gallery() {
                             <span className="font-mono">{j.progress}%</span>
                           )}
                         </div>
-                      )}
-                      {j.preview && (
-                        <span className="absolute right-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-2xs font-medium">
-                          미리보기
-                        </span>
                       )}
                     </button>
 
@@ -510,18 +471,6 @@ export default function Gallery() {
                           {new Date(j.createdAt).toLocaleDateString('ko-KR')} |{' '}
                           {j.settings.architecture}
                         </p>
-                        {j.settings.experiment && (
-                          <button
-                            className="mt-0.5 block max-w-full truncate text-2xs font-semibold text-olive"
-                            onClick={() => {
-                              resetScroll();
-                              setExperimentFilter(j.settings.experiment!.id);
-                            }}
-                            aria-label={`실험 묶음 보기: ${j.settings.experiment.label}`}
-                          >
-                            {j.settings.experiment.label}
-                          </button>
-                        )}
                       </div>
                       {!isSelecting && (
                         <IconButton
@@ -552,8 +501,7 @@ export default function Gallery() {
           >
             {(search ||
               familyFilter !== 'all' ||
-              loraFilter !== 'all' ||
-              experimentFilter !== 'all') && (
+              loraFilter !== 'all') && (
               <button
                 className="btn-secondary"
                 onClick={() => {
@@ -561,7 +509,6 @@ export default function Gallery() {
                   setSearch('');
                   setFamilyFilter('all');
                   setLoraFilter('all');
-                  setExperimentFilter('all');
                 }}
               >
                 필터 초기화
