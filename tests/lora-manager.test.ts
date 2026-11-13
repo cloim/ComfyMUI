@@ -5,11 +5,13 @@ import {
   inferFamilyFromLoraItem,
   isVideoPreview,
   loraPreviewUrl,
+  matchLoraItem,
   civitaiAirProblem,
   parseCivitaiAir,
   parseUsageTips,
   resolveComfyLoraName,
   serializeUsageTips,
+  type LoraItem,
 } from '../src/lora-manager';
 
 describe('LoRA Manager domain helpers', () => {
@@ -124,5 +126,56 @@ describe('LoRA Manager domain helpers', () => {
     expect(isVideoPreview('/comfy/api/lm/previews?path=test.mp4&v=1')).toBe(true);
     expect(isVideoPreview('/comfy/api/lm/previews?path=test.webp')).toBe(false);
     expect(formatBytes(154200000)).toBe('147.1 MB');
+  });
+
+  it('matches lora name from job settings to LoraItem', () => {
+    const mockLoras: LoraItem[] = [
+      {
+        model_name: 'FLUX.1-Turbo-Alpha',
+        file_name: 'FLUX.1-Turbo-Alpha',
+        folder: 'Flux1.D',
+        file_path: '/host-models/loras/Flux1.D/FLUX.1-Turbo-Alpha.safetensors',
+        preview_url: '/preview_alpha.webp',
+        preview_nsfw_level: 0,
+        base_model: 'Flux.1 D',
+        sha256: '77f752',
+        file_size: 100,
+        modified: 100,
+        tags: [],
+        from_civitai: true,
+        usage_tips: '{}',
+        notes: '',
+        favorite: false,
+        update_available: false,
+      },
+      {
+        model_name: 'Go Minsi Makina FLUX',
+        file_name: 'makinaflux_gominsi_v1.0',
+        folder: 'Flux1.D/Celeb',
+        file_path: '/data/models-view/loras/Flux1.D/Celeb/makinaflux_gominsi_v1.0.safetensors',
+        preview_url: '/preview_minsi.webp',
+        preview_nsfw_level: 0,
+        base_model: 'Flux.1 D',
+        sha256: 'a858b1',
+        file_size: 100,
+        modified: 100,
+        tags: [],
+        from_civitai: true,
+        usage_tips: '{}',
+        notes: '',
+        favorite: false,
+        update_available: false,
+      },
+    ];
+
+    expect(matchLoraItem('Flux1.D/Celeb/makinaflux_gominsi_v1.0.safetensors', mockLoras)).toBe(
+      mockLoras[1],
+    );
+    expect(matchLoraItem('Flux1.D\\Celeb\\makinaflux_gominsi_v1.0.safetensors', mockLoras)).toBe(
+      mockLoras[1],
+    );
+    expect(matchLoraItem('makinaflux_gominsi_v1.0', mockLoras)).toBe(mockLoras[1]);
+    expect(matchLoraItem('Flux1.D/FLUX.1-Turbo-Alpha.safetensors', mockLoras)).toBe(mockLoras[0]);
+    expect(matchLoraItem('unknown_lora', mockLoras)).toBeNull();
   });
 });

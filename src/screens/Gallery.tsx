@@ -8,6 +8,7 @@ import {
   ArrowLeftRight,
   Download,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useStudio } from '../studio';
@@ -18,6 +19,7 @@ import { HistoryDetail } from '../components/HistoryDetail';
 import { Result } from '../components/Result';
 import { CompareViewer } from '../components/CompareViewer';
 import { HeaderActions, HeaderActionButton } from '../components/HeaderActions';
+import { SetPreviewModal } from '../components/SetPreviewModal';
 import {
   galleryWindow,
   galleryRowHeight,
@@ -68,6 +70,7 @@ export default function Gallery() {
     return [...active, ...fileJobs];
   }, [gallery, localJobs, fileJobs, writtenTimes]);
   const [deleting, setDeleting] = useState(false);
+  const [previewJob, setPreviewJob] = useState<Job | null>(null);
   const [savedView] = useState(readGalleryView);
   const [search, setSearch] = useState(savedView.search);
   const [familyFilter, setFamilyFilter] = useState(savedView.family);
@@ -473,14 +476,22 @@ export default function Gallery() {
                         </p>
                       </div>
                       {!isSelecting && (
-                        <IconButton
-                          icon={Trash2}
-                          danger
-                          className="-mr-1"
-                          label="기록 삭제"
-                          disabled={['submitting', 'running', 'queued'].includes(j.status)}
-                          onClick={() => setRemove(j)}
-                        />
+                        <div className="-mr-1 flex items-center">
+                          {j.status === 'complete' && Boolean(j.images[0]) && (
+                            <IconButton
+                              icon={Sparkles}
+                              label="대표 이미지로 설정"
+                              onClick={() => setPreviewJob(j)}
+                            />
+                          )}
+                          <IconButton
+                            icon={Trash2}
+                            danger
+                            label="기록 삭제"
+                            disabled={['submitting', 'running', 'queued'].includes(j.status)}
+                            onClick={() => setRemove(j)}
+                          />
+                        </div>
                       )}
                     </div>
                   </article>
@@ -499,9 +510,7 @@ export default function Gallery() {
                 : '생성한 이미지와 설정을 이곳에서 다시 만날 수 있어요'
             }
           >
-            {(search ||
-              familyFilter !== 'all' ||
-              loraFilter !== 'all') && (
+            {(search || familyFilter !== 'all' || loraFilter !== 'all') && (
               <button
                 className="btn-secondary"
                 onClick={() => {
@@ -675,6 +684,13 @@ export default function Gallery() {
           onClose={() => setComparingPair(null)}
         />
       )}
+
+      {/* Set Preview Image Modal */}
+      <SetPreviewModal
+        open={Boolean(previewJob)}
+        onClose={() => setPreviewJob(null)}
+        job={previewJob}
+      />
     </div>
   );
 }

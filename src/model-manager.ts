@@ -15,6 +15,8 @@ import {
   formatBytes,
   isVideoPreview,
   loraPreviewUrl,
+  matchLoraItem,
+  replacePreview,
   civitaiAirProblem,
   parseCivitaiAir,
   type CivitaiAir,
@@ -28,6 +30,8 @@ export {
   formatBytes,
   isVideoPreview,
   loraPreviewUrl as modelPreviewUrl,
+  matchLoraItem,
+  replacePreview,
   civitaiAirProblem,
   parseCivitaiAir,
   type CivitaiAir,
@@ -148,6 +152,63 @@ export function resolveComfyModelName(
   }
 
   return relForward.replaceAll('/', '\\');
+}
+
+export function matchModelItem(
+  modelName: string,
+  items: ModelManagerItem[],
+  info: ObjectInfo | null,
+): ModelManagerItem | null {
+  if (!modelName || !items.length) return null;
+  const targetNorm = modelName.replaceAll('\\', '/').toLowerCase().trim();
+  const targetFile = targetNorm.split('/').pop() || targetNorm;
+
+  // 1. Match via resolveComfyModelName
+  for (const item of items) {
+    const comfy = resolveComfyModelName(item, info).replaceAll('\\', '/').toLowerCase();
+    if (comfy === targetNorm) return item;
+  }
+
+  // 2. Match exact file_name
+  for (const item of items) {
+    if (item.file_name.toLowerCase() === targetFile) return item;
+  }
+
+  // 3. Match folder/file_name with extension
+  for (const item of items) {
+    const ext = (item.file_path || '').match(/(\.[^./\\]+)$/)?.[1] || '.safetensors';
+    const rel =
+      (item.folder
+        ? `${item.folder.replaceAll('\\', '/').replace(/\/+$/, '')}/${item.file_name}`
+        : item.file_name) + ext;
+    if (rel.toLowerCase() === targetNorm) return item;
+  }
+
+  // 4. Match folder/file_name without extension
+  const targetNoExt = targetNorm.replace(/\.(safetensors|gguf|ckpt|pt|pth|bin)$/i, '');
+  for (const item of items) {
+    const rel = item.folder
+      ? `${item.folder.replaceAll('\\', '/').replace(/\/+$/, '')}/${item.file_name}`
+      : item.file_name;
+    if (rel.toLowerCase() === targetNoExt) return item;
+  }
+
+  // 5. Match file_name with extension
+  for (const item of items) {
+    const ext = (item.file_path || '').match(/(\.[^./\\]+)$/)?.[1] || '.safetensors';
+    if (`${item.file_name}${ext}`.toLowerCase() === targetFile) return item;
+  }
+
+  // 6. Match stem if targetFile has a known model extension
+  const knownExt = targetFile.match(/\.(safetensors|gguf|ckpt|pt|pth|bin)$/i);
+  if (knownExt) {
+    const stripped = targetFile.slice(0, -knownExt[0].length);
+    for (const item of items) {
+      if (item.file_name.toLowerCase() === stripped) return item;
+    }
+  }
+
+  return null;
 }
 
 export function resolveComfyModelEntry(

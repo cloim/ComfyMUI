@@ -4,8 +4,10 @@ import {
   formatModelSubType,
   inferFamilyFromModelItem,
   isSpecializedModelPath,
+  matchModelItem,
   resolveComfyModelEntry,
   resolveComfyModelName,
+  type ModelManagerItem,
 } from '../src/model-manager';
 
 const modelInfo: ObjectInfo = {
@@ -123,5 +125,50 @@ describe('Model Manager domain helpers', () => {
       family: 'krea2',
       format: 'Diffusion',
     });
+  });
+
+  it('matches model name from job settings to ModelManagerItem', () => {
+    const mockItems: ModelManagerItem[] = [
+      {
+        model_name: 'Fluxmania',
+        file_name: 'Kreamania I',
+        folder: 'Flux1.D',
+        file_path: '/data/models-view/diffusion_models/Flux1.D/Kreamania I.safetensors',
+        preview_url: '/preview1.webp',
+        preview_nsfw_level: 0,
+        base_model: 'Flux.1 D',
+        sha256: '87eec16',
+        file_size: 100,
+        modified: 100,
+        tags: [],
+        from_civitai: true,
+        notes: '',
+        favorite: false,
+        update_available: false,
+      },
+      {
+        model_name: 'Krea 2 Turbo',
+        file_name: 'krea2_turbo_fp8',
+        folder: 'Krea2',
+        file_path: '/host-models/diffusion_models/Krea2/krea2_turbo_fp8.safetensors',
+        preview_url: '/preview2.webp',
+        preview_nsfw_level: 0,
+        base_model: 'Krea 2 Turbo',
+        sha256: '2d35235',
+        file_size: 100,
+        modified: 100,
+        tags: [],
+        from_civitai: true,
+        notes: '',
+        favorite: false,
+        update_available: false,
+      },
+    ];
+
+    expect(matchModelItem('Flux1.D/Kreamania I.safetensors', mockItems, null)).toBe(mockItems[0]);
+    expect(matchModelItem('Flux1.D\\Kreamania I.safetensors', mockItems, null)).toBe(mockItems[0]);
+    expect(matchModelItem('Kreamania I', mockItems, null)).toBe(mockItems[0]);
+    expect(matchModelItem('krea2_turbo_fp8.safetensors', mockItems, null)).toBe(mockItems[1]);
+    expect(matchModelItem('non-existent-model', mockItems, null)).toBeNull();
   });
 });

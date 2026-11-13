@@ -34,7 +34,9 @@ export async function request<T>(
     response = await fetch(`${base}${path}`, {
       ...init,
       headers: {
-        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(init?.body && !(typeof FormData !== 'undefined' && init.body instanceof FormData)
+          ? { 'Content-Type': 'application/json' }
+          : {}),
         ...init?.headers,
       },
       signal: init?.signal

@@ -19,6 +19,7 @@ import { calculateRemainingEstimate, jobsAhead } from '../estimate';
 import { IconButton, Spinner, Modal } from './ui';
 import { ImageViewer } from './ImageViewer';
 import { UpscaleDialog } from './UpscaleDialog';
+import { SetPreviewModal } from './SetPreviewModal';
 // `fallback` is the latest completed job, shown while `job` has no image yet (running, failed or cancelled).
 export function Result({
   job,
@@ -34,6 +35,7 @@ export function Result({
   const [imageRetry, setImageRetry] = useState(0);
   const [cancelling, setCancelling] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const {
     setSettings,
     notify,
@@ -388,6 +390,13 @@ export function Result({
                 </button>
                 <button
                   className="btn-secondary flex-1 min-w-[112px]"
+                  onClick={() => setPreviewModalOpen(true)}
+                >
+                  <Sparkles size={14} />
+                  대표 이미지 설정
+                </button>
+                <button
+                  className="btn-secondary flex-1 min-w-[112px]"
                   onClick={() => void shareImage(job)}
                 >
                   <Share2 size={14} />
@@ -497,6 +506,11 @@ export function Result({
         alt="생성한 이미지"
         open={expanded}
         onClose={() => setExpanded(false)}
+      />
+      <SetPreviewModal
+        open={previewModalOpen}
+        onClose={() => setPreviewModalOpen(false)}
+        job={job ?? null}
       />
     </div>
   );

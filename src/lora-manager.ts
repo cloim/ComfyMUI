@@ -271,6 +271,65 @@ export function resolveComfyLoraName(
   return relForward.replaceAll('/', '\\');
 }
 
+export function matchLoraItem(
+  loraName: string,
+  items: LoraItem[],
+  comfyLoraNames: string[] = [],
+): LoraItem | null {
+  if (!loraName || !items.length) return null;
+  const targetNorm = loraName.replaceAll('\\', '/').toLowerCase().trim();
+  const targetFile = targetNorm.split('/').pop() || targetNorm;
+
+  // 1. Match via resolveComfyLoraName
+  if (comfyLoraNames.length > 0) {
+    for (const item of items) {
+      const comfy = resolveComfyLoraName(item, comfyLoraNames).replaceAll('\\', '/').toLowerCase();
+      if (comfy === targetNorm) return item;
+    }
+  }
+
+  // 2. Match exact file_name
+  for (const item of items) {
+    if (item.file_name.toLowerCase() === targetFile) return item;
+  }
+
+  // 3. Match folder/file_name with extension
+  for (const item of items) {
+    const ext = (item.file_path || '').match(/(\.[^./\\]+)$/)?.[1] || '.safetensors';
+    const rel =
+      (item.folder
+        ? `${item.folder.replaceAll('\\', '/').replace(/\/+$/, '')}/${item.file_name}`
+        : item.file_name) + ext;
+    if (rel.toLowerCase() === targetNorm) return item;
+  }
+
+  // 4. Match folder/file_name without extension
+  const targetNoExt = targetNorm.replace(/\.(safetensors|gguf|ckpt|pt|pth|bin)$/i, '');
+  for (const item of items) {
+    const rel = item.folder
+      ? `${item.folder.replaceAll('\\', '/').replace(/\/+$/, '')}/${item.file_name}`
+      : item.file_name;
+    if (rel.toLowerCase() === targetNoExt) return item;
+  }
+
+  // 5. Match file_name with extension
+  for (const item of items) {
+    const ext = (item.file_path || '').match(/(\.[^./\\]+)$/)?.[1] || '.safetensors';
+    if (`${item.file_name}${ext}`.toLowerCase() === targetFile) return item;
+  }
+
+  // 6. Match stem if targetFile has a known model extension
+  const knownExt = targetFile.match(/\.(safetensors|gguf|ckpt|pt|pth|bin)$/i);
+  if (knownExt) {
+    const stripped = targetFile.slice(0, -knownExt[0].length);
+    for (const item of items) {
+      if (item.file_name.toLowerCase() === stripped) return item;
+    }
+  }
+
+  return null;
+}
+
 export function appendTriggerWords(currentPrompt: string, words: string[]): string {
   const cleanWords = words.map((w) => w.trim()).filter(Boolean);
   if (cleanWords.length === 0) return currentPrompt;
@@ -339,6 +398,34 @@ export async function setPreviewFromUrl(
   });
   if (!res.success || !res.preview_url)
     throw new Error(res.error || '기본 이미지를 바꾸지 못했어요');
+  return { preview_url: res.preview_url, preview_nsfw_level: res.preview_nsfw_level ?? 0 };
+}
+
+// Uploads an image blob/file and replaces the card preview with it.
+// Field order matters for multipart parsing in ComfyUI LoRA Manager: preview_file, model_path, nsfw_level.
+export async function replacePreview(
+  base: string,
+  kind: ExampleKind,
+  filePath: string,
+  file: Blob | File,
+  filename = 'preview.png',
+): Promise<{ preview_url: string; preview_nsfw_level: number }> {
+  const form = new FormData();
+  form.append('preview_file', file, filename);
+  form.append('model_path', filePath);
+  form.append('nsfw_level', '0');
+
+  const res = await request<{
+    success?: boolean;
+    error?: string;
+    preview_url?: string;
+    preview_nsfw_level?: number;
+  }>(base, `/api/lm/${kind}/replace-preview`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.success || !res.preview_url)
+    throw new Error(res.error || '대표 이미지를 변경하지 못했어요');
   return { preview_url: res.preview_url, preview_nsfw_level: res.preview_nsfw_level ?? 0 };
 }
 
