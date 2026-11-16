@@ -741,3 +741,22 @@ export async function cancelLoraDownload(
 ): Promise<{ success: boolean }> {
   return request(base, `/api/lm/cancel-download-get?download_id=${encodeURIComponent(downloadId)}`);
 }
+
+export function compareLoraItems(
+  a: Pick<LoraItem, 'base_model' | 'model_name' | 'file_name'>,
+  b: Pick<LoraItem, 'base_model' | 'model_name' | 'file_name'>,
+): number {
+  const baseA = (a.base_model || 'Unknown').trim();
+  const baseB = (b.base_model || 'Unknown').trim();
+  const baseCompare = baseA.localeCompare(baseB, undefined, { numeric: true, sensitivity: 'base' });
+  if (baseCompare !== 0) return baseCompare;
+
+  const nameA = (a.model_name || a.file_name || '').trim();
+  const nameB = (b.model_name || b.file_name || '').trim();
+  return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+export function sortLoraItems(items: LoraItem[]): LoraItem[] {
+  return [...items].sort(compareLoraItems);
+}
+

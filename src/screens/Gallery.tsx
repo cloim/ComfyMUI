@@ -82,6 +82,7 @@ export default function Gallery() {
   const previousViewport = useRef<typeof viewport | null>(null);
   const pendingResizeTop = useRef<number | null>(null);
   const [scrollTop, setScrollTop] = useState(savedView.scrollTop);
+  const lastScrollTopRef = useRef(savedView.scrollTop);
   const viewRef = useRef(savedView);
   viewRef.current = {
     search,
@@ -98,6 +99,7 @@ export default function Gallery() {
   };
   const resetScroll = () => {
     restorePending.current = false;
+    lastScrollTopRef.current = 0;
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     viewRef.current.scrollTop = 0;
     setScrollTop(0);
@@ -188,17 +190,20 @@ export default function Gallery() {
     rowHeight,
     scrollTop,
     viewport.height,
+    4,
   );
   useLayoutEffect(() => {
     if (pendingResizeTop.current === null || !scrollRef.current) return;
     scrollRef.current.scrollTop = pendingResizeTop.current;
     viewRef.current.scrollTop = scrollRef.current.scrollTop;
+    lastScrollTopRef.current = scrollRef.current.scrollTop;
     setScrollTop(scrollRef.current.scrollTop);
     pendingResizeTop.current = null;
   }, [viewport.width, viewport.columns]);
   useLayoutEffect(() => {
     if (!restorePending.current || !shown.length || !scrollRef.current || !viewport.width) return;
     scrollRef.current.scrollTop = savedView.scrollTop;
+    lastScrollTopRef.current = scrollRef.current.scrollTop;
     setScrollTop(scrollRef.current.scrollTop);
     restorePending.current = false;
   }, [shown.length, viewport.width, savedView.scrollTop]);
@@ -367,18 +372,27 @@ export default function Gallery() {
         tabIndex={0}
         aria-label="기록 목록"
         data-ui-audit-scroll-root
+        style={{ overflowAnchor: 'none' }}
         className="min-h-0 flex-1 overflow-y-auto px-4 pb-20 sm:px-5 lg:px-6"
         onScroll={(event) => {
           const top = event.currentTarget.scrollTop;
           viewRef.current.scrollTop = top;
-          if (Math.floor(top / rowHeight) !== Math.floor(scrollTop / rowHeight)) setScrollTop(top);
+          const prev = lastScrollTopRef.current;
+          if (
+            top === 0 ||
+            top + event.currentTarget.clientHeight >= event.currentTarget.scrollHeight - 2 ||
+            Math.abs(top - prev) >= Math.max(20, rowHeight / 2)
+          ) {
+            lastScrollTopRef.current = top;
+            setScrollTop(top);
+          }
         }}
         onTouchMove={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
       >
         {shown.length ? (
           <>
-            {windowed.top > 0 && <div aria-hidden="true" style={{ height: windowed.top }} />}
+            <div aria-hidden="true" style={{ height: windowed.top, flexShrink: 0 }} />
             <div
               data-ui-audit-card-group
               className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4"
@@ -498,7 +512,7 @@ export default function Gallery() {
                 );
               })}
             </div>
-            {windowed.bottom > 0 && <div aria-hidden="true" style={{ height: windowed.bottom }} />}
+            <div aria-hidden="true" style={{ height: windowed.bottom, flexShrink: 0 }} />
           </>
         ) : (
           <Empty

@@ -12,6 +12,7 @@ import {
   parseUsageTips,
   resolveComfyLoraName,
   serializeUsageTips,
+  sortLoraItems,
   type LoraItem,
 } from '../src/lora-manager';
 
@@ -211,6 +212,72 @@ describe('LoRA Manager domain helpers', () => {
     ]);
     expect(extractLoraTriggerWords('SubFolder/unmatched_lora_v2.safetensors', [])).toEqual([
       'unmatched_lora_v2',
+    ]);
+  });
+
+  it('sorts lora items by base_model, then model_name ascending', () => {
+    const raw: LoraItem[] = [
+      {
+        model_name: 'Anime Style',
+        file_name: 'anime.safetensors',
+        base_model: 'SDXL',
+        folder: '',
+        file_path: 'anime.safetensors',
+        preview_url: '',
+        preview_nsfw_level: 0,
+        sha256: '1',
+        file_size: 1,
+        modified: 1,
+        tags: [],
+        from_civitai: false,
+        usage_tips: '',
+        notes: '',
+        favorite: false,
+        update_available: false,
+      },
+      {
+        model_name: 'Vintage Retro',
+        file_name: 'vintage.safetensors',
+        base_model: 'Flux.1 D',
+        folder: '',
+        file_path: 'vintage.safetensors',
+        preview_url: '',
+        preview_nsfw_level: 0,
+        sha256: '2',
+        file_size: 1,
+        modified: 1,
+        tags: [],
+        from_civitai: false,
+        usage_tips: '',
+        notes: '',
+        favorite: false,
+        update_available: false,
+      },
+      {
+        model_name: 'Cyberpunk',
+        file_name: 'cyberpunk.safetensors',
+        base_model: 'Flux.1 D',
+        folder: '',
+        file_path: 'cyberpunk.safetensors',
+        preview_url: '',
+        preview_nsfw_level: 0,
+        sha256: '3',
+        file_size: 1,
+        modified: 1,
+        tags: [],
+        from_civitai: false,
+        usage_tips: '',
+        notes: '',
+        favorite: false,
+        update_available: false,
+      },
+    ];
+
+    const sorted = sortLoraItems(raw);
+    expect(sorted.map((l) => `${l.base_model} - ${l.model_name}`)).toEqual([
+      'Flux.1 D - Cyberpunk',
+      'Flux.1 D - Vintage Retro',
+      'SDXL - Anime Style',
     ]);
   });
 });

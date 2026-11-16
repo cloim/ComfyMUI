@@ -45,6 +45,7 @@ import {
   resolveComfyModelName,
   saveModelMetadata,
   scanModels,
+  sortModelManagerItems,
   type CivitaiAir,
   type CivitaiVersion,
   type ModelManagerItem,
@@ -247,6 +248,7 @@ export default function Models() {
     Boolean(versionId) && kindDownloads.some((d) => d.versionId === versionId);
 
   const hasMore = items.length < total;
+  const sortedItems = useMemo(() => sortModelManagerItems(items), [items]);
 
   function handleScroll(e: UIEvent<HTMLDivElement>) {
     if (loading || loadingMore || !hasMore) return;
@@ -851,7 +853,7 @@ export default function Models() {
             data-ui-audit-card-group
             className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           >
-            {items.map((item) => {
+            {sortedItems.map((item) => {
               const previewSrc = modelPreviewUrl(connection.base, item.preview_url);
               const videoPreview = isVideoPreview(previewSrc);
               const comfyName = resolveComfyModelName(item, info);

@@ -468,3 +468,22 @@ export async function fetchModelCivitaiVersionById(
     `/api/lm/checkpoints/civitai/model/version/${encodeURIComponent(String(modelVersionId))}`,
   );
 }
+
+export function compareModelManagerItems(
+  a: Pick<ModelManagerItem, 'base_model' | 'model_name' | 'file_name'>,
+  b: Pick<ModelManagerItem, 'base_model' | 'model_name' | 'file_name'>,
+): number {
+  const baseA = (a.base_model || 'Unknown').trim();
+  const baseB = (b.base_model || 'Unknown').trim();
+  const baseCompare = baseA.localeCompare(baseB, undefined, { numeric: true, sensitivity: 'base' });
+  if (baseCompare !== 0) return baseCompare;
+
+  const nameA = (a.model_name || a.file_name || '').trim();
+  const nameB = (b.model_name || b.file_name || '').trim();
+  return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+export function sortModelManagerItems(items: ModelManagerItem[]): ModelManagerItem[] {
+  return [...items].sort(compareModelManagerItems);
+}
+

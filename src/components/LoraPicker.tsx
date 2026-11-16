@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Layers2, Search } from 'lucide-react';
 import { useStudioSelector } from '../studio';
 import { compatibleAssets } from '../models';
@@ -74,6 +74,19 @@ export function LoraPicker({ open, onClose }: { open: boolean; onClose: () => vo
       .toLowerCase()
       .includes(query);
   });
+  const sortedVisible = useMemo(() => {
+    return [...visible].sort((aName, bName) => {
+      const itemA = metadata.get(aName);
+      const itemB = metadata.get(bName);
+      const baseA = (itemA?.base_model || 'Unknown').trim();
+      const baseB = (itemB?.base_model || 'Unknown').trim();
+      const baseCompare = baseA.localeCompare(baseB, undefined, { numeric: true, sensitivity: 'base' });
+      if (baseCompare !== 0) return baseCompare;
+      const displayA = (itemA?.model_name || aName).trim();
+      const displayB = (itemB?.model_name || bName).trim();
+      return displayA.localeCompare(displayB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+  }, [visible, metadata]);
 
   function choose(name: string) {
     if (settings.loras.length >= 20) {
@@ -145,9 +158,9 @@ export function LoraPicker({ open, onClose }: { open: boolean; onClose: () => vo
               </div>
             ))}
           </div>
-        ) : visible.length ? (
+        ) : sortedVisible.length ? (
           <div data-ui-audit-card-group className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {visible.map((name) => (
+            {sortedVisible.map((name) => (
               <LoraCard
                 key={name}
                 name={name}

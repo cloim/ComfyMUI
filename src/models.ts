@@ -211,7 +211,12 @@ export function catalog(
   return sortModelEntries(entries, modelOrder);
 }
 export function sortModelEntries(entries: ModelEntry[], modelOrder: string[] = []): ModelEntry[] {
-  if (!modelOrder.length) return entries;
+  const compareDefault = (a: ModelEntry, b: ModelEntry) => {
+    const familyCompare = a.family.localeCompare(b.family, undefined, { numeric: true, sensitivity: 'base' });
+    if (familyCompare !== 0) return familyCompare;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  };
+  if (!modelOrder.length) return [...entries].sort(compareDefault);
   const orderMap = new Map<string, number>();
   modelOrder.forEach((id, index) => {
     if (!orderMap.has(id)) orderMap.set(id, index);
@@ -222,7 +227,7 @@ export function sortModelEntries(entries: ModelEntry[], modelOrder: string[] = [
     if (idxA !== undefined && idxB !== undefined) return idxA - idxB;
     if (idxA !== undefined) return -1;
     if (idxB !== undefined) return 1;
-    return 0;
+    return compareDefault(a, b);
   });
 }
 export function applyModelReorder(

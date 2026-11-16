@@ -7,6 +7,7 @@ import {
   matchModelItem,
   resolveComfyModelEntry,
   resolveComfyModelName,
+  sortModelManagerItems,
   type ModelManagerItem,
 } from '../src/model-manager';
 
@@ -170,5 +171,71 @@ describe('Model Manager domain helpers', () => {
     expect(matchModelItem('Kreamania I', mockItems, null)).toBe(mockItems[0]);
     expect(matchModelItem('krea2_turbo_fp8.safetensors', mockItems, null)).toBe(mockItems[1]);
     expect(matchModelItem('non-existent-model', mockItems, null)).toBeNull();
+  });
+
+  it('sorts model manager items by base_model, then model_name ascending', () => {
+    const raw: ModelManagerItem[] = [
+      {
+        model_name: 'Beta',
+        file_name: 'beta.safetensors',
+        base_model: 'SDXL',
+        folder: '',
+        file_path: 'beta.safetensors',
+        preview_url: '',
+        preview_nsfw_level: 0,
+        sub_type: 'checkpoint',
+        sha256: '1',
+        file_size: 1,
+        modified: 1,
+        tags: [],
+        from_civitai: false,
+        notes: '',
+        favorite: false,
+        update_available: false,
+      },
+      {
+        model_name: 'Zeta',
+        file_name: 'zeta.safetensors',
+        base_model: 'Flux.1 D',
+        folder: '',
+        file_path: 'zeta.safetensors',
+        preview_url: '',
+        preview_nsfw_level: 0,
+        sub_type: 'checkpoint',
+        sha256: '2',
+        file_size: 1,
+        modified: 1,
+        tags: [],
+        from_civitai: false,
+        notes: '',
+        favorite: false,
+        update_available: false,
+      },
+      {
+        model_name: 'Alpha',
+        file_name: 'alpha.safetensors',
+        base_model: 'Flux.1 D',
+        folder: '',
+        file_path: 'alpha.safetensors',
+        preview_url: '',
+        preview_nsfw_level: 0,
+        sub_type: 'checkpoint',
+        sha256: '3',
+        file_size: 1,
+        modified: 1,
+        tags: [],
+        from_civitai: false,
+        notes: '',
+        favorite: false,
+        update_available: false,
+      },
+    ];
+
+    const sorted = sortModelManagerItems(raw);
+    expect(sorted.map((m) => `${m.base_model} - ${m.model_name}`)).toEqual([
+      'Flux.1 D - Alpha',
+      'Flux.1 D - Zeta',
+      'SDXL - Beta',
+    ]);
   });
 });

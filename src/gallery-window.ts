@@ -10,11 +10,15 @@ export function galleryWindow(
   rowHeight: number,
   scrollTop: number,
   viewportHeight: number,
+  overscan = 2,
 ) {
   const rows = Math.ceil(count / columns);
   if (count <= 80) return { start: 0, end: count, top: 0, bottom: 0 };
-  const first = Math.min(Math.max(0, rows - 1), Math.max(0, Math.floor(scrollTop / rowHeight) - 2));
-  const last = Math.min(rows, Math.ceil((scrollTop + viewportHeight) / rowHeight) + 2);
+  const first = Math.min(
+    Math.max(0, rows - 1),
+    Math.max(0, Math.floor(scrollTop / rowHeight) - overscan),
+  );
+  const last = Math.min(rows, Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan);
   return {
     start: first * columns,
     end: Math.min(count, Math.max(first + 1, last) * columns),
