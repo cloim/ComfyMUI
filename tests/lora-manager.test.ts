@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendTriggerWords,
+  extractLoraTriggerWords,
   formatBytes,
   inferFamilyFromLoraItem,
   isVideoPreview,
@@ -177,5 +178,39 @@ describe('LoRA Manager domain helpers', () => {
     expect(matchLoraItem('makinaflux_gominsi_v1.0', mockLoras)).toBe(mockLoras[1]);
     expect(matchLoraItem('Flux1.D/FLUX.1-Turbo-Alpha.safetensors', mockLoras)).toBe(mockLoras[0]);
     expect(matchLoraItem('unknown_lora', mockLoras)).toBeNull();
+  });
+
+  it('extracts trigger words from matched LoraItem or falls back cleanly', () => {
+    const mockLoras: LoraItem[] = [
+      {
+        model_name: 'Custom Model',
+        file_name: 'custom_lora',
+        folder: '',
+        file_path: '/models/custom_lora.safetensors',
+        preview_url: '',
+        preview_nsfw_level: 0,
+        base_model: 'Flux.1 D',
+        sha256: '111',
+        file_size: 100,
+        modified: 100,
+        tags: [],
+        from_civitai: true,
+        usage_tips: '{}',
+        notes: '',
+        favorite: false,
+        update_available: false,
+        civitai: {
+          trainedWords: ['trigger1', 'trigger2'],
+        },
+      },
+    ];
+
+    expect(extractLoraTriggerWords('custom_lora.safetensors', mockLoras)).toEqual([
+      'trigger1',
+      'trigger2',
+    ]);
+    expect(extractLoraTriggerWords('SubFolder/unmatched_lora_v2.safetensors', [])).toEqual([
+      'unmatched_lora_v2',
+    ]);
   });
 });

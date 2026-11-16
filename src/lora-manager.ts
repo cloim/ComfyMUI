@@ -330,6 +330,28 @@ export function matchLoraItem(
   return null;
 }
 
+export function extractLoraTriggerWords(
+  loraName: string,
+  items: LoraItem[],
+  comfyLoraNames: string[] = [],
+): string[] {
+  const item = matchLoraItem(loraName, items, comfyLoraNames);
+  if (item?.civitai?.trainedWords && item.civitai.trainedWords.length > 0) {
+    const words = item.civitai.trainedWords.map((w) => w.trim()).filter(Boolean);
+    if (words.length > 0) return words;
+  }
+  if (item?.model_name?.trim()) {
+    return [item.model_name.trim()];
+  }
+  const cleanName = loraName
+    .replaceAll('\\', '/')
+    .split('/')
+    .pop()
+    ?.replace(/\.[^/.]+$/, '')
+    ?.trim();
+  return cleanName ? [cleanName] : [];
+}
+
 export function appendTriggerWords(currentPrompt: string, words: string[]): string {
   const cleanWords = words.map((w) => w.trim()).filter(Boolean);
   if (cleanWords.length === 0) return currentPrompt;

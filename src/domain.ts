@@ -257,6 +257,33 @@ export function parseAttributeList(raw: string): string[] {
   return result;
 }
 
+export function buildRandomAssemblePrompt(
+  loraTriggers: string[],
+  elements: PromptAssembleElement[],
+): string {
+  const chosenAttrs: string[] = [];
+  for (const el of elements) {
+    if (el.attributes && el.attributes.length > 0) {
+      const idx = Math.floor(Math.random() * el.attributes.length);
+      const chosen = el.attributes[idx].trim();
+      if (chosen) chosenAttrs.push(chosen);
+    }
+  }
+
+  const seen = new Set<string>();
+  const tokens: string[] = [];
+  for (const word of [...loraTriggers, ...chosenAttrs]) {
+    const trimmed = word.trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      tokens.push(trimmed);
+    }
+  }
+  return tokens.join(', ');
+}
+
 export type DefaultPrompts = {
   positive: string;
   negative: string;

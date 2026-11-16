@@ -4,6 +4,7 @@ import {
   DEFAULT_PROMPT_ASSEMBLE,
   hasPromptAttribute,
   togglePromptAttribute,
+  buildRandomAssemblePrompt,
   parseAttributeList,
   buildWorkflow,
   parseWorkflow,
@@ -258,5 +259,24 @@ describe('portable presets', () => {
     expect(p).toBe('A portrait of a woman, low');
 
     expect(parseAttributeList('a, b / c, A')).toEqual(['a', 'b', 'c']);
+  });
+  it('builds random prompt combining lora triggers and assemble elements cleanly without duplicates', () => {
+    const elements = [
+      { id: 'angle', name: '앵글', attributes: ['eye-level', 'low'] },
+      { id: 'framing', name: '구성', attributes: ['portrait'] },
+      { id: 'empty', name: '빈 요소', attributes: [] },
+    ];
+    const loraTriggers = ['1girl', 'solo', 'portrait'];
+    const prompt = buildRandomAssemblePrompt(loraTriggers, elements);
+    // 'portrait' should not be duplicated even if chosen by assemble
+    expect(prompt.startsWith('1girl, solo, portrait')).toBe(true);
+    // should contain either 'eye-level' or 'low'
+    expect(prompt.includes('eye-level') || prompt.includes('low')).toBe(true);
+    // no trailing commas or empty attributes
+    expect(prompt.includes(', ,')).toBe(false);
+
+    // Empty elements and empty triggers
+    expect(buildRandomAssemblePrompt([], [])).toBe('');
+    expect(buildRandomAssemblePrompt(['my_trigger'], [])).toBe('my_trigger');
   });
 });

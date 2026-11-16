@@ -19,11 +19,13 @@ import {
   ListOrdered,
   ArrowUp,
   ArrowDown,
+  Dices,
 } from 'lucide-react';
 import { useStudio, useStudioSelector } from '../studio';
 import {
   hasPromptAttribute,
   togglePromptAttribute,
+  buildRandomAssemblePrompt,
   options,
   parseWorkflow,
   downloadJson,
@@ -51,6 +53,11 @@ import { PromptHelper } from '../components/PromptHelper';
 import ModelPanel from '../components/ModelPanel';
 import { LoraPicker } from '../components/LoraPicker';
 import {
+  fetchLoraList,
+  extractLoraTriggerWords,
+  type LoraItem,
+} from '../lora-manager';
+import {
   compatibleAssets,
   selectedEntry,
   isArtifactProneSampler,
@@ -67,6 +74,8 @@ export default function Create() {
     setSelectedAssembleId,
     info,
     familyAssignments,
+    connection,
+    notify,
   } = useStudioSelector((state) => ({
     settings: state.settings,
     setSettings: state.setSettings,
@@ -75,8 +84,43 @@ export default function Create() {
     setSelectedAssembleId: state.setSelectedAssembleId,
     info: state.info,
     familyAssignments: state.familyAssignments,
+    connection: state.connection,
+    notify: state.notify,
   }));
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const loraListCache = useRef<LoraItem[] | null>(null);
+  const [randomizing, setRandomizing] = useState(false);
+
+  async function handleRandomPrompt() {
+    if (s.loras.length === 0) {
+      notify('등록된 LoRA가 없어요. 먼저 LoRA를 추가해 주세요');
+      return;
+    }
+    setRandomizing(true);
+    try {
+      let items = loraListCache.current;
+      if (!items) {
+        try {
+          const res = await fetchLoraList(connection.base, { page: 1, pageSize: 100 });
+          items = res.items;
+          loraListCache.current = items;
+        } catch {
+          items = [];
+        }
+      }
+      const allNames = options(info, 'LoraLoaderModelOnly', 'lora_name').concat(
+        options(info, 'LoraLoader', 'lora_name'),
+      );
+      const triggers = s.loras.flatMap((l) =>
+        extractLoraTriggerWords(l.name, items || [], allNames),
+      );
+      const generated = buildRandomAssemblePrompt(triggers, promptAssemble);
+      patch({ positive: generated });
+      notify('등록된 LoRA와 어셈블을 조합한 랜덤 프롬프트를 적용했어요');
+    } finally {
+      setRandomizing(false);
+    }
+  }
   const [advanced, setAdvanced] = useState(false);
   const [advancedTab, setAdvancedTab] = useState('settings');
   function openAdvanced(tab = 'settings') {
@@ -136,6 +180,8 @@ export default function Create() {
               onToggleAttribute={(attr) =>
                 patch({ positive: togglePromptAttribute(s.positive, attr) })
               }
+              onRandomAssemble={handleRandomPrompt}
+              randomizing={randomizing}
             />
             <label htmlFor="positive" className="sr-only">
               그리고 싶은 장면
@@ -379,12 +425,16 @@ function PromptAssembleBar({
   onSelectId,
   positive,
   onToggleAttribute,
+  onRandomAssemble,
+  randomizing,
 }: {
   elements: PromptAssembleElement[];
   selectedId: string;
   onSelectId: (id: string) => void;
   positive: string;
   onToggleAttribute: (attr: string) => void;
+  onRandomAssemble?: () => void;
+  randomizing?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -445,7 +495,10 @@ function PromptAssembleBar({
 
   return (
     <div className="mb-2.5 flex flex-col gap-1.5">
-      <div data-ui-audit-row className="grid grid-cols-2 items-center gap-2">
+      <div
+        data-ui-audit-row
+        className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2"
+      >
         <SelectControl
           aria-label="프롬프트 요소"
           value={currentElement?.id || ''}
@@ -491,6 +544,18 @@ function PromptAssembleBar({
             aria-hidden="true"
           />
         </div>
+        {onRandomAssemble && (
+          <button
+            type="button"
+            aria-label="등록한 LoRA 기준 어셈블 랜덤 조합"
+            title="등록한 LoRA 기준 어셈블 랜덤 조합"
+            disabled={randomizing}
+            onClick={onRandomAssemble}
+            className="btn-secondary flex h-9 w-9 shrink-0 items-center justify-center p-0 text-olive hover:text-olive active:scale-95 disabled:opacity-50"
+          >
+            <Dices size={16} />
+          </button>
+        )}
       </div>
       {open &&
         currentElement &&
@@ -543,9 +608,8 @@ function PreviewPanel() {
     </div>
   );
 }
-const RUN_LIMIT = 20;
 const clampRuns = (n: number) =>
-  Number.isFinite(n) ? Math.min(RUN_LIMIT, Math.max(1, Math.round(n))) : 1;
+  Number.isFinite(n) ? Math.max(1, Math.round(n)) : 1;
 // Image count and generate button, shown in the top bar of the create screen.
 export function GenerateControls() {
   const {
@@ -593,13 +657,12 @@ export function GenerateControls() {
         )}
         <label
           className="relative w-[60px] shrink-0 sm:w-[68px]"
-          title={`장 수 | 2장 이상이면 Seed를 바꿔 ${RUN_LIMIT}장까지 이어서 생성`}
+          title="장 수 | 2장 이상이면 Seed를 바꿔 이어서 생성"
         >
           <input
             type="number"
             inputMode="numeric"
             min={1}
-            max={RUN_LIMIT}
             step={1}
             aria-label="장 수"
             value={countText}

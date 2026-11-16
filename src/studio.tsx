@@ -887,7 +887,7 @@ function useStudioState() {
     if (submitLock.current) return;
     submitLock.current = true;
     setBusy(true);
-    const validCount = Math.min(20, Math.max(1, Math.round(count)));
+    const validCount = Math.max(1, Math.round(count));
     let successCount = 0;
     try {
       for (let i = 0; i < validCount; i++) {
