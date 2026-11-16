@@ -285,10 +285,14 @@ export default function Gallery() {
 
   const executeSingleDelete = async () => {
     if (!remove) return;
+    const removingId = remove.id;
     setDeleting(true);
-    const ok = await deleteJobs([remove.id]);
+    const ok = await deleteJobs([removingId]);
     setDeleting(false);
-    if (ok) setRemove(null);
+    if (ok) {
+      setRemove(null);
+      if (selected === removingId) setSelected(null);
+    }
   };
 
   return (
@@ -608,9 +612,10 @@ export default function Gallery() {
                 const next = imageJobs[imageIndex + direction];
                 if (imageIndex >= 0 && next) setSelected(next.id);
               }}
+              onDelete={() => setRemove(detail)}
             />
           ) : (
-            <Result key={detail.id} job={detail} />
+            <Result key={detail.id} job={detail} onDelete={() => setRemove(detail)} />
           ))}
       </Modal>
 

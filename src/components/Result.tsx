@@ -9,6 +9,7 @@ import {
   Sparkles,
   Maximize2,
   Share2,
+  Trash2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { type Generation, type Job, reusableSettings } from '../domain';
@@ -25,10 +26,12 @@ export function Result({
   job,
   fallback,
   compact = false,
+  onDelete,
 }: {
   job?: Job;
   fallback?: Job;
   compact?: boolean;
+  onDelete?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
@@ -128,48 +131,68 @@ export function Result({
       )}
       <div
         style={{ aspectRatio: frameRatio }}
-        className={`group relative overflow-hidden rounded-xl bg-[#d9dfd3] ${compact ? '' : 'max-h-[480px]'} ${canExpand ? 'cursor-zoom-in' : ''}`}
-        onClick={() => {
-          if (canExpand) setExpanded(true);
-        }}
-        onKeyDown={(e) => {
-          if (canExpand && (e.key === 'Enter' || e.key === ' ')) {
-            e.preventDefault();
-            setExpanded(true);
-          }
-        }}
-        role={canExpand ? 'button' : undefined}
-        tabIndex={canExpand ? 0 : undefined}
-        aria-label={canExpand ? '이미지 크게 보기' : undefined}
+        className={`group relative overflow-hidden rounded-xl bg-[#d9dfd3] ${compact ? '' : 'max-h-[480px]'}`}
       >
         {!previewImg && !source && (
           <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-muted">
             아직 생성한 이미지가 없어요
           </div>
         )}
-        {(previewImg || source) && (
-          <img
-            key={previewImg ? 'live-preview' : `${source}-${imageRetry}`}
-            src={
-              previewImg ||
-              source + (imageRetry ? `${source.includes('?') ? '&' : '?'}retry=${imageRetry}` : '')
-            }
-            alt={
-              previewImg
-                ? '실시간 생성 미리보기'
-                : showingFallback
-                  ? '직전에 생성한 이미지'
-                  : '생성한 이미지'
-            }
-            onError={() => {
-              if (!previewImg) setImageFailed(true);
-            }}
-            onLoad={() => setImageFailed(false)}
-            className={`h-full w-full object-contain transition-opacity duration-700 ${
-              previewImg ? 'opacity-95' : active ? 'opacity-35 blur-sm' : ''
-            }`}
-          />
-        )}
+        {(previewImg || source) &&
+          (canExpand ? (
+            <button
+              type="button"
+              aria-label="이미지 크게 보기"
+              className="block h-full w-full cursor-zoom-in text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink"
+              onClick={() => setExpanded(true)}
+            >
+              <img
+                key={previewImg ? 'live-preview' : `${source}-${imageRetry}`}
+                src={
+                  previewImg ||
+                  source +
+                    (imageRetry ? `${source.includes('?') ? '&' : '?'}retry=${imageRetry}` : '')
+                }
+                alt={
+                  previewImg
+                    ? '실시간 생성 미리보기'
+                    : showingFallback
+                      ? '직전에 생성한 이미지'
+                      : '생성한 이미지'
+                }
+                onError={() => {
+                  if (!previewImg) setImageFailed(true);
+                }}
+                onLoad={() => setImageFailed(false)}
+                className={`h-full w-full object-contain transition-opacity duration-700 ${
+                  previewImg ? 'opacity-95' : active ? 'opacity-35 blur-sm' : ''
+                }`}
+              />
+            </button>
+          ) : (
+            <img
+              key={previewImg ? 'live-preview' : `${source}-${imageRetry}`}
+              src={
+                previewImg ||
+                source +
+                  (imageRetry ? `${source.includes('?') ? '&' : '?'}retry=${imageRetry}` : '')
+              }
+              alt={
+                previewImg
+                  ? '실시간 생성 미리보기'
+                  : showingFallback
+                    ? '직전에 생성한 이미지'
+                    : '생성한 이미지'
+              }
+              onError={() => {
+                if (!previewImg) setImageFailed(true);
+              }}
+              onLoad={() => setImageFailed(false)}
+              className={`h-full w-full object-contain transition-opacity duration-700 ${
+                previewImg ? 'opacity-95' : active ? 'opacity-35 blur-sm' : ''
+              }`}
+            />
+          ))}
         {previewImg && (
           <span className="absolute left-3 top-3 rounded-full bg-olive px-2.5 py-1 text-2xs font-semibold text-white shadow-sm animate-pulse">
             실시간 생성 중
@@ -179,6 +202,18 @@ export function Result({
           <span className="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-2xs font-semibold text-ink shadow-sm">
             직전 생성 이미지
           </span>
+        )}
+        {onDelete && (
+          <button
+            type="button"
+            aria-label="기록 삭제"
+            title="기록 삭제"
+            disabled={active}
+            onClick={() => onDelete()}
+            className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white/90 shadow-sm backdrop-blur-sm transition-all hover:bg-red-600 hover:text-white disabled:pointer-events-none disabled:opacity-40"
+          >
+            <Trash2 size={16} aria-hidden="true" />
+          </button>
         )}
         {active && (
           <div

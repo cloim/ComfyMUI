@@ -8,11 +8,13 @@ export function HistoryDetail({
   index,
   count,
   onNavigate,
+  onDelete,
 }: {
   job: Job;
   index: number;
   count: number;
   onNavigate: (direction: -1 | 1) => void;
+  onDelete?: () => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const slide = useRef<HTMLDivElement>(null);
@@ -144,7 +146,7 @@ export function HistoryDetail({
       </div>
       <div className="overflow-hidden">
         <div ref={slide} className="[&_img]:touch-pan-y [&_img]:touch-pinch-zoom">
-          <Result key={job.id} job={job} />
+          <Result key={job.id} job={job} onDelete={onDelete} />
         </div>
       </div>
     </div>

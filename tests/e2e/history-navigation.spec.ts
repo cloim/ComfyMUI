@@ -141,3 +141,25 @@ test('single filtered image disables both directions and fits a small viewport',
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
 });
+
+test('detail modal displays delete icon button on top right of image and triggers deletion', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: '완료 이미지 상세 보기' }).first().click();
+  const dialog = page.getByRole('dialog', { name: '생성 기록', exact: true });
+  await expect(dialog).toBeVisible();
+
+  // Delete button on top right of the image
+  const deleteBtn = dialog.getByRole('button', { name: '기록 삭제', exact: true });
+  await expect(deleteBtn).toBeVisible();
+
+  // Click delete button -> confirmation dialog opens
+  await deleteBtn.click();
+  const confirmDialog = page.getByRole('dialog', { name: /삭제할까요\?/ });
+  await expect(confirmDialog).toBeVisible();
+
+  // Cancel keeping item
+  await confirmDialog.getByRole('button', { name: '유지하기' }).click();
+  await expect(confirmDialog).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+});
