@@ -67,6 +67,63 @@ test('5000 records render only viewport cards and still reach the final image', 
   await expect(page.getByRole('img', { name: '장면 04999', exact: true })).toBeVisible();
 });
 
+test('scrolling progressively to bottom reaches and stays at final image without jitter', async ({
+  page,
+}) => {
+  // Mock 92 items
+  await page.route('**/api/gallery', (route) =>
+    route.fulfill({
+      json: {
+        available: true,
+        items: Array.from({ length: 92 }, (_, i) => ({
+          filename: `gallery-${i}.png`,
+          subfolder: '',
+          type: 'output',
+          mtime: 1800000000000 - i * 1000,
+          size: 100,
+          settings: {
+            positive: `장면 ${String(i).padStart(5, '0')}`,
+            seed: i,
+            model: 'Flux1.D/test-model.safetensors',
+            architecture: 'flux',
+            width: 512,
+            height: 768,
+          },
+        })),
+      },
+    }),
+  );
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/gallery');
+  await page.waitForSelector('[data-ui-audit-card-type="gallery-item"]');
+  const list = page.getByLabel('기록 목록', { exact: true });
+
+  // Jump to 300px before the very bottom
+  await list.evaluate((el) => {
+    el.scrollTop = el.scrollHeight - el.clientHeight - 300;
+  });
+  await page.waitForTimeout(100);
+
+  const box = (await list.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
+  // Now scroll small steps down to and past the bottom
+  for (let i = 0; i < 15; i++) {
+    await page.mouse.wheel(0, 50);
+    await page.waitForTimeout(50);
+  }
+
+  // The last card (장면 00091) should be visible and rendered
+  await expect(page.getByRole('img', { name: '장면 00091', exact: true })).toBeVisible();
+
+  // Scroll should be stably at the bottom (maxScroll)
+  const atEnd = await list.evaluate(
+    (el) => el.scrollTop >= el.scrollHeight - el.clientHeight - 2,
+  );
+  expect(atEnd).toBe(true);
+});
+
 test('search and scroll filters survive returning from another screen', async ({
   page,
 }) => {

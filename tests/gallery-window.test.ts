@@ -18,7 +18,7 @@ describe('gallery viewport', () => {
   });
   it('includes the last partial row and clamps a stale scroll position', () => {
     const window = galleryWindow(503, 3, 250, 999999, 700);
-    expect(window.start).toBe(501);
+    expect(window.start).toBe(483);
     expect(window.end).toBe(503);
     expect(window.bottom).toBe(0);
   });
