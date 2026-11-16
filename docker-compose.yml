@@ -91,6 +91,8 @@ services:
       - persona-codex:/root/.codex
       # Shared named volume to access ComfyUI models & output
       - comfy-data:/comfy-data:rw
+      # Modal Cloud CLI credentials
+      - ${HOST_MODAL_CONFIG:-C:/Users/cloim/.modal.toml}:/root/.modal.toml:ro
     depends_on:
       comfyui:
         condition: service_healthy
