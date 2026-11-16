@@ -18,7 +18,7 @@ FROM node:24-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production \
-    PORT=4173 \
+    PORT=8189 \
     HOST=0.0.0.0
 
 # Install curl for container healthcheck
@@ -35,6 +35,6 @@ COPY --from=builder /app/dist ./dist
 # Copy backend server files
 COPY server.mjs state-db.mjs gallery.mjs object-info.mjs ./
 
-EXPOSE 4173
+EXPOSE 8189
 
 CMD ["node", "server.mjs"]

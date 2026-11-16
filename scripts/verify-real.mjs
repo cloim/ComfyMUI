@@ -2,7 +2,7 @@
 // This requests one small, non-sensitive scene and saves evidence under ignored docs/.
 import { chromium } from '@playwright/test';
 import { writeFileSync, mkdirSync } from 'node:fs';
-const base = 'http://127.0.0.1:4173';
+const base = 'http://127.0.0.1:8189';
 const queue = await (await fetch(base + '/comfy/queue')).json();
 if (queue.queue_running.length || queue.queue_pending.length)
   throw Error('서버가 대기 상태일 때 검증해 주세요');

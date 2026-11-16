@@ -42,10 +42,10 @@ services:
     container_name: comfymui-app
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${PORT:-4173}:4173"
+      - "127.0.0.1:8189:8189"
     environment:
       - NODE_ENV=production
-      - PORT=4173
+      - PORT=8189
       - HOST=0.0.0.0
       - COMFY_URL=http://comfyui:8188
       - COMFY_OUTPUT_DIR=/comfy-data/output
@@ -60,7 +60,7 @@ services:
       comfyui:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://127.0.0.1:4173/api/state || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8189/api/state || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -74,13 +74,13 @@ services:
     container_name: persona-app
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${PERSONA_PORT:-4317}:4317"
+      - "127.0.0.1:8190:8190"
     env_file:
       - path: ../Persona/.env
         required: false
     environment:
       - NODE_ENV=production
-      - PORT=4317
+      - PORT=8190
       - HOST=0.0.0.0
       - COMFY_URL=http://comfyui:8188
       - LORA_DIR=/comfy-data/models/loras
@@ -95,7 +95,7 @@ services:
       comfyui:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://127.0.0.1:4317/api/session || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8190/api/session || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 6

@@ -20,14 +20,14 @@ npm run build
 npm start
 ```
 
-실행 주소는 `http://localhost:4173`입니다. 앱 서버는 기본적으로 `0.0.0.0`에서 수신합니다. 같은 LAN의 모바일에서는 PC의 LAN IP와 4173 포트로 열 수 있습니다. 로컬 테스트용으로 신뢰할 수 있는 네트워크에서 사용하세요. 외부 공개와 인증 구성은 별도 배포 작업입니다.
+실행 주소는 `http://localhost:8189`입니다. 앱 서버는 기본적으로 `0.0.0.0`에서 수신합니다. 같은 LAN의 모바일에서는 PC의 LAN IP와 8189 포트로 열 수 있습니다. 로컬 테스트용으로 신뢰할 수 있는 네트워크에서 사용하세요. 외부 공개와 인증 구성은 별도 배포 작업입니다.
 
 서버 환경변수:
 
 | 변수 | 기본값 | 용도 |
 | --- | --- | --- |
 | `COMFY_URL` | `http://127.0.0.1:8188` | 고정 ComfyUI 백엔드 주소 |
-| `PORT` | `4173` | 빌드 실행 서버 포트 |
+| `PORT` | `8189` | 빌드 실행 서버 포트 |
 | `HOST` | `0.0.0.0` | 수신 인터페이스 |
 
 PowerShell 예: `$env:COMFY_URL='http://127.0.0.1:8188'; npm start`
@@ -53,7 +53,7 @@ cp .env.example .env
 주요 설정값:
 - `HOST_MODELS_DIR`: 기존 로컬 Windows 모델 폴더 경로 (기본값: `E:/Models`)
 - `COMFY_PORT`: 호스트 ComfyUI 포트 (기본값: `8188`)
-- `PORT`: 호스트 ComfyMUI 앱 포트 (기본값: `4173`)
+- `PORT`: 호스트 ComfyMUI 앱 포트 (기본값: `8189`)
 - `COMFY_EXTRA_ARGS`: ComfyUI 시작 추가 옵션 (기본값: `--lowvram --reserve-vram 1`)
 
 #### 2. 데이터 이전 (비파괴적)
@@ -80,7 +80,7 @@ docker compose ps
 docker compose logs -f
 ```
 
-기동 후 브라우저에서 `http://localhost:4173`으로 접속할 수 있습니다.
+기동 후 브라우저에서 `http://localhost:8189`으로 접속할 수 있습니다.
 
 #### 4. 서비스 종료
 

@@ -332,7 +332,7 @@ app.get('/{*path}', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile('dist/index.html', { root: process.cwd() });
 });
-const server = app.listen(Number(process.env.PORT || 4173), process.env.HOST || '0.0.0.0', () =>
+const server = app.listen(Number(process.env.PORT || 8189), process.env.HOST || '0.0.0.0', () =>
   console.log('ComfyMUI ready'),
 );
 server.on('upgrade', (req, socket, head) => {

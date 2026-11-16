@@ -2,7 +2,7 @@ import { it, expect } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { defaults, buildWorkflow, validateAgainstServer, type ObjectInfo } from '../../src/domain';
 import { catalog, selectModel, validateSelection, type ModelFamily } from '../../src/models';
-const base = 'http://127.0.0.1:4173/comfy';
+const base = 'http://127.0.0.1:8189/comfy';
 const prompt =
   'A red ceramic teapot on a wooden table beside a small green plant, soft daylight, studio photograph, no text, no people';
 for (const family of ['flux', 'krea2', 'moss', 'qwen21'] as ModelFamily[])
@@ -42,7 +42,7 @@ for (const family of ['flux', 'krea2', 'moss', 'qwen21'] as ModelFamily[])
     );
     const response = await fetch(base + '/prompt', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Origin: 'http://127.0.0.1:4173' },
+      headers: { 'Content-Type': 'application/json', Origin: 'http://127.0.0.1:8189' },
       body: JSON.stringify({ prompt: graph, client_id: crypto.randomUUID() }),
     });
     const body = await response.json();
