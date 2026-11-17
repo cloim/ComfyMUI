@@ -286,12 +286,24 @@ export default function Gallery() {
   const executeSingleDelete = async () => {
     if (!remove) return;
     const removingId = remove.id;
+    const isCurrentModal = selected === removingId;
+    let nextSelectedId: string | null = null;
+
+    if (isCurrentModal) {
+      const currentIndex = imageJobs.findIndex((j) => j.id === removingId);
+      if (currentIndex >= 0 && currentIndex < imageJobs.length - 1) {
+        nextSelectedId = imageJobs[currentIndex + 1].id;
+      }
+    }
+
     setDeleting(true);
     const ok = await deleteJobs([removingId]);
     setDeleting(false);
     if (ok) {
       setRemove(null);
-      if (selected === removingId) setSelected(null);
+      if (isCurrentModal) {
+        setSelected(nextSelectedId);
+      }
     }
   };
 

@@ -163,3 +163,53 @@ test('detail modal displays delete icon button on top right of image and trigger
   await expect(confirmDialog).toHaveCount(0);
   await expect(dialog).toBeVisible();
 });
+
+test('deleting image in detail modal shows next image, or closes modal if no next image', async ({
+  page,
+}) => {
+  await page.route('**/api/outputs/delete', async (route) => {
+    const postData = route.request().postDataJSON();
+    const filenames = (postData?.files || []).map((f: { filename: string }) => f.filename);
+    await route.fulfill({
+      json: {
+        deleted: filenames,
+        missing: [],
+        failed: [],
+      },
+    });
+  });
+
+  // Open the first image
+  await page.getByRole('button', { name: '완료 이미지 상세 보기' }).first().click();
+  const dialog = page.getByRole('dialog', { name: '생성 기록', exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('status')).toHaveText('1 / 3');
+  await expect(dialog).toContainText('슬라이드 첫 장');
+
+  // Delete the first image
+  await dialog.getByRole('button', { name: '기록 삭제', exact: true }).click();
+  const confirmDialog = page.getByRole('dialog', { name: /삭제할까요\?/ });
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole('button', { name: /삭제/ }).click();
+  await expect(confirmDialog).toHaveCount(0);
+
+  // Modal stays open and shows the next image (was 2nd, now 1st of 2)
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('status')).toHaveText('1 / 2');
+  await expect(dialog).toContainText('제외할 장면');
+
+  // Navigate to the last image
+  await dialog.getByRole('button', { name: '다음 이미지', exact: true }).click();
+  await expect(dialog.getByRole('status')).toHaveText('2 / 2');
+  await expect(dialog).toContainText('슬라이드 마지막 장');
+
+  // Delete the last image
+  await dialog.getByRole('button', { name: '기록 삭제', exact: true }).click();
+  const confirmDialog2 = page.getByRole('dialog', { name: /삭제할까요\?/ });
+  await expect(confirmDialog2).toBeVisible();
+  await confirmDialog2.getByRole('button', { name: /삭제/ }).click();
+  await expect(confirmDialog2).toHaveCount(0);
+
+  // Since there is no next image, modal closes
+  await expect(dialog).toHaveCount(0);
+});
