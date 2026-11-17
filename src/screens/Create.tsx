@@ -52,11 +52,7 @@ import { Result } from '../components/Result';
 import { PromptHelper } from '../components/PromptHelper';
 import ModelPanel from '../components/ModelPanel';
 import { LoraPicker } from '../components/LoraPicker';
-import {
-  fetchLoraList,
-  extractLoraTriggerWords,
-  type LoraItem,
-} from '../lora-manager';
+import { fetchLoraList, extractLoraTriggerWords, type LoraItem } from '../lora-manager';
 import {
   compatibleAssets,
   selectedEntry,
@@ -608,8 +604,7 @@ function PreviewPanel() {
     </div>
   );
 }
-const clampRuns = (n: number) =>
-  Number.isFinite(n) ? Math.max(1, Math.round(n)) : 1;
+const clampRuns = (n: number) => (Number.isFinite(n) ? Math.max(1, Math.round(n)) : 1);
 // Image count and generate button, shown in the top bar of the create screen.
 export function GenerateControls() {
   const {
@@ -702,11 +697,13 @@ export function GenerateControls() {
         title={`서버 대기열 (${clientQueue.length}개)`}
         open={showQueue}
         onClose={() => setShowQueue(false)}
+        onCancel={() => setShowQueue(false)}
         footer={
           <>
             {clientQueue.length > 0 && (
               <button
                 className="btn-secondary text-red-700"
+                data-modal-no-cancel
                 onClick={() => {
                   void clearQueue();
                   setShowQueue(false);

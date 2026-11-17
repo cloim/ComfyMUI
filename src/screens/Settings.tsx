@@ -982,7 +982,8 @@ export default function Settings() {
                   />
                 </label>
                 <p className="text-xs leading-relaxed text-muted">
-                  절전 중에는 화면 유지와 백그라운드 오디오를 끄고 실시간 생성 미리보기와 진행 확인 빈도를 줄여요
+                  절전 중에는 화면 유지와 백그라운드 오디오를 끄고 실시간 생성 미리보기와 진행 확인
+                  빈도를 줄여요
                 </p>
                 <label className="flex min-h-11 items-center justify-between gap-3 text-xs font-semibold">
                   생성 중 화면 유지

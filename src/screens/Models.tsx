@@ -1019,11 +1019,13 @@ export default function Models() {
         open={Boolean(activeModel)}
         size="lg"
         onClose={() => setActiveModel(null)}
+        onCancel={() => setActiveModel(null)}
         footer={
           activeModel ? (
             <>
               <button
                 type="button"
+                data-modal-no-confirm
                 onClick={() => setDeleteTarget(activeModel)}
                 className="btn-danger"
               >
@@ -1032,6 +1034,7 @@ export default function Models() {
               </button>
               <button
                 type="button"
+                data-modal-no-cancel
                 disabled={savingDetail}
                 onClick={handleSaveDetail}
                 className="btn-secondary"

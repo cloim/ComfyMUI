@@ -48,6 +48,18 @@ export function Modal({
   children,
   footer,
   size = 'md',
+  draggable = true,
+  resizable = false,
+  storageKey,
+  closeOnOverlayClick = true,
+  closeOnEscape = true,
+  confirmOnEnter = true,
+  onConfirm,
+  onCancel,
+  initialFocusRef,
+  minWidth = 280,
+  minHeight = 180,
+  className = '',
 }: {
   title: string;
   open: boolean;
@@ -55,6 +67,18 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   size?: 'md' | 'lg' | 'xl';
+  draggable?: boolean;
+  resizable?: boolean;
+  storageKey?: string;
+  closeOnOverlayClick?: boolean;
+  closeOnEscape?: boolean;
+  confirmOnEnter?: boolean;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+  initialFocusRef?: RefObject<HTMLElement | null>;
+  minWidth?: number;
+  minHeight?: number;
+  className?: string;
 }) {
   return (
     <SharedModal
@@ -63,15 +87,18 @@ export function Modal({
       title={title}
       footer={footer}
       size={size}
-      draggable
-      resizable={false}
-      storageKey={title}
-      initialFocusRef={undefined}
-      minWidth={280}
-      minHeight={180}
-      className=""
-      closeOnOverlayClick
-      closeOnEscape
+      draggable={draggable}
+      resizable={resizable}
+      storageKey={storageKey ?? title}
+      initialFocusRef={initialFocusRef}
+      minWidth={minWidth}
+      minHeight={minHeight}
+      className={className}
+      closeOnOverlayClick={closeOnOverlayClick}
+      closeOnEscape={closeOnEscape}
+      confirmOnEnter={confirmOnEnter}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
     >
       {children}
     </SharedModal>

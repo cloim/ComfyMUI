@@ -1047,11 +1047,13 @@ export default function Loras() {
         open={Boolean(activeLora)}
         size="lg"
         onClose={() => setActiveLora(null)}
+        onCancel={() => setActiveLora(null)}
         footer={
           activeLora ? (
             <>
               <button
                 type="button"
+                data-modal-no-confirm
                 onClick={() => setDeleteTarget(activeLora)}
                 className="btn-danger"
               >
@@ -1060,6 +1062,7 @@ export default function Loras() {
               </button>
               <button
                 type="button"
+                data-modal-no-cancel
                 disabled={savingDetail}
                 onClick={handleSaveDetail}
                 className="btn-secondary"

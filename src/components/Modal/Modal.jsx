@@ -7,6 +7,12 @@ import { RESIZE_HANDLES, useModalGeometry } from './useModalGeometry.js';
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+const POSITIVE_BUTTON_SELECTOR =
+  '[data-modal-confirm], [data-modal-positive], .modal-footer .btn-primary, .modal-footer .btn-danger, .modal-footer button[type="submit"], .modal-footer button.primary, .modal-footer a.btn-primary';
+
+const NEGATIVE_BUTTON_SELECTOR =
+  '[data-modal-cancel], [data-modal-negative], .modal-footer .btn-secondary:not([data-modal-no-cancel]), .modal-footer .btn-ghost:not([data-modal-no-cancel]), .modal-footer .modal-cancel, .modal-footer button.cancel';
+
 export function Modal({
   isOpen,
   onClose,
@@ -19,6 +25,9 @@ export function Modal({
   storageKey,
   closeOnOverlayClick = true,
   closeOnEscape = true,
+  confirmOnEnter = true,
+  onConfirm,
+  onCancel,
   initialFocusRef,
   minWidth = 320,
   minHeight = 200,
@@ -51,18 +60,22 @@ export function Modal({
 
   // 열릴 때 첫 포커스를 옮기고, 닫힐 때 열기 직전 요소로 되돌린다. 되돌리지 않으면 모달을
   // 닫은 뒤 포커스가 body로 떨어져 키보드 사용자가 맥락을 잃는다.
+  // 첫 포커스는 본문의 첫 입력/상호작용 요소를 우선하고, 본문에 입력 요소가 없는 단순 확인 창은
+  // 패널 자체에 두어 Enter/ESC 등 모달 단축키가 즉시 반응하게 한다.
   useEffect(() => {
     if (!isOpen) {
       return;
     }
     previouslyFocusedRef.current = document.activeElement;
-    const timer = window.setTimeout(() => {
-      const target =
-        initialFocusRef?.current ??
-        panelRef.current?.querySelector(FOCUSABLE_SELECTOR) ??
-        panelRef.current;
+    const focusTarget = () => {
+      const bodyTarget = panelRef.current?.querySelector(
+        '.modal-body input:not([disabled]), .modal-body textarea:not([disabled]), .modal-body select:not([disabled]), .modal-body [tabindex]:not([tabindex="-1"]), .modal-body a[href], .modal-body button:not([disabled])',
+      );
+      const target = initialFocusRef?.current ?? bodyTarget ?? panelRef.current;
       target?.focus();
-    }, 0);
+    };
+    focusTarget();
+    const timer = window.setTimeout(focusTarget, 0);
     return () => {
       window.clearTimeout(timer);
       const previous = previouslyFocusedRef.current;
@@ -72,24 +85,104 @@ export function Modal({
     };
   }, [isOpen, initialFocusRef]);
 
-  // ESC와 Tab. ESC는 맨 위 모달만 반응해, 중첩 상태에서 한 번에 하나씩 닫히게 한다.
+  // ESC, Enter, Tab 처리.
+  // ESC는 최상위 모달에서 부정 버튼(취소)을 누르거나 onClose로 닫는다.
+  // Enter는 최상위 모달에서 긍정 버튼(확인/저장)을 누르거나 onConfirm을 실행한다.
   useEffect(() => {
     if (!isOpen) {
       return;
     }
     const onKeyDown = (event) => {
-      if (event.key === 'Escape' && closeOnEscape && isTopModal(modalId)) {
+      if (!isTopModal(modalId)) {
+        return;
+      }
+
+      // ESC: 부정 버튼 클릭 또는 onCancel/onClose 호출
+      if (event.key === 'Escape' && closeOnEscape) {
         event.stopPropagation();
+        event.preventDefault();
+
+        if (typeof onCancel === 'function') {
+          onCancel();
+          return;
+        }
+
+        const negativeButton = panelRef.current?.querySelector(NEGATIVE_BUTTON_SELECTOR);
+        if (
+          negativeButton instanceof HTMLElement &&
+          !negativeButton.hasAttribute('disabled') &&
+          negativeButton.getAttribute('aria-disabled') !== 'true'
+        ) {
+          negativeButton.click();
+          return;
+        }
+
         onClose();
         return;
       }
-      if (event.key === 'Tab' && isTopModal(modalId)) {
+
+      // Enter: 긍정 버튼 클릭 또는 onConfirm 호출
+      if (event.key === 'Enter' && confirmOnEnter && !event.isComposing && event.keyCode !== 229) {
+        // Shift나 Alt와 함께 누른 경우는 줄바꿈이나 단축키 목적일 수 있으므로 제외
+        if (event.shiftKey || event.altKey) {
+          return;
+        }
+
+        const active = document.activeElement;
+        const isInsideModal = panelRef.current?.contains(active);
+        const tagName = active?.tagName?.toLowerCase();
+
+        // 모달 내부의 textarea나 contenteditable 영역은 줄바꿈 입력을 보존한다 (단, Ctrl/Cmd + Enter는 확인 허용).
+        if (
+          isInsideModal &&
+          (tagName === 'textarea' || active?.isContentEditable) &&
+          !event.ctrlKey &&
+          !event.metaKey
+        ) {
+          return;
+        }
+
+        // 모달 내부의 버튼이나 링크 등에 포커스가 있는 경우 브라우저 네이티브 활성화 동작에 맡긴다.
+        if (
+          isInsideModal &&
+          (tagName === 'button' ||
+            tagName === 'a' ||
+            (tagName === 'input' && ['button', 'submit', 'reset'].includes(active?.type)))
+        ) {
+          return;
+        }
+
+        event.stopPropagation();
+        event.preventDefault();
+
+        if (typeof onConfirm === 'function') {
+          onConfirm();
+          return;
+        }
+
+        const positiveButton =
+          panelRef.current?.querySelector(POSITIVE_BUTTON_SELECTOR) ??
+          panelRef.current?.querySelector(
+            '.modal-footer button:not([data-modal-cancel]):not([data-modal-negative]):not([data-modal-no-confirm]):not(.btn-secondary):not(.btn-ghost):not(.modal-close), .modal-footer a:not([data-modal-cancel]):not([data-modal-negative]):not([data-modal-no-confirm]):not(.btn-secondary):not(.btn-ghost):not(.modal-close)',
+          );
+
+        if (
+          positiveButton instanceof HTMLElement &&
+          !positiveButton.hasAttribute('disabled') &&
+          positiveButton.getAttribute('aria-disabled') !== 'true'
+        ) {
+          positiveButton.click();
+          return;
+        }
+      }
+
+      if (event.key === 'Tab') {
         trapFocus(event, panelRef.current);
       }
     };
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [isOpen, closeOnEscape, onClose, modalId]);
+  }, [isOpen, closeOnEscape, confirmOnEnter, onClose, onConfirm, onCancel, modalId]);
 
   // 오버레이 클릭 닫기. pointerdown과 click이 모두 오버레이에서 일어났을 때만 닫는다.
   // 본문에서 드래그를 시작해 오버레이에서 손을 뗀 경우(텍스트 선택, 헤더 드래그)에 모달이

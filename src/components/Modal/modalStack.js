@@ -38,6 +38,9 @@ export function isTopModal(id) {
 // 스크롤바가 사라지면서 콘텐츠가 옆으로 밀리는 현상을 막기 위해, 잠글 때 스크롤바 폭만큼
 // padding-right로 보상한다.
 function lockBodyScroll() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
   const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
   savedBodyOverflow = document.body.style.overflow;
   savedBodyPaddingRight = document.body.style.paddingRight;
@@ -50,8 +53,10 @@ function lockBodyScroll() {
 }
 
 function unlockBodyScroll() {
+  if (typeof document === 'undefined') {
+    return;
+  }
   document.body.style.overflow = savedBodyOverflow;
-  document.body.style.paddingRight = savedBodyPaddingRight;
-  savedBodyOverflow = '';
   savedBodyPaddingRight = '';
+  savedBodyOverflow = '';
 }

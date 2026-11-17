@@ -216,11 +216,13 @@ export default function Presets() {
         title="프리셋 상세"
         open={Boolean(selected)}
         onClose={() => setSelected(null)}
+        onCancel={() => setSelected(null)}
         footer={
           selected && (
             <>
               <button
                 className="btn-secondary"
+                data-modal-no-cancel
                 onClick={() =>
                   downloadJson('comfymui-preset.json', { version: 1, presets: [selected] })
                 }
