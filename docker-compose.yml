@@ -51,6 +51,9 @@ services:
       - COMFY_OUTPUT_DIR=/comfy-data/output
       - STATE_DB=/data/comfymui.db
       - THUMB_CACHE_DIR=/data/thumbnails
+      - SCENARIO_AI_BASE_URL=${SCENARIO_AI_BASE_URL:-}
+      - SCENARIO_AI_MODEL=${SCENARIO_AI_MODEL:-}
+      - SCENARIO_AI_API_KEY=${SCENARIO_AI_API_KEY:-}
     volumes:
       # Named volume for ComfyMUI persistence (SQLite state DB & thumbnail cache)
       - comfymui-data:/data

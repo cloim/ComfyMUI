@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { objectInfoMiddleware } from './object-info.mjs';
+import { scenarioPromptApp } from './scenario-prompt.mjs';
 export default defineConfig({
   plugins: [
     react(),
@@ -11,6 +12,16 @@ export default defineConfig({
     {
       name: 'dev-thumbnail-proxy',
       configureServer(server) {
+        server.middlewares.use(
+          scenarioPromptApp((req: { headers: { origin?: string; host?: string } }) => {
+            if (!req.headers.origin) return true;
+            try {
+              return new URL(req.headers.origin).host === req.headers.host;
+            } catch {
+              return false;
+            }
+          }),
+        );
         server.middlewares.use(
           objectInfoMiddleware(process.env.COMFY_URL || 'http://127.0.0.1:8188', { prewarm: true }),
         );

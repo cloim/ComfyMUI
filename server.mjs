@@ -8,6 +8,7 @@ import { resolve, join, dirname, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { openStateDb, STATE_KEY } from './state-db.mjs';
 import { objectInfoMiddleware } from './object-info.mjs';
+import { scenarioPromptApp } from './scenario-prompt.mjs';
 
 const app = express();
 const upstream = process.env.COMFY_URL || 'http://127.0.0.1:8188';
@@ -49,6 +50,8 @@ function validateThumbParams(filename, subfolder, type) {
   }
   return true;
 }
+
+app.use(scenarioPromptApp(sameOrigin));
 
 // Cache files are named <hash of the image>-<version>.webp so a reused file name with a
 // new version never gets the old thumbnail, and every version can be removed together.

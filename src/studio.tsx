@@ -56,6 +56,7 @@ import {
 import { parseBinaryPreview } from './preview';
 import { useDownloadTracker } from './downloads';
 import { deleteOutputFiles, outputKey } from './outputs';
+import { collectSceneResults, type Scenario } from './scenario';
 import { backgroundKeepAlive } from './keep-alive';
 import {
   deferredWriter,
@@ -285,6 +286,25 @@ function useStudioState() {
             : job,
         ),
   });
+  const [scenarios, setScenarios, scenarioSaveError] = usePersisted<Scenario[]>('cm-scenarios', []);
+  const [scenarioAction, setScenarioAction] = useState<string | null>(null);
+  const scenarioActionLock = useRef(false);
+  async function runScenarioAction(id: string, run: () => Promise<void>) {
+    if (scenarioActionLock.current) return;
+    scenarioActionLock.current = true;
+    setScenarioAction(id);
+    try {
+      await run();
+    } finally {
+      scenarioActionLock.current = false;
+      setScenarioAction(null);
+    }
+  }
+  useEffect(() => {
+    if (scenarios.length && jobs.some((job) => job.scenario && job.status === 'complete')) {
+      setScenarios((current) => collectSceneResults(current, jobs));
+    }
+  }, [jobs, scenarios.length]);
   const [clientQueue, setClientQueue, queueError] = usePersisted<QueueItem[]>(
     'cm-client-queue',
     [],
@@ -762,7 +782,11 @@ function useStudioState() {
       clearTimeout(pollTimer);
     };
   }, []);
-  async function submitSingleJob(input: Generation, isBatch = false): Promise<boolean> {
+  async function submitSingleJob(
+    input: Generation,
+    isBatch = false,
+    scenario?: Job['scenario'],
+  ): Promise<boolean> {
     if (!online) {
       notify('네트워크 연결 후 다시 생성해 주세요');
       return false;
@@ -782,17 +806,19 @@ function useStudioState() {
       }
     }
     if (snapshot.random && !snapshot.workflow) snapshot.seed = randomSeed();
-    const workflow = buildWorkflow(snapshot);
+    const tempId = newId();
+    let workflow;
     try {
+      workflow = buildWorkflow(snapshot);
+      if (scenario) workflow['7'].inputs.filename_prefix = `scenario/ComfyMUI_${tempId}`;
       validateAgainstServer(workflow, info!);
     } catch (e) {
       notify((e as Error).message);
       return false;
     }
-    if (!snapshot.upscale && !isBatch) setSettings(reusableSettings(snapshot));
+    if (!snapshot.upscale && !isBatch && !scenario) setSettings(reusableSettings(snapshot));
     setLivePreviewUrl('');
     lastPreviewAt.current = 0;
-    const tempId = newId();
     const job: Job = {
       id: tempId,
       createdAt: Date.now(),
@@ -802,6 +828,7 @@ function useStudioState() {
       progress: 0,
       images: [],
       requestToken: tempId,
+      ...(scenario && { scenario }),
     };
     setJobs((all) => trimJobsPreservingFavorites([job, ...all], 500));
 
@@ -831,15 +858,16 @@ function useStudioState() {
     }
   }
 
-  async function generate(input = settings) {
-    if (submitLock.current) return;
+  async function generate(input = settings, scenario?: Job['scenario']) {
+    if (submitLock.current) return false;
     submitLock.current = true;
     setBusy(true);
     try {
-      const ok = await submitSingleJob(input);
-      if (ok) {
+      const ok = await submitSingleJob(input, false, scenario);
+      if (ok && !scenario) {
         notify('생성 요청을 서버에 보냈어요');
       }
+      return ok;
     } finally {
       submitLock.current = false;
       setBusy(false);
@@ -1310,6 +1338,10 @@ function useStudioState() {
     setPresets,
     jobs,
     setJobs,
+    scenarios,
+    setScenarios,
+    scenarioAction,
+    runScenarioAction,
     connection,
     connectionState,
     connectionError,
@@ -1358,6 +1390,7 @@ function useStudioState() {
       saveError ||
       presetError ||
       historyError ||
+      scenarioSaveError ||
       familySaveError ||
       queueError ||
       defaultPromptError ||

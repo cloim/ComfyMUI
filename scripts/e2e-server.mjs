@@ -283,6 +283,7 @@ const schema = {
   },
 };
 schema.EmptyFlux2LatentImage = schema.EmptySD3LatentImage;
+schema.RepeatLatentBatch = { input: { required: { samples: ['LATENT'], amount: ['INT'] } } };
 schema.ModelSamplingFlux = {
   input: {
     required: {
@@ -606,11 +607,26 @@ const mock = createServer(async (req, res) => {
   if (req.method === 'POST') {
     let body = '';
     for await (const chunk of req) body += chunk;
+    if (url.pathname === '/upload/image') {
+      const file = body.match(/filename="([^"]+)"/)?.[1];
+      if (!file) return send({ error: { message: '참조 이미지 확인 실패' } }, 400);
+      return send({ name: file, subfolder: 'scenario', type: 'input' });
+    }
     let data;
     try {
       data = JSON.parse(body);
     } catch {
       return send({ error: { message: 'Invalid JSON body' } }, 400);
+    }
+    if (url.pathname === '/v1/chat/completions') {
+      if (data.model !== 'scenario-test-model') return send({ error: 'Invalid model' }, 400);
+      const scene = JSON.parse(data.messages[1].content);
+      const isEdit = data.messages[0].content.includes('<image1>');
+      return send({
+        choices: [
+          { message: { content: `${isEdit ? 'Edit <image1>' : 'Scene'}: ${scene.description}` } },
+        ],
+      });
     }
     if (url.pathname === '/userdata/comfymui-state.json') {
       globalThis.__legacyState = data && typeof data.entries === 'object' ? data : null;
@@ -950,7 +966,8 @@ const mock = createServer(async (req, res) => {
           },
         },
       });
-    const images = Array.from({ length: j.prompt['4']?.inputs?.batch_size || 1 }, (_, i) => ({
+    const batchSize = j.prompt['4']?.inputs?.batch_size || j.prompt['52']?.inputs?.amount || 1;
+    const images = Array.from({ length: batchSize }, (_, i) => ({
       filename: `mock-${id}-${i}.png`,
       subfolder: '',
       type: 'output',
@@ -1004,4 +1021,6 @@ process.env.PORT = '4174';
 process.env.COMFY_OUTPUT_DIR = outputDir;
 process.env.STATE_DB = join(mkdtempSync(join(tmpdir(), 'comfymui-e2e-state-')), 'state.db');
 process.env.STATE_TEST_RESET = '1';
+process.env.SCENARIO_AI_BASE_URL = 'http://127.0.0.1:8799/v1';
+process.env.SCENARIO_AI_MODEL = 'scenario-test-model';
 await import('../server.mjs');

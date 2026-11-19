@@ -42,6 +42,7 @@ export type Generation = {
   denoise: number;
   workflow: Workflow | null;
   upscale?: UpscaleSpec | null;
+  editSource?: ImageRef;
 };
 // Upscales an existing output image with an upscale model, then optionally re-samples it
 // at low denoise with the original model and prompt to restore fine detail.
@@ -92,7 +93,9 @@ export function baseSettings(s: Generation): Generation {
   return { ...s, width: s.upscale.sourceWidth, height: s.upscale.sourceHeight, upscale: null };
 }
 export function reusableSettings(input: Generation): Generation {
-  return baseSettings(structuredClone(input));
+  const settings = baseSettings(structuredClone(input));
+  delete settings.editSource;
+  return settings;
 }
 // LoadImage resolves "path [output]" from ComfyUI's output folder without uploading.
 export function annotatedImage(ref: ImageRef) {
@@ -141,6 +144,7 @@ export type Job = {
   stage?: 'preparing' | 'sampling' | 'saving';
   requestToken?: string;
   submissionUncertain?: boolean;
+  scenario?: { sceneId: string; revision: string };
 };
 
 export function trimJobsPreservingFavorites(jobs: Job[], limit = 500): Job[] {
@@ -573,6 +577,30 @@ export function buildWorkflow(s: Generation): Workflow {
     };
     w['5'].inputs.negative = ['2', 1];
     delete w['3'];
+    if (s.editSource && !s.upscale) {
+      w['50'] = { class_type: 'LoadImage', inputs: { image: annotatedImage(s.editSource) } };
+      w['51'] = {
+        class_type: 'ImageScale',
+        inputs: {
+          image: ['50', 0],
+          upscale_method: 'lanczos',
+          width: s.width,
+          height: s.height,
+          crop: 'center',
+        },
+      };
+      w['2'].inputs.vae = ['9', 0];
+      w['2'].inputs['images.image_1'] = ['51', 0];
+      w['5'].inputs.latent_image = ['2', 2];
+      delete w['4'];
+      if (s.batch > 1) {
+        w['52'] = {
+          class_type: 'RepeatLatentBatch',
+          inputs: { samples: ['2', 2], amount: s.batch },
+        };
+        w['5'].inputs.latent_image = ['52', 0];
+      }
+    }
   }
   return s.upscale ? withUpscale(w, s, s.upscale) : w;
 }

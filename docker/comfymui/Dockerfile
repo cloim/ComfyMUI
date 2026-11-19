@@ -6,7 +6,7 @@ FROM node:24-slim AS builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json tsconfig.json tsconfig.tsbuildinfo* vite.config.ts index.html object-info.mjs ./
+COPY package.json package-lock.json tsconfig.json tsconfig.tsbuildinfo* vite.config.ts index.html object-info.mjs scenario-prompt.mjs ./
 COPY public ./public
 COPY src ./src
 
@@ -33,7 +33,7 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 
 # Copy backend server files
-COPY server.mjs state-db.mjs gallery.mjs object-info.mjs ./
+COPY server.mjs state-db.mjs gallery.mjs object-info.mjs scenario-prompt.mjs ./
 
 EXPOSE 8189
 

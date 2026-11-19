@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation, Link } from 'react-router-dom';
 import {
   Sparkles,
@@ -11,6 +11,7 @@ import {
   Check,
   Layers2,
   Box,
+  Clapperboard,
 } from 'lucide-react';
 import { StudioProvider, useStudio } from './studio';
 import { IconButton } from './components/ui';
@@ -23,8 +24,10 @@ import Models from './screens/Models';
 import Settings from './screens/Settings';
 import { usePwa } from './pwa';
 import { SyncConflicts } from './components/SyncConflicts';
+const Scenario = lazy(() => import('./screens/Scenario'));
 const nav = [
   { path: '/create', label: '만들기', icon: Sparkles },
+  { path: '/scenario', label: '시나리오', icon: Clapperboard },
   { path: '/models', label: '모델', icon: Box },
   { path: '/loras', label: 'LoRA', icon: Layers2 },
   { path: '/gallery', label: '기록', icon: Images },
@@ -208,6 +211,21 @@ function Shell() {
           <HeaderSlotProvider value={headerSlot}>
             <Routes>
               <Route path="/create" element={<Create />} />
+              <Route
+                path="/scenario"
+                element={
+                  <Suspense
+                    fallback={
+                      <div role="status" className="mx-auto max-w-[1140px] p-4 sm:p-5">
+                        <span className="sr-only">시나리오 불러오는 중</span>
+                        <div className="h-24 animate-pulse rounded-xl bg-stone" />
+                      </div>
+                    }
+                  >
+                    <Scenario />
+                  </Suspense>
+                }
+              />
               <Route path="/models" element={<Models />} />
               <Route path="/loras" element={<Loras />} />
               <Route path="/gallery" element={<Gallery />} />
@@ -226,7 +244,7 @@ function Shell() {
               key={n.path}
               to={n.path}
               className={({ isActive }) =>
-                `flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1 whitespace-nowrap rounded-lg px-1 py-1 text-2xs font-semibold ${isActive ? 'text-olive' : 'text-muted'}`
+                `flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1 whitespace-nowrap rounded-lg px-0.5 py-1 text-2xs font-semibold ${isActive ? 'text-olive' : 'text-muted'}`
               }
             >
               <n.icon size={17} />
