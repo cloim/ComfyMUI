@@ -142,5 +142,54 @@ test('bulk generation converts blank prompts and filters revised scenes', async 
   await page.getByLabel('일괄 생성 범위').selectOption('changed');
   await page.getByRole('button', { name: '1개 씬 생성' }).click();
   await expect.poll(() => graphs.length).toBe(3);
-  expect(graphs[2]['2'].inputs.text).toBe('Scene: 역에 도착한다');
+  // The AI prompt no longer matched the description, so the bulk run rewrote it.
+  expect(graphs[2]['2'].inputs.text).toBe('Scene: 역 광장으로 나온다');
+  await expect(page.getByLabel('생성 프롬프트')).toHaveValue('Scene: 역 광장으로 나온다');
+
+  // A manual prompt is never rewritten: the bulk run asks the user to keep or edit it.
+  const list = page.getByRole('list', { name: '씬 순서' });
+  await page.getByLabel('일괄 생성 범위').selectOption('all');
+  await expect(page.getByRole('button', { name: '2개 씬 생성' })).toBeEnabled();
+  await list.getByRole('button', { name: /첫 장면/ }).click();
+  await page.getByLabel('장면 묘사').fill('플랫폼에 선다');
+  await page.getByRole('button', { name: '2개 씬 생성' }).click();
+  await expect.poll(() => graphs.length).toBe(4);
+  expect(graphs[3]['2'].inputs.text).toBe('Scene: 역 광장으로 나온다');
+  const error = page.getByRole('alert');
+  await expect(error).toContainText('직접 입력한 프롬프트를 유지하거나 고친 뒤 생성해 주세요');
+  await page.getByRole('button', { name: '이 프롬프트 유지' }).click();
+  await expect(error).toHaveCount(0);
+  await expect(page.getByLabel('생성 프롬프트')).toHaveValue('Keep my prompt');
+  await page.getByRole('button', { name: '이 씬 다시 생성' }).click();
+  await expect.poll(() => graphs.length).toBe(5);
+  expect(graphs[4]['2'].inputs.text).toBe('Keep my prompt');
+});
+
+test('character LoRAs must match the base model family', async ({ page }) => {
+  await page.goto('/scenario');
+  await page.getByRole('button', { name: '시나리오 만들기', exact: true }).click();
+  const model = page.getByLabel('기본 모델', { exact: true });
+  await model.selectOption({ label: 'Flux1.D/test-model.safetensors' });
+  await page.getByRole('button', { name: '캐릭터 추가' }).click();
+  await page.getByLabel('캐릭터 1 이름').fill('지수');
+  await page.getByLabel('캐릭터 LoRA', { exact: true }).selectOption('Flux1.D/soft.safetensors');
+  const families = await model.locator('optgroup').evaluateAll((groups) =>
+    groups.map((group) => ({
+      label: group.getAttribute('label'),
+      first: group.querySelector('option')?.textContent,
+    })),
+  );
+  const other = families.find((group) => group.label !== 'Flux1.D' && group.label !== 'Qwen2.1');
+  await model.selectOption({ label: other!.first! });
+  await expect(page.getByLabel('캐릭터 LoRA', { exact: true })).toContainText('현재 계열과 다름');
+  await page.getByRole('button', { name: '씬 추가', exact: true }).click();
+  await page.getByRole('button', { name: '지수', exact: true }).click();
+  await page.getByLabel('생성 프롬프트').fill('A quiet street');
+  let submitted = false;
+  page.on('request', (request) => {
+    if (request.url().endsWith('/comfy/prompt') && request.method() === 'POST') submitted = true;
+  });
+  await page.getByRole('button', { name: '이 씬 생성', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('지수의 LoRA가 기본 모델 계열과 맞지 않아요');
+  expect(submitted).toBe(false);
 });

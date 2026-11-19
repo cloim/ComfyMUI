@@ -1,15 +1,17 @@
+import { useRef } from 'react';
 import { Check, Image, LoaderCircle, Scan, Upload, WandSparkles } from 'lucide-react';
 import { thumbnailUrl } from '../api';
 import type { Job } from '../domain';
 import {
   featuredImage,
-  scenarioPromptInput,
+  promptContextKey,
+  promptStale,
   sceneTitle,
   type Scenario,
   type Scene,
   type SceneImage,
 } from '../scenario';
-import { SelectControl } from './ui';
+import { FieldError, SelectControl } from './ui';
 
 export function ScenarioScene({
   project,
@@ -42,8 +44,12 @@ export function ScenarioScene({
   onCheck: () => void;
   onPreview: (image: SceneImage) => void;
 }) {
-  const promptContext = JSON.stringify(scenarioPromptInput(project, scene));
-  const promptChanged = Boolean(scene.prompt && scene.promptContext !== promptContext);
+  const generateRow = useRef<HTMLDivElement>(null);
+  const promptContext = promptContextKey(project, scene);
+  const promptChanged = promptStale(project, scene);
+  const error =
+    message || (job?.status === 'error' ? job.error || '생성 설정을 확인해 주세요.' : '');
+  const errorId = `scene-error-${scene.id}`;
   const previousCuts = project.scenes.slice(0, index).flatMap((source, i) => {
     const image = featuredImage(source);
     return image
@@ -213,9 +219,18 @@ export function ScenarioScene({
           </button>
         </div>
         {promptChanged && (
-          <p className="scenario-hint scenario-attention">
-            묘사 또는 공통 설정이 바뀌었어요. 이 프롬프트를 유지하거나 다시 작성할 수 있어요.
-          </p>
+          <div className="scenario-stale">
+            <p className="scenario-hint scenario-attention">
+              묘사 또는 공통 설정이 바뀌었어요. 이 프롬프트를 유지하거나 다시 작성할 수 있어요.
+            </p>
+            <button
+              type="button"
+              className="btn-secondary scenario-touch"
+              onClick={() => onChange({ promptContext })}
+            >
+              이 프롬프트 유지
+            </button>
+          </div>
         )}
         <textarea
           className="field scenario-prompt"
@@ -224,7 +239,9 @@ export function ScenarioScene({
           maxLength={8000}
           aria-labelledby={`prompt-${scene.id}`}
           placeholder="AI 프롬프트가 여기에 표시돼요. 직접 입력할 수도 있어요."
-          onChange={(e) => onChange({ prompt: e.target.value, promptContext })}
+          onChange={(e) =>
+            onChange({ prompt: e.target.value, promptContext, promptSource: 'manual' })
+          }
         />
         {draft && (
           <div className="scenario-draft">
@@ -233,13 +250,13 @@ export function ScenarioScene({
             <button
               type="button"
               className="btn-secondary scenario-touch"
-              onClick={() => onChange({ prompt: draft, promptContext })}
+              onClick={() => onChange({ prompt: draft, promptContext, promptSource: 'ai' })}
             >
               이 프롬프트 적용
             </button>
           </div>
         )}
-        <div className="scenario-generate-row" data-ui-audit-row>
+        <div ref={generateRow} className="scenario-generate-row" data-ui-audit-row>
           <SelectControl
             aria-label="후보 장 수"
             value={scene.count}
@@ -267,6 +284,7 @@ export function ScenarioScene({
             <button
               type="button"
               className="btn-primary scenario-touch"
+              aria-describedby={error ? errorId : undefined}
               aria-busy={Boolean(pending) || action === 'generate:' + scene.id || undefined}
               disabled={Boolean(pending) || !(scene.description.trim() || scene.prompt.trim())}
               onClick={onGenerate}
@@ -289,11 +307,7 @@ export function ScenarioScene({
           )}
         </div>
       </fieldset>
-      {(message || job?.status === 'error') && (
-        <p role="status" className="scenario-error">
-          {message || job?.error || '생성 설정을 확인해 주세요.'}
-        </p>
-      )}
+      <FieldError anchor={generateRow} message={error} id={errorId} />
       {scene.candidates.length > 0 && (
         <section className="scenario-candidates" aria-label="생성 후보">
           <div className="scenario-section-title">

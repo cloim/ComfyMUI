@@ -7,7 +7,8 @@ import {
   type ImageRef,
   type Job,
 } from './domain';
-import { selectModel, type FamilyAssignments, type ModelEntry } from './models';
+import { compatibleAssets, selectModel, type FamilyAssignments, type ModelEntry } from './models';
+import { outputKey } from './outputs';
 import type { ObjectInfo } from './domain';
 
 export type SceneImage = { id: string; base: string; image: ImageRef };
@@ -17,6 +18,8 @@ export type Scene = {
   description: string;
   prompt: string;
   promptContext: string;
+  // Who wrote the prompt. A missing value (older data) counts as a manual prompt.
+  promptSource?: 'ai' | 'manual';
   mode: 'create' | 'edit';
   characters: string[];
   reference: (SceneImage & { sceneId?: string }) | null;
@@ -98,11 +101,22 @@ export function scenarioPromptInput(scenario: Scenario, scene: Scene) {
   };
 }
 
+export function promptContextKey(scenario: Scenario, scene: Scene) {
+  return JSON.stringify(scenarioPromptInput(scenario, scene));
+}
+
+// The prompt was written for a different description or common setting.
+export function promptStale(scenario: Scenario, scene: Scene) {
+  return Boolean(scene.prompt.trim() && scene.promptContext !== promptContextKey(scenario, scene));
+}
+
 export function sceneRevision(scenario: Scenario, scene: Scene) {
+  // An edit scene uses only the frame size of the common settings.
+  const { width, height } = scenario.settings;
   return JSON.stringify([
     scenarioPromptInput(scenario, scene),
     scene.prompt.trim(),
-    scenario.settings,
+    scene.mode === 'edit' ? { width, height } : scenario.settings,
     scene.mode === 'edit' ? scenario.editModelId : sceneCharacters(scenario, scene),
     scene.mode === 'edit' ? scene.reference?.id : null,
   ]);
@@ -145,6 +159,14 @@ export function sceneGeneration(
   }
   const loras = new Map(settings.loras.map((lora) => [lora.name, lora]));
   const characters = sceneCharacters(scenario, scene);
+  if (info) {
+    const compatible = compatibleAssets(info, 'lora', settings.architecture, assignments);
+    const mismatch = characters.find((c) => c.lora && !compatible.includes(c.lora));
+    if (mismatch)
+      throw new Error(
+        `${mismatch.name.trim() || '캐릭터'}의 LoRA가 기본 모델 계열과 맞지 않아요. 공통 설정에서 LoRA를 다시 선택해 주세요`,
+      );
+  }
   for (const character of characters) {
     if (character.lora && !loras.has(character.lora)) {
       loras.set(character.lora, {
@@ -196,6 +218,38 @@ export function collectSceneResults(scenarios: Scenario[], jobs: readonly Job[])
       return candidates.length
         ? { ...scene, candidates: [...scene.candidates, ...candidates], renderedRevision }
         : scene;
+    });
+    return scenes.some((scene, i) => scene !== scenario.scenes[i])
+      ? { ...scenario, scenes }
+      : scenario;
+  });
+  return next.some((scenario, i) => scenario !== scenarios[i]) ? next : scenarios;
+}
+
+// Drops candidates, featured cuts and pinned references whose output files were deleted.
+export function pruneDeletedOutputs(
+  scenarios: Scenario[],
+  base: string,
+  removed: ReadonlySet<string>,
+) {
+  if (!removed.size) return scenarios;
+  const gone = (item: SceneImage | null) =>
+    Boolean(
+      item &&
+      item.base === base &&
+      item.image.type === 'output' &&
+      removed.has(outputKey(item.image)),
+    );
+  const next = scenarios.map((scenario) => {
+    const scenes = scenario.scenes.map((scene) => {
+      const candidates = scene.candidates.filter((candidate) => !gone(candidate));
+      const reference = gone(scene.reference) ? null : scene.reference;
+      if (candidates.length === scene.candidates.length && reference === scene.reference)
+        return scene;
+      const featuredId = candidates.some(({ id }) => id === scene.featuredId)
+        ? scene.featuredId
+        : null;
+      return { ...scene, candidates, featuredId, reference };
     });
     return scenes.some((scene, i) => scene !== scenario.scenes[i])
       ? { ...scenario, scenes }

@@ -272,8 +272,12 @@
   @apply text-[#805411];
 }
 
-.scenario-error {
-  @apply mt-3 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-red-50 p-2.5 text-xs leading-relaxed text-red-800 [overflow-wrap:anywhere];
+.scenario-stale {
+  @apply flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5;
+}
+
+.scenario-stale p {
+  @apply min-w-0 flex-1 basis-48 break-keep;
 }
 
 .scenario-draft p {

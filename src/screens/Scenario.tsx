@@ -24,6 +24,7 @@ import {
   featuredImage,
   newScenario,
   newScene,
+  promptStale,
   scenarioPromptInput,
   sceneGeneration,
   sceneRevision,
@@ -186,7 +187,11 @@ export default function Scenario() {
         if (target.prompt.trim()) {
           setDrafts((items) => ({ ...items, [target.id]: prompt }));
         } else {
-          updateScene(target.id, { prompt, promptContext: JSON.stringify(input) });
+          updateScene(target.id, {
+            prompt,
+            promptContext: JSON.stringify(input),
+            promptSource: 'ai',
+          });
         }
       } catch (error) {
         setErrors((items) => ({ ...items, [target.id]: (error as Error).message }));
@@ -217,10 +222,20 @@ export default function Scenario() {
         setErrors((items) => ({ ...items, [target.id]: '' }));
         try {
           let prepared = target;
-          if (!target.prompt.trim()) {
+          const stale = bulk && promptStale(project, target);
+          // A manual prompt is the user's own wording: bulk runs never rewrite it.
+          if (stale && target.promptSource !== 'ai')
+            throw new Error(
+              '장면 묘사 또는 공통 설정이 바뀌었어요. 직접 입력한 프롬프트를 유지하거나 고친 뒤 생성해 주세요',
+            );
+          if (!target.prompt.trim() || stale) {
             const input = scenarioPromptInput(project, target);
             const prompt = await convertScenarioPrompt(input);
-            const patch = { prompt, promptContext: JSON.stringify(input) };
+            const patch = {
+              prompt,
+              promptContext: JSON.stringify(input),
+              promptSource: 'ai' as const,
+            };
             updateScene(target.id, patch);
             prepared = { ...target, ...patch };
           }

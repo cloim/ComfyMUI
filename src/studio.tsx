@@ -56,7 +56,7 @@ import {
 import { parseBinaryPreview } from './preview';
 import { useDownloadTracker } from './downloads';
 import { deleteOutputFiles, outputKey } from './outputs';
-import { collectSceneResults, type Scenario } from './scenario';
+import { collectSceneResults, pruneDeletedOutputs, type Scenario } from './scenario';
 import { backgroundKeepAlive } from './keep-alive';
 import {
   deferredWriter,
@@ -1097,6 +1097,8 @@ function useStudioState() {
         setGallery((prev) =>
           prev ? { ...prev, files: prev.files.filter((f) => !removed.has(galleryKey(f))) } : prev,
         );
+        // Scenario cuts that showed those files would otherwise point at nothing.
+        setScenarios((all) => pruneDeletedOutputs(all, GALLERY_BASE, removed));
         // Forget local records of those files so the create screen stops showing them.
         setJobs((all) =>
           all.filter(
