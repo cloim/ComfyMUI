@@ -17,6 +17,13 @@ test('mobile storyboard preserves manual prompts and pins Qwen references', asyn
   await page.getByLabel('캐릭터 1 이름').fill('지수');
   await page.getByLabel('캐릭터 LoRA', { exact: true }).selectOption('Flux1.D/soft.safetensors');
   await page.getByLabel('트리거 단어').fill('jisu_character');
+  // A new scenario opens on its common settings; scene work lives in its own tab.
+  await expect(page.getByRole('tab', { name: '공통 설정' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('button', { name: '씬 추가', exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: /씬 편집/ }).click();
   await page.getByRole('button', { name: '씬 추가', exact: true }).click();
   await page.getByLabel('씬 이름').fill('골목');
   await page.getByRole('button', { name: '지수', exact: true }).click();
@@ -69,10 +76,14 @@ test('mobile storyboard preserves manual prompts and pins Qwen references', asyn
   expect(edit['50'].inputs.image).toMatch(/^mock-.*-0\.png \[output\]$/);
   await page.getByRole('button', { name: '후보 1 대표 컷으로 선택' }).click();
 
-  await page.getByRole('button', { name: '스토리보드', exact: true }).click();
+  const boardTab = page.getByRole('tab', { name: /스토리보드/ });
+  await boardTab.press('ArrowLeft');
+  await expect(page.getByRole('tab', { name: /씬 편집/ })).toBeFocused();
+  await boardTab.click();
+  await expect(page.getByLabel('씬 이름')).toHaveCount(0);
   const board = page.getByRole('list', { name: '스토리보드' });
   await expect(board.locator('img')).toHaveCount(2);
-  await expect(page.getByText('대표 컷 2 / 2')).toBeVisible();
+  await expect(boardTab).toContainText('2/2');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(325);
   // The storyboard is saved to the server so other devices can continue it.
   await expect
@@ -125,6 +136,7 @@ test('bulk generation converts blank prompts and filters revised scenes', async 
   await page.getByRole('button', { name: '새 시나리오 만들기' }).click();
   const model = page.getByLabel('기본 모델', { exact: true });
   await model.selectOption({ label: 'Flux1.D/test-model.safetensors' });
+  await page.getByRole('tab', { name: /씬 편집/ }).click();
   const add = page.getByRole('button', { name: '씬 추가', exact: true });
   await add.click();
   await page.getByLabel('씬 이름').fill('첫 장면');
@@ -195,6 +207,7 @@ test('character LoRAs must match the base model family', async ({ page }) => {
   const other = families.find((group) => group.label !== 'Flux1.D' && group.label !== 'Qwen2.1');
   await model.selectOption({ label: other!.first! });
   await expect(page.getByLabel('캐릭터 LoRA', { exact: true })).toContainText('현재 계열과 다름');
+  await page.getByRole('tab', { name: /씬 편집/ }).click();
   await page.getByRole('button', { name: '씬 추가', exact: true }).click();
   await page.getByRole('button', { name: '지수', exact: true }).click();
   await page.getByLabel('생성 프롬프트').fill('A quiet street');

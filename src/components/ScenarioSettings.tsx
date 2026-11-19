@@ -1,4 +1,4 @@
-import { Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { newId, type ObjectInfo } from '../domain';
 import { compatibleAssets, selectModel, type FamilyAssignments, type ModelEntry } from '../models';
 import type { Scenario } from '../scenario';
@@ -43,15 +43,7 @@ export function ScenarioSettings({
   const updateCharacter = (id: string, patch: Partial<Scenario['characters'][number]>) =>
     onChange({ characters: characters.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
   return (
-    <details
-      className="scenario-panel scenario-settings"
-      open={!scenario.scenes.length || undefined}
-    >
-      <summary>
-        <SlidersHorizontal size={17} aria-hidden="true" />
-        <span>공통 설정</span>
-        <small>{installed ? familyLabels[installed.family] : '모델 선택'}</small>
-      </summary>
+    <section className="scenario-panel scenario-settings" aria-label="공통 설정">
       <fieldset disabled={disabled} className="scenario-settings-content">
         <label className="scenario-field">
           <span>기본 모델</span>
@@ -260,6 +252,6 @@ export function ScenarioSettings({
           ))}
         </div>
       </fieldset>
-    </details>
+    </section>
   );
 }

@@ -44,29 +44,8 @@
   @apply min-w-0 rounded-xl border border-line bg-white;
 }
 
-.scenario-settings summary {
-  @apply flex min-h-12 list-none items-center gap-2.5 rounded-xl px-3.5 text-sm font-bold sm:px-4;
-}
-
-.scenario-settings summary::-webkit-details-marker {
-  display: none;
-}
-
-.scenario-settings summary::after {
-  @apply h-2 w-2 -translate-y-0.5 -rotate-45 border-b border-l border-muted transition-transform;
-  content: '';
-}
-
-.scenario-settings[open] summary::after {
-  @apply translate-y-0.5 rotate-[135deg];
-}
-
-.scenario-settings summary small {
-  @apply ml-auto text-xs font-medium text-muted;
-}
-
 .scenario-settings-content {
-  @apply grid min-w-0 gap-3 border-t border-line p-3.5 sm:grid-cols-2 sm:p-4 lg:grid-cols-3;
+  @apply grid min-w-0 gap-3 p-3.5 sm:grid-cols-2 sm:p-4 lg:grid-cols-3;
 }
 
 .scenario-wide {
@@ -123,27 +102,37 @@
   @apply flex min-w-0 flex-col gap-3;
 }
 
-.scenario-view {
-  @apply flex flex-wrap items-center justify-between gap-x-3 gap-y-1;
+/* Same look and keyboard behaviour as the category tabs of the settings screen. */
+.scenario-tabs {
+  @apply flex gap-1.5 rounded-2xl border border-line bg-white p-1.5;
 }
 
-.scenario-view-switch,
+.scenario-tabs [role='tab'] {
+  @apply flex min-h-9 flex-auto items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-paper sm:px-4;
+}
+
+.scenario-tabs [role='tab'][aria-selected='true'] {
+  @apply bg-ink text-lime hover:bg-ink;
+}
+
+.scenario-tabs [role='tab'] svg {
+  @apply hidden shrink-0 sm:inline;
+}
+
+.scenario-tab-count {
+  @apply font-medium tabular-nums opacity-75;
+}
+
 .scenario-mode {
   @apply flex min-w-0 items-stretch gap-0.5 rounded-xl bg-stone p-0.5;
 }
 
-.scenario-view-switch button,
 .scenario-mode button {
   @apply flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-[10px] px-2.5 text-xs font-semibold text-muted transition hover:text-ink;
 }
 
-.scenario-view-switch button[aria-pressed='true'],
 .scenario-mode button[aria-pressed='true'] {
   @apply bg-white text-ink shadow-xs;
-}
-
-.scenario-counter {
-  @apply whitespace-nowrap text-xs font-medium text-muted;
 }
 
 .scenario-edit-layout {

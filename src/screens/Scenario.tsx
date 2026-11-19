@@ -9,6 +9,7 @@ import {
   Layers2,
   LoaderCircle,
   Plus,
+  SlidersHorizontal,
   Trash2,
 } from 'lucide-react';
 import { imageUrl, thumbnailUrl } from '../api';
@@ -38,6 +39,12 @@ import { useStudioSelector } from '../studio';
 import './scenario.css';
 
 type Scope = 'all' | 'missing' | 'changed';
+type Tab = 'settings' | 'scenes' | 'board';
+const tabs: { id: Tab; label: string; icon: typeof Film }[] = [
+  { id: 'settings', label: '공통 설정', icon: SlidersHorizontal },
+  { id: 'scenes', label: '씬 편집', icon: Layers2 },
+  { id: 'board', label: '스토리보드', icon: Film },
+];
 const scopes: Record<Scope, string> = {
   all: '전체 씬',
   missing: '이미지 없는 씬',
@@ -80,7 +87,8 @@ export default function Scenario() {
   }));
   const [projectId, setProjectId] = useState('');
   const [sceneId, setSceneId] = useState('');
-  const [view, setView] = useState<'edit' | 'board'>('edit');
+  // A new scenario starts with its common settings; one with scenes opens on its scenes.
+  const [tab, setTab] = useState<Tab>(() => (scenarios[0]?.scenes.length ? 'scenes' : 'settings'));
   const [scope, setScope] = useState<Scope>('all');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -123,7 +131,7 @@ export default function Scenario() {
     setScenarios((items) => [draft, ...items]);
     setProjectId(draft.id);
     setSceneId('');
-    setView('edit');
+    setTab('settings');
   }
 
   function updateProject(id: string, update: (value: ScenarioRecord) => ScenarioRecord) {
@@ -143,8 +151,8 @@ export default function Scenario() {
 
   function openScene(id: string) {
     setSceneId(id);
-    setView('edit');
-    requestAnimationFrame(() => editor.current?.scrollIntoView({ block: 'start' }));
+    setTab('scenes');
+    requestAnimationFrame(() => editor.current?.scrollIntoView({ block: 'nearest' }));
   }
 
   function addScene() {
@@ -340,8 +348,10 @@ export default function Scenario() {
                 value={project.id}
                 disabled={working}
                 onChange={(e) => {
+                  const next = scenarios.find(({ id }) => id === e.target.value);
                   setProjectId(e.target.value);
                   setSceneId('');
+                  setTab(next?.scenes.length ? 'scenes' : 'settings');
                 }}
               >
                 {scenarios.map((item) => (
@@ -352,83 +362,118 @@ export default function Scenario() {
               </SelectControl>
             )}
           </div>
-          <ScenarioSettings
-            key={project.id}
-            scenario={project}
-            entries={entries}
-            info={info}
-            assignments={familyAssignments}
-            editModel={editModel}
-            loading={connectionState === 'connecting'}
-            disabled={working}
-            onChange={(patch) => {
-              updateProject(project.id, (item) => ({ ...item, ...patch }));
-              setDrafts({});
-            }}
-          />
-          <div className="scenario-workspace">
-            <div className="scenario-view">
-              <div role="group" className="scenario-view-switch" aria-label="시나리오 보기 방식">
-                <button
-                  type="button"
-                  aria-pressed={view === 'edit'}
-                  onClick={() => setView('edit')}
-                >
-                  <Layers2 size={16} aria-hidden="true" /> 씬 편집
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={view === 'board'}
-                  onClick={() => setView('board')}
-                >
-                  <Film size={16} aria-hidden="true" /> 스토리보드
-                </button>
-              </div>
-              {project.scenes.length > 0 && (
-                <span className="scenario-counter">
-                  대표 컷 {chosenCount} / {project.scenes.length}
-                </span>
-              )}
-            </div>
-            {view === 'board' && project.scenes.length > 0 ? (
-              <ol className="scenario-board" aria-label="스토리보드" data-ui-audit-card-group>
-                {project.scenes.map((item, i) => {
-                  const cut = featuredImage(item);
-                  return (
-                    <li key={item.id} data-ui-audit-card>
-                      <button
-                        type="button"
-                        className="scenario-board-cut"
-                        onClick={() => openScene(item.id)}
-                      >
-                        <span className="scenario-board-image">
-                          {cut ? (
-                            <img src={thumbnailUrl(cut.base, cut.image)} alt="" loading="lazy" />
-                          ) : (
-                            <Image size={22} strokeWidth={1.6} aria-hidden="true" />
-                          )}
-                        </span>
-                        <span className="scenario-board-caption">
-                          <span className="scenario-scene-number">
-                            {String(i + 1).padStart(2, '0')}
+          <div role="tablist" aria-label="시나리오 작업" className="scenario-tabs">
+            {tabs.map((item, i) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                id={`scenario-tab-${item.id}`}
+                aria-selected={tab === item.id}
+                aria-controls="scenario-tabpanel"
+                tabIndex={tab === item.id ? 0 : -1}
+                onClick={() => setTab(item.id)}
+                onKeyDown={(e) => {
+                  const delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+                  if (!delta && !['Home', 'End'].includes(e.key)) return;
+                  e.preventDefault();
+                  const next =
+                    e.key === 'Home'
+                      ? 0
+                      : e.key === 'End'
+                        ? tabs.length - 1
+                        : (i + delta + tabs.length) % tabs.length;
+                  setTab(tabs[next].id);
+                  (
+                    e.currentTarget.parentElement!.querySelectorAll('[role=tab]')[
+                      next
+                    ] as HTMLButtonElement
+                  ).focus();
+                }}
+              >
+                <item.icon size={15} aria-hidden="true" />
+                <span>{item.label}</span>
+                {item.id === 'scenes' && project.scenes.length > 0 && (
+                  <span className="scenario-tab-count">{project.scenes.length}</span>
+                )}
+                {item.id === 'board' && project.scenes.length > 0 && (
+                  <span className="scenario-tab-count">
+                    <span className="sr-only">대표 컷 </span>
+                    {chosenCount}/{project.scenes.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div
+            id="scenario-tabpanel"
+            role="tabpanel"
+            aria-labelledby={`scenario-tab-${tab}`}
+            className="scenario-workspace"
+          >
+            {tab === 'settings' && (
+              <ScenarioSettings
+                key={project.id}
+                scenario={project}
+                entries={entries}
+                info={info}
+                assignments={familyAssignments}
+                editModel={editModel}
+                loading={connectionState === 'connecting'}
+                disabled={working}
+                onChange={(patch) => {
+                  updateProject(project.id, (item) => ({ ...item, ...patch }));
+                  setDrafts({});
+                }}
+              />
+            )}
+            {tab === 'board' &&
+              (project.scenes.length > 0 ? (
+                <ol className="scenario-board" aria-label="스토리보드" data-ui-audit-card-group>
+                  {project.scenes.map((item, i) => {
+                    const cut = featuredImage(item);
+                    return (
+                      <li key={item.id} data-ui-audit-card>
+                        <button
+                          type="button"
+                          className="scenario-board-cut"
+                          onClick={() => openScene(item.id)}
+                        >
+                          <span className="scenario-board-image">
+                            {cut ? (
+                              <img src={thumbnailUrl(cut.base, cut.image)} alt="" loading="lazy" />
+                            ) : (
+                              <Image size={22} strokeWidth={1.6} aria-hidden="true" />
+                            )}
                           </span>
-                          <span>
-                            {sceneTitle(item)}
-                            <small>
-                              {cut
-                                ? '씬 열기'
-                                : item.candidates.length
-                                  ? '대표 컷 선택'
-                                  : '첫 컷 만들기'}
-                            </small>
+                          <span className="scenario-board-caption">
+                            <span className="scenario-scene-number">
+                              {String(i + 1).padStart(2, '0')}
+                            </span>
+                            <span>
+                              {sceneTitle(item)}
+                              <small>
+                                {cut
+                                  ? '씬 열기'
+                                  : item.candidates.length
+                                    ? '대표 컷 선택'
+                                    : '첫 컷 만들기'}
+                              </small>
+                            </span>
                           </span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            ) : (
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : (
+                <div className="scenario-empty">
+                  <Film size={26} strokeWidth={1.5} aria-hidden="true" />
+                  <h3>아직 씬이 없어요</h3>
+                  <p>씬을 추가하고 대표 컷을 고르면 여기에서 순서대로 볼 수 있어요</p>
+                </div>
+              ))}
+            {tab === 'scenes' && (
               <div className="scenario-edit-layout">
                 <div className="scenario-rail">
                   {project.scenes.length > 0 && (
@@ -520,53 +565,55 @@ export default function Scenario() {
                     <div className="scenario-empty">
                       <Image size={26} strokeWidth={1.5} aria-hidden="true" />
                       <h3>첫 씬을 추가해 보세요</h3>
-                      <p>장면을 한두 문장으로 적으면 AI 프롬프트로 바꿀 수 있어요.</p>
+                      <p>장면을 한두 문장으로 적으면 AI 프롬프트로 바꿀 수 있어요</p>
                     </div>
                   )}
                 </div>
               </div>
             )}
           </div>
-          <div className="scenario-footer">
-            <button
-              type="button"
-              className="btn-secondary scenario-touch"
-              disabled={working}
-              onClick={addScene}
-            >
-              <Plus size={16} aria-hidden="true" /> 씬 추가
-            </button>
-            {project.scenes.length > 0 && (
-              <div className="scenario-batch" data-ui-audit-row>
-                <SelectControl
-                  aria-label="일괄 생성 범위"
-                  value={scope}
-                  disabled={working}
-                  onChange={(e) => setScope(e.target.value as Scope)}
-                >
-                  {Object.entries(scopes).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </SelectControl>
-                <button
-                  type="button"
-                  className="btn-primary scenario-touch"
-                  aria-busy={scenarioAction === 'batch' || undefined}
-                  disabled={working || !targets.length}
-                  onClick={() => void submit(targets, true)}
-                >
-                  {scenarioAction === 'batch' ? (
-                    <LoaderCircle size={15} className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Check size={15} aria-hidden="true" />
-                  )}
-                  {scenarioAction === 'batch' ? '등록 중' : `${targets.length}개 씬 생성`}
-                </button>
-              </div>
-            )}
-          </div>
+          {tab !== 'settings' && (
+            <div className="scenario-footer">
+              <button
+                type="button"
+                className="btn-secondary scenario-touch"
+                disabled={working}
+                onClick={addScene}
+              >
+                <Plus size={16} aria-hidden="true" /> 씬 추가
+              </button>
+              {project.scenes.length > 0 && (
+                <div className="scenario-batch" data-ui-audit-row>
+                  <SelectControl
+                    aria-label="일괄 생성 범위"
+                    value={scope}
+                    disabled={working}
+                    onChange={(e) => setScope(e.target.value as Scope)}
+                  >
+                    {Object.entries(scopes).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </SelectControl>
+                  <button
+                    type="button"
+                    className="btn-primary scenario-touch"
+                    aria-busy={scenarioAction === 'batch' || undefined}
+                    disabled={working || !targets.length}
+                    onClick={() => void submit(targets, true)}
+                  >
+                    {scenarioAction === 'batch' ? (
+                      <LoaderCircle size={15} className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Check size={15} aria-hidden="true" />
+                    )}
+                    {scenarioAction === 'batch' ? '등록 중' : `${targets.length}개 씬 생성`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           {preview && (
             <ImageViewer
               src={imageUrl(preview.base, preview.image)}
