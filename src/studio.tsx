@@ -286,7 +286,14 @@ function useStudioState() {
             : job,
         ),
   });
-  const [scenarios, setScenarios, scenarioSaveError] = usePersisted<Scenario[]>('cm-scenarios', []);
+  // Shared so a storyboard started on one device continues on another.
+  const [scenarios, setScenarios, scenarioSaveError] = usePersisted<Scenario[]>(
+    'cm-scenarios',
+    [],
+    {
+      shared: true,
+    },
+  );
   const [scenarioAction, setScenarioAction] = useState<string | null>(null);
   const scenarioActionLock = useRef(false);
   async function runScenarioAction(id: string, run: () => Promise<void>) {

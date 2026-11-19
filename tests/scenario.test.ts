@@ -11,6 +11,7 @@ import {
   type Scenario,
   type SceneImage,
 } from '../src/scenario';
+import { mergeById, mergePresets } from '../src/storage';
 
 const cut = (id: string, filename: string, type = 'output', base = '/comfy'): SceneImage => ({
   id,
@@ -99,5 +100,24 @@ describe('deleted scenario outputs', () => {
     expect(pruneDeletedOutputs(scenarios, 'http://other:8188', new Set(['scenario/a.png']))).toBe(
       scenarios,
     );
+  });
+});
+
+describe('shared scenario merge', () => {
+  it('merges edits to different scenarios and keeps overlapping edits as conflicts', () => {
+    const a = { id: 'a', title: 'A' };
+    const b = { id: 'b', title: 'B' };
+    expect(mergeById([a, b], [{ ...a, title: 'A2' }, b], [a, { ...b, title: 'B2' }])).toEqual([
+      { ...a, title: 'A2' },
+      { ...b, title: 'B2' },
+    ]);
+    expect(mergeById([a], [{ ...a, title: 'local' }], [{ ...a, title: 'server' }])).toBeNull();
+    expect(mergeById([a, b], [a], [a, b, { id: 'c' }])).toEqual([a, { id: 'c' }]);
+  });
+
+  it('keeps the preset limit', () => {
+    const many = Array.from({ length: 101 }, (_, i) => ({ id: String(i) }));
+    expect(mergePresets([], many, [])).toBeNull();
+    expect(mergeById([], many, [])).toHaveLength(101);
   });
 });

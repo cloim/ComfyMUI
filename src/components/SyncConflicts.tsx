@@ -19,6 +19,7 @@ const names: Record<string, string> = {
   'cm-prompt-assemble-selected': '선택한 프롬프트 조합',
   'cm-model-order': '모델 정렬',
   'cm-example-defaults': '모델 대표 이미지',
+  'cm-scenarios': '시나리오',
 };
 
 function VersionPreview({ value }: { value: unknown }) {
@@ -28,7 +29,9 @@ function VersionPreview({ value }: { value: unknown }) {
         {value.length
           ? value
               .map((item) =>
-                typeof item === 'object' && item ? item.name || item.id || '항목' : String(item),
+                typeof item === 'object' && item
+                  ? item.name || item.title || item.id || '항목'
+                  : String(item),
               )
               .join(' · ')
           : '저장된 항목 없음'}

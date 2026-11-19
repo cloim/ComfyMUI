@@ -163,9 +163,19 @@ function applySharedValue(key: string, value: unknown) {
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-// A three-way merge preserves changes to different preset IDs, including deletes.
+// A three-way merge preserves changes to different item IDs, including deletes.
 // An overlapping edit stays a visible conflict rather than guessing a winner.
 export function mergePresets(base: unknown, local: unknown, server: unknown): unknown[] | null {
+  // Preserve the application's existing preset limit; never silently discard items.
+  return mergeById(base, local, server, 100);
+}
+
+export function mergeById(
+  base: unknown,
+  local: unknown,
+  server: unknown,
+  limit = Infinity,
+): unknown[] | null {
   if (!Array.isArray(base) || !Array.isArray(local) || !Array.isArray(server)) return null;
   const valid = (list: unknown[]) =>
     list.every((p: any) => p && typeof p.id === 'string') &&
@@ -189,8 +199,7 @@ export function mergePresets(base: unknown, local: unknown, server: unknown): un
     const value = same(lv, bv) ? sv : lv;
     if (value !== undefined) result.push(value);
   }
-  // Preserve the application's existing preset limit; never silently discard items.
-  return result.length <= 100 ? result : null;
+  return result.length <= limit ? result : null;
 }
 
 const pending = new Map<string, unknown>(Object.entries(readJSON(PENDING_KEY, {})));
@@ -330,8 +339,13 @@ export async function flushServerWrites(keepalive = false): Promise<void> {
           dirty.delete(key);
           continue;
         }
+        const base = baseline.get(key)?.value;
         const merged =
-          key === 'cm-presets' ? mergePresets(baseline.get(key)?.value, local, entry.value) : null;
+          key === 'cm-presets'
+            ? mergePresets(base, local, entry.value)
+            : key === 'cm-scenarios'
+              ? mergeById(base, local, entry.value)
+              : null;
         if (merged !== null) {
           bases[key] = entry;
           pending.set(key, merged);

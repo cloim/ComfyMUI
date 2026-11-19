@@ -74,6 +74,17 @@ test('mobile storyboard preserves manual prompts and pins Qwen references', asyn
   await expect(board.locator('img')).toHaveCount(2);
   await expect(page.getByText('대표 컷 2 / 2')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(325);
+  // The storyboard is saved to the server so other devices can continue it.
+  await expect
+    .poll(async () => {
+      const { entries } = await (await page.request.get('/api/state')).json();
+      const saved = entries['cm-scenarios']?.value?.find(
+        (item: { title: string }) => item.title === '비 오는 날',
+      );
+      return saved?.scenes.filter((scene: { featuredId: string | null }) => scene.featuredId)
+        .length;
+    })
+    .toBe(2);
   await page.reload();
   await expect(page.getByLabel('시나리오 이름')).toHaveValue('비 오는 날');
   await page.getByRole('list', { name: '씬 순서' }).getByRole('button', { name: /카페/ }).click();
@@ -110,7 +121,8 @@ test('mobile storyboard preserves manual prompts and pins Qwen references', asyn
 
 test('bulk generation converts blank prompts and filters revised scenes', async ({ page }) => {
   await page.goto('/scenario');
-  await page.getByRole('button', { name: '시나리오 만들기', exact: true }).click();
+  // Scenarios are shared through the server, so earlier tests may have left one.
+  await page.getByRole('button', { name: '새 시나리오 만들기' }).click();
   const model = page.getByLabel('기본 모델', { exact: true });
   await model.selectOption({ label: 'Flux1.D/test-model.safetensors' });
   const add = page.getByRole('button', { name: '씬 추가', exact: true });
@@ -167,7 +179,8 @@ test('bulk generation converts blank prompts and filters revised scenes', async 
 
 test('character LoRAs must match the base model family', async ({ page }) => {
   await page.goto('/scenario');
-  await page.getByRole('button', { name: '시나리오 만들기', exact: true }).click();
+  // Scenarios are shared through the server, so earlier tests may have left one.
+  await page.getByRole('button', { name: '새 시나리오 만들기' }).click();
   const model = page.getByLabel('기본 모델', { exact: true });
   await model.selectOption({ label: 'Flux1.D/test-model.safetensors' });
   await page.getByRole('button', { name: '캐릭터 추가' }).click();
