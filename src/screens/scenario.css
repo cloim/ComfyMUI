@@ -15,7 +15,7 @@
 }
 
 .scenario-start p {
-  @apply max-w-xs text-sm leading-relaxed text-[#d4ddd1];
+  @apply max-w-xs text-xs leading-relaxed text-[#d4ddd1];
 }
 
 .scenario-start .btn-primary {
@@ -81,23 +81,26 @@
   @apply flex min-w-0 flex-col gap-1.5;
 }
 
+/* Labels and fields use the app-wide sizes of Field and .field in style.css. */
 .scenario-field > span:first-child,
 .scenario-prompt-heading {
-  @apply text-sm font-bold;
+  @apply text-xs font-semibold text-ink/80;
 }
 
-.scenario-field small,
+.scenario-field small {
+  @apply ml-1 text-2xs font-medium text-muted;
+}
+
 .scenario-section-title small {
   @apply ml-1 text-xs font-medium text-muted;
 }
 
 .scenario-page .field {
   min-height: 44px;
-  font-size: 16px;
 }
 
 .scenario-page textarea.field {
-  @apply py-2.5 leading-relaxed sm:text-sm;
+  @apply py-2.5 leading-relaxed;
 }
 
 .scenario-characters {
@@ -196,7 +199,7 @@
 }
 
 .scenario-empty h3 {
-  @apply text-base font-bold text-ink;
+  @apply text-sm font-semibold text-ink;
 }
 
 .scenario-empty p {
@@ -397,11 +400,5 @@
 
   .scenario-batch > button > svg {
     display: none;
-  }
-}
-
-@media (min-width: 640px) {
-  .scenario-page .field {
-    font-size: 0.875rem;
   }
 }
