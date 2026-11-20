@@ -20,6 +20,7 @@ import { Result } from '../components/Result';
 import { CompareViewer } from '../components/CompareViewer';
 import { HeaderActions, HeaderActionButton } from '../components/HeaderActions';
 import { SetPreviewModal } from '../components/SetPreviewModal';
+import { splitBatches } from '../gallery';
 import {
   galleryWindow,
   galleryRowHeight,
@@ -59,7 +60,7 @@ export default function Gallery() {
   // History is the ComfyUI output folder. Generations still running are shown first.
   // Without the folder (direct ComfyUI address) the local records are used.
   const jobs = useMemo(() => {
-    if (!gallery) return localJobs;
+    if (!gallery) return splitBatches(localJobs);
     // A running job whose image is already in the folder is shown only once, as the file.
     const written = (j: Job) =>
       (writtenTimes.get(JSON.stringify([j.settings.seed, j.settings.positive])) || 0) >=
@@ -208,9 +209,12 @@ export default function Gallery() {
     restorePending.current = false;
   }, [shown.length, viewport.width, savedView.scrollTop]);
 
-  const detail = jobs.find((j) => j.id === selected);
+  // A link to a whole batch record opens its first image.
+  const detail =
+    jobs.find((j) => j.id === selected) ||
+    (selected ? jobs.find((j) => j.id.startsWith(`${selected}#`)) : undefined);
   const imageJobs = shown.filter((j) => j.status === 'complete' && j.images.length > 0);
-  const imageIndex = imageJobs.findIndex((j) => j.id === selected);
+  const imageIndex = imageJobs.findIndex((j) => j.id === detail?.id);
   const isSelecting = selectedIds.size > 0;
 
   const labels = {

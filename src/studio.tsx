@@ -70,6 +70,7 @@ import {
   galleryKey,
   GALLERY_BASE,
   isGalleryJob,
+  batchImageId,
   type GalleryIndex,
 } from './gallery';
 import {
@@ -1118,7 +1119,23 @@ function useStudioState() {
         return false;
       }
     }
-    if (localIds.size > 0) setJobs((all) => all.filter((j) => !localIds.has(j.id)));
+    if (localIds.size > 0) {
+      // History lists a batch image by image; removing one keeps the rest of the record.
+      const images = new Map<string, Set<string>>();
+      for (const id of localIds) {
+        const part = batchImageId(id);
+        if (part) images.set(part.jobId, (images.get(part.jobId) || new Set()).add(part.image));
+      }
+      setJobs((all) =>
+        all.flatMap((j) => {
+          if (localIds.has(j.id)) return [];
+          const drop = images.get(j.id);
+          if (!drop) return [j];
+          const rest = j.images.filter((image) => !drop.has(outputKey(image)));
+          return rest.length ? [{ ...j, images: rest }] : [];
+        }),
+      );
+    }
     const done = ids.length - failed;
     notify(
       failed > 0

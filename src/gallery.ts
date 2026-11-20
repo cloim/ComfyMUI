@@ -117,3 +117,25 @@ export function galleryJob(file: GalleryFile, fallbackNegative: string): Job {
 }
 
 export const isGalleryJob = (job: Pick<Job, 'id'>) => job.id.startsWith('file:');
+
+// Device records keep a batch as one job, so History would show only its first image.
+// Each image becomes its own item, as in the output folder. The id names the image file,
+// so it stays the same after another image of the batch is deleted.
+export function splitBatches(jobs: readonly Job[]): Job[] {
+  return jobs.flatMap((job) =>
+    job.status === 'complete' && job.images.length > 1 && !isGalleryJob(job)
+      ? job.images.map((image) => ({
+          ...job,
+          id: `${job.id}#${image.subfolder ? `${image.subfolder}/` : ''}${image.filename}`,
+          images: [image],
+        }))
+      : [job],
+  );
+}
+
+// `<job id>#<image key>` from splitBatches, or null for a whole job.
+export function batchImageId(id: string) {
+  if (isGalleryJob({ id })) return null;
+  const at = id.indexOf('#');
+  return at > 0 ? { jobId: id.slice(0, at), image: id.slice(at + 1) } : null;
+}
