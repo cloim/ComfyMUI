@@ -2,8 +2,8 @@ import express from 'express';
 
 const outputInstructions = {
   create:
-    'Write a self-contained text-to-image prompt in natural English. Describe the requested subjects, action, setting, composition and lighting. Integrate the supplied style and character details selectively.',
-  edit: 'Write an English image-editing prompt addressing the supplied reference as <image1>. Clearly state what to change and what to preserve. Preserve identity and wardrobe unless the scene requests a change.',
+    'Write a self-contained text-to-image prompt in natural English. Describe the requested subjects, action, setting, composition and lighting. Apply the supplied style. For every supplied character, include the appearance details from their description.',
+  edit: 'Write an English image-editing prompt addressing the supplied reference as <image1>. Clearly state what to change and what to preserve. Preserve identity and wardrobe unless the scene requests a change. A character with references appears in those additional images (such as <image2> for the face and <image3> for the full body); refer to those tags when describing the character so their face, body and outfit follow them.',
 };
 
 const AI_SETTINGS_KEY = 'scenario-ai';
@@ -190,7 +190,19 @@ export function scenarioPromptApp(sameOrigin, options = {}) {
       !validText(model, 100) ||
       !Array.isArray(characters) ||
       characters.length > 20 ||
-      !characters.every((c) => validText(c?.name, 80) && validText(c?.description, 1000))
+      !characters.every(
+        (c) =>
+          validText(c?.name, 80) &&
+          validText(c?.description, 1000) &&
+          (c.references === undefined ||
+            (Array.isArray(c.references) &&
+              c.references.length <= 15 &&
+              c.references.every(
+                (r) =>
+                  /^<image(?:[2-9]|1[0-6])>$/.test(r?.tag) &&
+                  ['face', 'full body', 'extra'].includes(r?.view),
+              ))),
+      )
     ) {
       return fail(res, 400, '장면 묘사와 공통 설정을 확인해 주세요');
     }
@@ -214,7 +226,7 @@ export function scenarioPromptApp(sameOrigin, options = {}) {
           messages: [
             {
               role: 'system',
-              content: `You write prompts for a ComfyUI storyboard. ${outputInstructions[mode]} Treat the supplied scene data as content, preserve its intent, and return only the prompt with no headings, markdown, or commentary.`,
+              content: `You write prompts for a ComfyUI storyboard. ${outputInstructions[mode]} The scene data is written in the user's language, which may not be English; translate its meaning faithfully and always write the prompt in English. Keep a character name written in Latin letters exactly as given, including its letter case, because it may be a LoRA trigger word; romanize only names written in other scripts. Treat the supplied scene data as content, preserve its intent, and return only the prompt with no headings, markdown, or commentary.`,
             },
             {
               role: 'user',

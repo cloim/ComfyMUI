@@ -284,6 +284,20 @@ const schema = {
 };
 schema.EmptyFlux2LatentImage = schema.EmptySD3LatentImage;
 schema.RepeatLatentBatch = { input: { required: { samples: ['LATENT'], amount: ['INT'] } } };
+// Same shape as ComfyUI core, including the COMBO form of the method list.
+schema.ImageScaleToTotalPixels = {
+  input: {
+    required: {
+      image: ['IMAGE'],
+      upscale_method: [
+        'COMBO',
+        { options: ['nearest-exact', 'bilinear', 'area', 'bicubic', 'lanczos'] },
+      ],
+      megapixels: ['FLOAT', { default: 1, min: 0.01, max: 16 }],
+      resolution_steps: ['INT', { default: 1, min: 1, max: 256 }],
+    },
+  },
+};
 schema.ModelSamplingFlux = {
   input: {
     required: {

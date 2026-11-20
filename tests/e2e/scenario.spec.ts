@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
 
+// The first test starts from an empty scenario list.
+test.beforeEach(async ({ request }) => {
+  expect((await request.post('/api/state/reset')).ok()).toBe(true);
+});
+
 test('mobile storyboard preserves manual prompts and pins Qwen references', async ({ page }) => {
   await page.setViewportSize({ width: 325, height: 667 });
   await page.goto('/create');
@@ -194,10 +199,6 @@ test('character LoRAs must match the base model family', async ({ page }) => {
   // Scenarios are shared through the server, so earlier tests may have left one.
   await page.getByRole('button', { name: '새 시나리오 만들기' }).click();
   const model = page.getByLabel('기본 모델', { exact: true });
-  await model.selectOption({ label: 'Flux1.D/test-model.safetensors' });
-  await page.getByRole('button', { name: '캐릭터 추가' }).click();
-  await page.getByLabel('캐릭터 1 이름').fill('지수');
-  await page.getByLabel('캐릭터 LoRA', { exact: true }).selectOption('Flux1.D/soft.safetensors');
   const families = await model.locator('optgroup').evaluateAll((groups) =>
     groups.map((group) => ({
       label: group.getAttribute('label'),
@@ -206,7 +207,15 @@ test('character LoRAs must match the base model family', async ({ page }) => {
   );
   const other = families.find((group) => group.label !== 'Flux1.D' && group.label !== 'Qwen2.1');
   await model.selectOption({ label: other!.first! });
-  await expect(page.getByLabel('캐릭터 LoRA', { exact: true })).toContainText('현재 계열과 다름');
+  await page.getByRole('button', { name: '캐릭터 추가' }).click();
+  await page.getByLabel('캐릭터 1 이름').fill('지수');
+  // A LoRA of another family switches the base model to that family.
+  await page.getByLabel('캐릭터 LoRA', { exact: true }).selectOption('Flux1.D/soft.safetensors');
+  await expect(model.locator('option:checked')).toHaveText(/^Flux1\.D\//);
+  await expect(page.getByText(/기본 모델을 Flux1\.D 계열의 .+\(으\)로 바꿨어요/)).toBeVisible();
+  // Changing the base model afterwards leaves the LoRA unusable for new scenes.
+  await model.selectOption({ label: other!.first! });
+  await expect(page.getByText(/새로 생성하는 씬에 쓸 수 없어요/)).toBeVisible();
   await page.getByRole('tab', { name: /씬 편집/ }).click();
   await page.getByRole('button', { name: '씬 추가', exact: true }).click();
   await page.getByRole('button', { name: '지수', exact: true }).click();

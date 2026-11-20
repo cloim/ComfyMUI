@@ -56,7 +56,12 @@ import {
 import { parseBinaryPreview } from './preview';
 import { useDownloadTracker } from './downloads';
 import { deleteOutputFiles, outputKey } from './outputs';
-import { collectSceneResults, pruneDeletedOutputs, type Scenario } from './scenario';
+import {
+  collectSceneResults,
+  normalizeScenarios,
+  pruneDeletedOutputs,
+  type Scenario,
+} from './scenario';
 import { backgroundKeepAlive } from './keep-alive';
 import {
   deferredWriter,
@@ -293,6 +298,7 @@ function useStudioState() {
     [],
     {
       shared: true,
+      migrate: normalizeScenarios,
     },
   );
   const [scenarioAction, setScenarioAction] = useState<string | null>(null);

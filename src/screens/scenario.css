@@ -1,9 +1,25 @@
 @reference '../style.css';
 
 .scenario-page {
-  @apply mx-auto flex min-h-full w-full max-w-[1140px] flex-col gap-4 px-3 pt-4 sm:px-5 lg:px-6 lg:pt-6;
+  @apply mx-auto flex min-h-full w-full max-w-[1320px] flex-col gap-3 px-3 pt-3 sm:gap-4 sm:px-5 sm:pt-4 lg:px-6 lg:pt-5;
   --scene-dark: #222b24;
+  --scene-soft: #edf5e7;
 }
+
+.scenario-touch {
+  min-inline-size: 44px;
+  min-block-size: 44px;
+}
+
+/* Zero specificity, so card classes on a fieldset keep their border and padding. */
+:where(.scenario-page fieldset) {
+  margin: 0;
+  min-inline-size: 0;
+  border: 0;
+  padding: 0;
+}
+
+/* Start screen and saved list */
 
 .scenario-start {
   @apply my-auto flex min-h-72 flex-col items-center justify-center gap-4 rounded-2xl px-6 py-10 text-center text-white;
@@ -22,87 +38,112 @@
   @apply mt-2 bg-lime text-ink hover:bg-lime/90;
 }
 
-.scenario-touch {
-  min-inline-size: 44px;
-  min-block-size: 44px;
-}
-
-.scenario-project {
-  @apply grid min-w-0 gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] sm:items-end;
-}
-
-.scenario-project-top,
-.scenario-section-title {
-  @apply flex min-w-0 items-center justify-between gap-2;
-}
-
-.scenario-project-top > label {
-  @apply min-w-0 flex-1;
-}
-
-.scenario-panel {
-  @apply min-w-0 rounded-xl border border-line bg-white;
-}
-
-.scenario-settings-content {
-  @apply grid min-w-0 gap-3 p-3.5 sm:grid-cols-2 sm:p-4 lg:grid-cols-3;
-}
-
-.scenario-wide {
-  @apply col-span-full;
-}
-
-.scenario-model-loading {
-  @apply flex min-h-11 animate-pulse items-center rounded-lg bg-stone px-3 text-xs text-muted;
-}
-
-.scenario-field {
-  @apply flex min-w-0 flex-col gap-1.5;
-}
-
-/* Labels and fields use the app-wide sizes of Field and .field in style.css. */
-.scenario-field > span:first-child,
-.scenario-prompt-heading {
-  @apply text-xs font-semibold text-ink/80;
-}
-
-.scenario-field small {
-  @apply ml-1 text-2xs font-medium text-muted;
-}
-
-.scenario-section-title small {
-  @apply ml-1 text-xs font-medium text-muted;
-}
-
-.scenario-page .field {
-  min-height: 44px;
-}
-
-.scenario-page textarea.field {
-  @apply py-2.5 leading-relaxed;
-}
-
-.scenario-characters {
-  @apply grid min-w-0 gap-2 border-t border-line pt-3 sm:grid-cols-2;
-}
-
-.scenario-characters > .scenario-section-title {
-  @apply col-span-full;
-}
-
-.scenario-character {
-  @apply grid min-w-0 gap-2.5 rounded-lg bg-paper p-3;
-}
-
-.scenario-lora-controls {
-  @apply grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,96px)] gap-2;
-}
-
-.scenario-workspace {
+.scenario-list {
   @apply flex min-w-0 flex-col gap-3;
 }
 
-/* Same look and keyboard behaviour as the category tabs of the settings screen. */
+.scenario-list-head {
+  @apply flex flex-wrap items-end justify-between gap-2;
+}
+
+.scenario-list-head h2 {
+  @apply flex items-center gap-1.5 text-sm font-bold;
+}
+
+.scenario-list-grid,
+.scenario-board {
+  @apply m-0 grid list-none grid-cols-2 gap-2 rounded-xl p-2.5 sm:grid-cols-3 sm:gap-3 sm:p-4 lg:grid-cols-4 xl:grid-cols-5;
+  background: var(--scene-dark);
+}
+
+.scenario-board li {
+  @apply min-w-0;
+}
+
+.scenario-list-card,
+.scenario-board-cut {
+  @apply flex h-full w-full flex-col overflow-hidden rounded-lg text-left transition hover:bg-white/10;
+}
+
+.scenario-list-card:focus-visible,
+.scenario-board-cut:focus-visible {
+  @apply outline-lime;
+}
+
+.scenario-board-image {
+  @apply grid aspect-[4/3] w-full place-items-center overflow-hidden rounded-lg border border-white/15 bg-[#303d31] text-[#c2d2bd];
+}
+
+.scenario-board-image img {
+  @apply h-full w-full object-contain;
+}
+
+.scenario-list-meta {
+  @apply flex min-w-0 flex-col gap-0.5 px-1.5 py-2 text-xs text-[#c2d2bd] [overflow-wrap:anywhere];
+}
+
+.scenario-list-meta strong {
+  @apply font-bold text-white;
+}
+
+.scenario-list-facts,
+.scenario-bar-facts {
+  @apply flex flex-wrap gap-x-1.5;
+}
+
+.scenario-list-facts > span,
+.scenario-bar-facts > span {
+  @apply whitespace-nowrap;
+}
+
+.scenario-list-facts > span + span::before,
+.scenario-bar-facts > span + span::before {
+  @apply mr-1.5;
+  content: '·';
+}
+
+.scenario-board-caption {
+  @apply flex min-w-0 items-start gap-1.5 px-1.5 py-2 text-xs font-bold text-white [overflow-wrap:anywhere];
+}
+
+.scenario-board-caption .scenario-scene-number {
+  @apply mt-px text-lime;
+}
+
+.scenario-board-caption small {
+  @apply mt-0.5 block font-normal text-[#c2d2bd];
+}
+
+/* Scenario header bar */
+
+.scenario-bar {
+  @apply grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2;
+}
+
+.scenario-back {
+  @apply gap-1 px-2.5;
+}
+
+.scenario-back > span {
+  @apply sr-only sm:not-sr-only;
+}
+
+.scenario-name {
+  @apply text-sm font-bold;
+}
+
+.scenario-bar-facts {
+  @apply order-last col-span-full text-xs text-muted lg:order-none lg:col-span-1;
+}
+
+@media (min-width: 1024px) {
+  .scenario-bar {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+  }
+}
+
+/* Tabs: same look and keyboard behaviour as the settings screen. */
+
 .scenario-tabs {
   @apply flex gap-1.5 rounded-2xl border border-line bg-white p-1.5;
 }
@@ -123,137 +164,45 @@
   @apply font-medium tabular-nums opacity-75;
 }
 
-.scenario-mode {
-  @apply flex min-w-0 items-stretch gap-0.5 rounded-xl bg-stone p-0.5;
+.scenario-workspace {
+  @apply flex min-w-0 flex-col gap-3;
 }
 
-.scenario-mode button {
-  @apply flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-[10px] px-2.5 text-xs font-semibold text-muted transition hover:text-ink;
+/* Shared form pieces */
+
+.scenario-field {
+  @apply flex min-w-0 flex-col gap-1.5;
 }
 
-.scenario-mode button[aria-pressed='true'] {
-  @apply bg-white text-ink shadow-xs;
-}
-
-.scenario-edit-layout {
-  @apply grid min-w-0 gap-2.5 lg:grid-cols-[minmax(206px,1fr)_minmax(0,2.85fr)] lg:items-start lg:gap-4;
-}
-
-.scenario-rail {
-  @apply flex min-w-0 flex-col gap-1;
-}
-
-.scenario-rail:empty {
-  display: none;
-}
-
-.scenario-editor {
-  @apply min-w-0 scroll-mt-3;
-}
-
-.scenario-scene-list {
-  @apply m-0 flex list-none flex-col gap-1 p-0;
-}
-
-.scenario-scene-list button {
-  @apply flex min-h-12 w-full min-w-0 items-center gap-2.5 rounded-lg border border-transparent bg-white px-2.5 py-1.5 text-left hover:border-line lg:flex-wrap lg:gap-y-0.5;
-}
-
-.scenario-scene-list button[aria-current='true'] {
-  @apply border-olive bg-[#edf5e7];
-}
-
-.scenario-scene-number {
-  @apply shrink-0 font-display text-sm font-extrabold tabular-nums text-olive;
-}
-
-.scenario-list-title {
-  @apply min-w-0 grow truncate text-sm font-bold;
-}
-
-.scenario-scene-list small {
-  @apply shrink-0 text-2xs font-medium text-muted;
-}
-
-.scenario-order {
-  @apply flex justify-end gap-0.5;
-}
-
-.scenario-order button:disabled {
-  @apply cursor-default opacity-40;
-}
-
-.scenario-empty {
-  @apply flex min-h-48 flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-[#bbc6b5] bg-[#eef2e9] px-5 py-8 text-center text-olive;
-}
-
-.scenario-empty h3 {
-  @apply text-sm font-semibold text-ink;
-}
-
-.scenario-empty p {
-  @apply max-w-sm text-xs leading-relaxed text-muted;
-}
-
-.scenario-scene-editor {
-  @apply p-3.5 sm:p-4;
-}
-
-.scenario-editor-fields {
-  @apply grid min-w-0 gap-3;
-}
-
-.scenario-mode button {
-  @apply flex-1;
-}
-
-.scenario-cast {
-  @apply flex flex-wrap gap-1.5;
-}
-
-.scenario-cast button {
-  @apply inline-flex min-h-11 min-w-0 max-w-full items-center gap-1 rounded-lg border border-line bg-paper px-3 py-1.5 text-left text-xs font-medium [overflow-wrap:anywhere];
-}
-
-.scenario-cast button[aria-pressed='true'] {
-  @apply border-olive bg-[#edf5e7] text-olive;
-}
-
-.scenario-reference,
-.scenario-draft {
-  @apply grid min-w-0 gap-2 rounded-lg bg-paper p-2.5;
-}
-
-.scenario-upload {
-  @apply relative shrink-0 cursor-pointer px-2.5;
-}
-
-.scenario-upload:focus-within {
-  @apply outline-2 outline-olive;
-}
-
-.scenario-upload input {
-  @apply absolute inset-0 h-full w-full cursor-pointer opacity-0;
-}
-
-.scenario-reference-preview {
-  @apply flex items-center gap-2.5 text-xs leading-relaxed text-muted;
-}
-
-.scenario-reference-image {
-  @apply h-12 w-14 shrink-0 overflow-hidden rounded-md border border-line bg-white;
-}
-
-.scenario-reference-image img {
-  @apply h-full w-full object-cover;
-}
-
+/* Labels and fields use the app-wide sizes of Field and .field in style.css. */
+.scenario-field > span:first-child,
 .scenario-prompt-heading {
-  @apply -mb-1.5;
+  @apply text-xs font-semibold text-ink/80;
 }
 
-.scenario-prompt {
-  @apply bg-paper;
+.scenario-field small,
+.scenario-section-title small {
+  @apply ml-1 text-2xs font-medium text-muted;
+}
+
+.scenario-page .field {
+  min-height: 44px;
+}
+
+.scenario-page textarea.field {
+  @apply py-2.5 leading-relaxed;
+}
+
+.scenario-row {
+  @apply flex min-w-0 items-end gap-2;
+}
+
+.scenario-section-title {
+  @apply flex min-w-0 items-center justify-between gap-2;
+}
+
+.scenario-section-title h3 {
+  @apply text-sm font-bold;
 }
 
 .scenario-hint {
@@ -272,6 +221,403 @@
   @apply min-w-0 flex-1 basis-48 break-keep;
 }
 
+.scenario-model-loading {
+  @apply flex min-h-11 animate-pulse items-center rounded-lg bg-stone px-3 text-xs text-muted;
+}
+
+.scenario-empty {
+  @apply flex min-h-40 flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-[#bbc6b5] bg-[#eef2e9] px-5 py-8 text-center text-olive;
+}
+
+.scenario-empty h3 {
+  @apply text-sm font-semibold text-ink;
+}
+
+.scenario-empty p {
+  @apply max-w-sm text-xs leading-relaxed text-muted;
+}
+
+.scenario-mode {
+  @apply flex min-w-0 items-stretch gap-0.5 rounded-xl bg-stone p-0.5;
+}
+
+.scenario-mode button {
+  @apply flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-3 text-xs font-semibold text-muted transition hover:text-ink;
+}
+
+.scenario-mode button[aria-pressed='true'] {
+  @apply bg-white text-ink shadow-xs;
+}
+
+/* Common settings */
+
+.scenario-settings {
+  @apply grid min-w-0 gap-3 lg:grid-cols-2 lg:items-start;
+}
+
+.scenario-card {
+  @apply min-w-0 rounded-xl border border-line bg-white p-3.5 sm:p-4;
+}
+
+.scenario-card-title {
+  @apply flex items-center gap-1.5 text-sm font-bold;
+}
+
+.scenario-card-title > svg {
+  @apply text-muted;
+}
+
+.scenario-card-head {
+  @apply flex flex-wrap items-center justify-between gap-2;
+}
+
+.scenario-card-body {
+  @apply mt-3 grid min-w-0 gap-3;
+}
+
+.scenario-wide {
+  @apply col-span-full;
+}
+
+.scenario-ratio {
+  @apply grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3;
+}
+
+.scenario-ratio-frame {
+  @apply block h-11 max-w-28 min-w-6 rounded-md border-2 border-olive/50;
+  background: var(--scene-soft);
+}
+
+.scenario-ratio-custom {
+  @apply flex min-w-0 items-end gap-2;
+}
+
+.scenario-ratio-custom .scenario-field {
+  @apply flex-1;
+}
+
+/* Characters: list on the left, editor on the right. */
+
+.scenario-master-detail {
+  @apply mt-3 grid min-w-0 gap-3 lg:grid-cols-[230px_minmax(0,1fr)] lg:items-start;
+}
+
+.scenario-character-list,
+.scenario-scene-list {
+  @apply m-0 flex min-w-0 list-none gap-1.5 overflow-x-auto p-0 pb-1 lg:flex-col lg:overflow-visible lg:pb-0;
+  scrollbar-width: thin;
+}
+
+.scenario-character-list li,
+.scenario-scene-list li {
+  @apply w-56 shrink-0 lg:w-auto;
+}
+
+.scenario-character-list button,
+.scenario-scene-list button {
+  @apply flex min-h-14 w-full min-w-0 items-center gap-2.5 rounded-lg border border-line bg-white p-1.5 pr-2.5 text-left transition hover:border-olive/50;
+}
+
+.scenario-character-list button {
+  @apply bg-paper;
+}
+
+.scenario-character-list button[aria-current='true'],
+.scenario-scene-list button[aria-current='true'] {
+  @apply border-olive;
+  background: var(--scene-soft);
+}
+
+.scenario-avatar {
+  @apply grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-stone text-muted;
+}
+
+.scenario-avatar img {
+  @apply h-full w-full object-cover;
+}
+
+.scenario-character-meta,
+.scenario-scene-meta {
+  @apply flex min-w-0 flex-1 flex-col gap-0.5;
+}
+
+.scenario-character-meta strong {
+  @apply truncate text-sm font-bold;
+}
+
+.scenario-character-meta small,
+.scenario-scene-meta small {
+  @apply truncate text-2xs font-medium text-muted;
+}
+
+.scenario-character-meta [data-ready] {
+  @apply font-semibold text-olive;
+}
+
+.scenario-character-meta [data-ready='false'] {
+  @apply text-[#a26a12];
+}
+
+.scenario-character-editor {
+  @apply grid min-w-0 gap-3 rounded-lg border border-line p-3 sm:p-4;
+}
+
+.scenario-lora-controls {
+  @apply grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,104px)] gap-2;
+}
+
+/* Character image slots */
+
+.scenario-slots {
+  @apply grid grid-cols-2 items-start gap-2;
+}
+
+@media (min-width: 640px) {
+  .scenario-slots {
+    grid-template-columns: repeat(auto-fill, minmax(132px, 160px));
+  }
+}
+
+.scenario-slot {
+  @apply relative grid min-w-0 gap-1.5 rounded-lg border border-line bg-white p-1.5;
+}
+
+.scenario-slot[data-filled='false'] {
+  @apply border-dashed;
+}
+
+.scenario-slot-head {
+  @apply flex items-center justify-between gap-1 px-0.5 text-2xs font-semibold;
+}
+
+/* Every slot shares one frame so a row lines up; a full body is shown whole. */
+.scenario-slot-image {
+  @apply relative grid aspect-[3/4] place-items-center overflow-hidden rounded-md bg-stone text-muted/70;
+}
+
+.scenario-slot[data-shape='body'] .scenario-slot-image img {
+  @apply object-contain;
+}
+
+.scenario-slot-image > button:not(.scenario-slot-remove) {
+  @apply relative block h-full w-full;
+}
+
+.scenario-slot-image img {
+  @apply h-full w-full object-cover;
+}
+
+.scenario-slot-image > button > svg {
+  @apply absolute right-1 bottom-1 rounded-sm bg-ink/80 p-0.5 text-white;
+}
+
+.scenario-slot-remove {
+  @apply absolute top-1 right-1 grid size-7 place-items-center rounded-full border border-line bg-white/95 text-muted shadow-xs hover:text-red-600;
+}
+
+.scenario-slot-busy {
+  @apply flex flex-col items-center gap-1 text-2xs font-semibold text-ink/70;
+}
+
+.scenario-slot-actions {
+  @apply grid gap-1;
+}
+
+.scenario-slot-action {
+  @apply relative flex min-h-9 cursor-pointer items-center justify-center gap-1 rounded-md border border-line bg-paper px-1.5 text-2xs font-semibold text-ink/80 transition hover:bg-stone disabled:cursor-default disabled:opacity-45;
+}
+
+.scenario-slot-action[aria-disabled='true'] {
+  @apply cursor-default opacity-45;
+}
+
+.scenario-slot-action:focus-within {
+  @apply outline-2 outline-olive;
+}
+
+.scenario-slot-action input,
+.scenario-slot-add input,
+.scenario-upload input {
+  @apply absolute inset-0 h-full w-full cursor-pointer opacity-0;
+}
+
+.scenario-slot-add {
+  @apply aspect-[3/4] cursor-pointer place-items-center content-center justify-items-center border-dashed text-center text-2xs font-semibold text-muted hover:border-olive hover:text-ink;
+}
+
+.scenario-slot-add:focus-within {
+  @apply outline-2 outline-olive;
+}
+
+/* Scene editing: scene list, then the form and its results side by side. */
+
+.scenario-edit-layout {
+  @apply grid min-w-0 gap-3 lg:grid-cols-[250px_minmax(0,1fr)] lg:items-start lg:gap-4;
+}
+
+.scenario-rail {
+  @apply flex min-w-0 flex-col gap-1.5 lg:sticky lg:top-3;
+}
+
+.scenario-rail:empty {
+  display: none;
+}
+
+.scenario-scene-thumb {
+  @apply relative grid h-11 w-14 shrink-0 place-items-center overflow-hidden rounded-md bg-stone text-muted;
+}
+
+.scenario-scene-thumb img {
+  @apply h-full w-full object-cover;
+}
+
+.scenario-scene-thumb .scenario-scene-number {
+  @apply absolute top-0.5 left-0.5 rounded-sm bg-ink/80 px-1 text-2xs leading-4 text-lime;
+}
+
+.scenario-scene-number {
+  @apply shrink-0 font-display text-sm font-extrabold tabular-nums text-olive;
+}
+
+.scenario-list-title {
+  @apply min-w-0 truncate text-sm font-bold;
+}
+
+.scenario-scene-meta small[data-state='확인 필요'] {
+  @apply text-red-700;
+}
+
+.scenario-scene-meta small[data-state='생성 중'],
+.scenario-scene-meta small[data-state='대기 중'] {
+  @apply text-olive;
+}
+
+.scenario-order {
+  @apply flex justify-end gap-0.5;
+}
+
+.scenario-order button:disabled {
+  @apply cursor-default opacity-40;
+}
+
+.scenario-editor {
+  @apply min-w-0 scroll-mt-3;
+}
+
+.scenario-scene-editor {
+  @apply grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start;
+}
+
+.scenario-scene-form {
+  @apply grid min-w-0 gap-3 rounded-xl border border-line bg-white p-3.5 sm:p-4;
+}
+
+.scenario-scene-top {
+  @apply flex-wrap;
+}
+
+.scenario-scene-top > .scenario-field:last-child {
+  @apply w-full sm:w-auto sm:min-w-64;
+}
+
+.scenario-mode-hint {
+  @apply -mt-1.5;
+}
+
+.scenario-cast {
+  @apply flex flex-wrap gap-1.5;
+}
+
+.scenario-cast button {
+  @apply inline-flex min-h-11 min-w-0 max-w-full items-center gap-1.5 rounded-full border border-line bg-paper py-1.5 pr-3.5 pl-2 text-left text-xs font-medium [overflow-wrap:anywhere];
+}
+
+.scenario-cast button[aria-pressed='true'] {
+  @apply border-olive text-olive;
+  background: var(--scene-soft);
+}
+
+.scenario-cast-avatar {
+  @apply size-6 shrink-0 rounded-full object-cover;
+}
+
+.scenario-subcard,
+.scenario-draft {
+  @apply grid min-w-0 gap-3 rounded-lg border border-line/70 bg-paper p-3;
+}
+
+.scenario-upload {
+  @apply relative shrink-0 cursor-pointer px-2.5;
+}
+
+.scenario-upload:focus-within {
+  @apply outline-2 outline-olive;
+}
+
+.scenario-reference-preview {
+  @apply flex items-center gap-2.5 text-xs leading-relaxed text-muted;
+}
+
+.scenario-reference-preview strong {
+  @apply font-mono text-2xs text-ink;
+}
+
+.scenario-reference-image {
+  @apply h-14 w-18 shrink-0 overflow-hidden rounded-md border border-line bg-white;
+}
+
+.scenario-reference-image img {
+  @apply h-full w-full object-cover;
+}
+
+.scenario-refs {
+  @apply m-0 flex list-none flex-wrap gap-1.5 p-0;
+}
+
+.scenario-refs li {
+  @apply flex items-center gap-2 rounded-lg border border-line bg-white py-1 pr-2.5 pl-1 text-2xs text-muted;
+}
+
+.scenario-refs button {
+  @apply size-9 shrink-0 overflow-hidden rounded-md;
+}
+
+.scenario-refs img {
+  @apply h-full w-full object-cover;
+}
+
+.scenario-refs strong {
+  @apply block font-mono text-ink;
+}
+
+.scenario-extra-picks {
+  @apply flex flex-wrap items-center gap-1.5;
+}
+
+.scenario-extra-picks button {
+  @apply relative size-11 overflow-hidden rounded-md border-2 border-transparent opacity-60 transition;
+}
+
+.scenario-extra-picks button[aria-pressed='true'] {
+  @apply border-olive opacity-100;
+}
+
+.scenario-extra-picks img {
+  @apply h-full w-full object-cover;
+}
+
+.scenario-extra-picks button > svg {
+  @apply absolute top-0.5 right-0.5 rounded-full bg-olive text-white;
+}
+
+.scenario-prompt-heading {
+  @apply -mb-1.5;
+}
+
+.scenario-prompt {
+  @apply bg-paper;
+}
+
 .scenario-draft p {
   @apply text-xs leading-relaxed [overflow-wrap:anywhere];
 }
@@ -284,16 +630,20 @@
   @apply grid grid-cols-[minmax(0,104px)_minmax(0,1fr)] gap-2 sm:grid-cols-[minmax(0,120px)_minmax(0,1fr)];
 }
 
-.scenario-candidates {
-  @apply mt-4 grid gap-2.5 border-t border-line pt-3;
+.scenario-results {
+  @apply min-w-0 rounded-xl border border-line bg-white p-3.5 sm:p-4 xl:sticky xl:top-3;
 }
 
-.scenario-section-title h3 {
-  @apply text-sm font-bold;
+.scenario-results-empty {
+  @apply flex min-h-36 flex-col items-center justify-center gap-2 rounded-lg bg-paper px-4 py-6 text-center text-xs leading-relaxed text-muted;
+}
+
+.scenario-candidates {
+  @apply grid gap-2.5;
 }
 
 .scenario-candidate-grid {
-  @apply grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4;
+  @apply grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-2;
 }
 
 .scenario-candidate {
@@ -301,7 +651,7 @@
 }
 
 .scenario-candidate[data-featured='true'] {
-  @apply border-olive;
+  @apply border-olive ring-1 ring-olive;
 }
 
 .scenario-candidate-image {
@@ -321,45 +671,11 @@
 }
 
 .scenario-candidate-pick[aria-pressed='true'] {
-  @apply bg-[#edf5e7] text-olive;
+  @apply text-olive;
+  background: var(--scene-soft);
 }
 
-.scenario-board {
-  @apply m-0 grid list-none grid-cols-2 gap-2 rounded-xl p-2.5 sm:grid-cols-3 sm:gap-3 sm:p-4 lg:grid-cols-4;
-  background: var(--scene-dark);
-}
-
-.scenario-board li {
-  @apply min-w-0;
-}
-
-.scenario-board-cut {
-  @apply flex h-full w-full flex-col overflow-hidden rounded-lg text-left transition hover:bg-white/10;
-}
-
-.scenario-board-cut:focus-visible {
-  @apply outline-lime;
-}
-
-.scenario-board-image {
-  @apply grid aspect-[4/3] w-full place-items-center overflow-hidden rounded-lg border border-white/15 bg-[#303d31] text-[#c2d2bd];
-}
-
-.scenario-board-image img {
-  @apply h-full w-full object-contain;
-}
-
-.scenario-board-caption {
-  @apply flex min-w-0 items-start gap-1.5 px-1.5 py-2 text-xs font-bold text-white [overflow-wrap:anywhere];
-}
-
-.scenario-board-caption .scenario-scene-number {
-  @apply mt-px text-lime;
-}
-
-.scenario-board-caption small {
-  @apply mt-0.5 block font-normal text-[#c2d2bd];
-}
+/* Bottom bar */
 
 .scenario-footer {
   @apply sticky bottom-0 z-10 -mx-3 mt-auto flex flex-wrap items-center gap-2 border-t border-line bg-paper px-3 py-2.5 sm:-mx-5 sm:px-5 lg:-mx-6 lg:px-6;

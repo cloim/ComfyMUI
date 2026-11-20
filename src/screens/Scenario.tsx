@@ -3,10 +3,12 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  ChevronLeft,
   Clapperboard,
   Film,
   Image,
   Layers2,
+  List,
   LoaderCircle,
   Plus,
   SlidersHorizontal,
@@ -16,11 +18,16 @@ import { imageUrl, thumbnailUrl } from '../api';
 import { HeaderActions } from '../components/HeaderActions';
 import { ImageViewer } from '../components/ImageViewer';
 import { ScenarioScene } from '../components/ScenarioScene';
-import { ScenarioSettings } from '../components/ScenarioSettings';
+import { ScenarioSettings, type CharacterImageTarget } from '../components/ScenarioSettings';
 import { IconButton, Modal, SelectControl } from '../components/ui';
+import { DraftInput } from '../components/DraftField';
 import { reorderQueue, type Job } from '../domain';
 import { catalog, selectModel } from '../models';
 import {
+  CHARACTER_SHOTS,
+  characterJobId,
+  characterShotGeneration,
+  characterShotPromptInput,
   convertScenarioPrompt,
   featuredImage,
   newScenario,
@@ -31,6 +38,7 @@ import {
   sceneRevision,
   sceneTitle,
   uploadSceneReference,
+  type CharacterSlot,
   type Scenario as ScenarioRecord,
   type Scene,
   type SceneImage,
@@ -52,6 +60,23 @@ const scopes: Record<Scope, string> = {
 };
 const pending = (job?: Job) =>
   Boolean(job && ['submitting', 'queued', 'running'].includes(job.status));
+
+const OPEN_SCENARIO_KEY = 'cm-scenario-open';
+function readOpenScenario() {
+  try {
+    return sessionStorage.getItem(OPEN_SCENARIO_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+function writeOpenScenario(id: string) {
+  try {
+    if (id) sessionStorage.setItem(OPEN_SCENARIO_KEY, id);
+    else sessionStorage.removeItem(OPEN_SCENARIO_KEY);
+  } catch {
+    /* Private browsing can restrict session storage. */
+  }
+}
 
 export default function Scenario() {
   const {
@@ -85,10 +110,19 @@ export default function Scenario() {
     connection: s.connection,
     notify: s.notify,
   }));
-  const [projectId, setProjectId] = useState('');
+  // The open scenario is kept for this browser tab, so a reload returns to it. Without one
+  // the saved scenarios are listed.
+  const [projectId, setProjectIdState] = useState(() => readOpenScenario());
+  const setProjectId = (id: string) => {
+    setProjectIdState(id);
+    writeOpenScenario(id);
+  };
   const [sceneId, setSceneId] = useState('');
+  const [characterId, setCharacterId] = useState('');
   // A new scenario starts with its common settings; one with scenes opens on its scenes.
-  const [tab, setTab] = useState<Tab>(() => (scenarios[0]?.scenes.length ? 'scenes' : 'settings'));
+  const [tab, setTab] = useState<Tab>(() =>
+    scenarios.find((item) => item.id === projectId)?.scenes.length ? 'scenes' : 'settings',
+  );
   const [scope, setScope] = useState<Scope>('all');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -107,7 +141,14 @@ export default function Scenario() {
     }
     return map;
   }, [jobs]);
-  const project = scenarios.find((item) => item.id === projectId) || scenarios[0];
+  const project = scenarios.find((item) => item.id === projectId);
+
+  function openProject(id: string) {
+    const next = scenarios.find((item) => item.id === id);
+    setProjectId(id);
+    setSceneId('');
+    setTab(next?.scenes.length ? 'scenes' : 'settings');
+  }
   const scene = project?.scenes.find((item) => item.id === sceneId) || project?.scenes[0];
   const index = project && scene ? project.scenes.indexOf(scene) : -1;
   const working = Boolean(scenarioAction);
@@ -118,6 +159,10 @@ export default function Scenario() {
         (entry) =>
           entry.name === project?.settings.model && entry.loader === project.settings.modelLoader,
       ) || editModels[0];
+  // An edit scene may pick its own model; otherwise the scenario's default applies.
+  const editModelFor = (target: Scene) =>
+    (target.editModelId && editModels.find((entry) => entry.id === target.editModelId)) ||
+    editModel;
 
   function createProject() {
     const draft = newScenario(settings);
@@ -180,6 +225,7 @@ export default function Scenario() {
       setSceneId(project.scenes[index + 1]?.id || project.scenes[index - 1]?.id || '');
     } else {
       setScenarios((items) => items.filter(({ id }) => id !== project.id));
+      setProjectId('');
       setSceneId('');
     }
     setRemove(null);
@@ -217,6 +263,70 @@ export default function Scenario() {
     });
   }
 
+  async function uploadCharacterImage(id: string, target: CharacterImageTarget, file: File) {
+    if (!project) return;
+    const projectKey = project.id;
+    await runScenarioAction(`character:${id}:${target}`, async () => {
+      try {
+        const image = await uploadSceneReference(connection.base, file);
+        updateProject(projectKey, (item) => ({
+          ...item,
+          characters: item.characters.map((c) =>
+            c.id !== id
+              ? c
+              : target === 'extra'
+                ? { ...c, extras: [...(c.extras || []), image] }
+                : { ...c, [target]: image },
+          ),
+        }));
+        setErrors(({ [id]: _done, ...rest }) => rest);
+      } catch (error) {
+        setErrors((items) => ({ ...items, [id]: (error as Error).message }));
+      }
+    });
+  }
+
+  // Renders a character's front image with the base model and LoRA. The finished image
+  // fills the slot through collectSceneResults.
+  async function generateCharacterImage(id: string, slot: CharacterSlot) {
+    const character = project?.characters.find((c) => c.id === id);
+    if (!project || !character) return;
+    if (connectionState !== 'connected') {
+      notify('ComfyUI 서버 연결을 확인해 주세요');
+      return;
+    }
+    await runScenarioAction(`shot:${id}:${slot}`, async () => {
+      try {
+        let prompt: string;
+        try {
+          prompt = await convertScenarioPrompt(characterShotPromptInput(project, character, slot));
+        } catch {
+          // Without the AI writer the fixed English shot description still works.
+          prompt = CHARACTER_SHOTS[slot].fallback;
+        }
+        const input = characterShotGeneration(
+          project,
+          character,
+          slot,
+          prompt,
+          info,
+          familyAssignments,
+          connection.base,
+        );
+        const ok = await generate(input, { sceneId: characterJobId(id, slot), revision: '' });
+        if (!ok) throw new Error('모델 설치 목록과 생성 설정을 확인한 후 다시 시도해 주세요');
+        setErrors(({ [id]: _done, ...rest }) => rest);
+      } catch (error) {
+        setErrors((items) => ({ ...items, [id]: (error as Error).message }));
+      }
+    });
+  }
+
+  function openCharacter(id: string) {
+    setCharacterId(id);
+    setTab('settings');
+  }
+
   async function submit(targets: Scene[], bulk: boolean) {
     if (!project || !targets.length) return;
     if (connectionState !== 'connected') {
@@ -250,7 +360,7 @@ export default function Scenario() {
           const input = sceneGeneration(
             project,
             bulk ? { ...prepared, count: 1 } : prepared,
-            editModel,
+            editModelFor(prepared),
             info,
             familyAssignments,
             connection.base,
@@ -309,7 +419,62 @@ export default function Scenario() {
           onClick={createProject}
         />
       </HeaderActions>
-      {!project ? (
+      {!project && scenarios.length > 0 ? (
+        <section className="scenario-list" aria-labelledby="scenario-list-title">
+          <div className="scenario-list-head">
+            <div>
+              <h2 id="scenario-list-title">
+                저장된 시나리오 <span className="scenario-tab-count">{scenarios.length}</span>
+              </h2>
+              <p className="scenario-hint">변경 내용은 자동으로 저장돼요.</p>
+            </div>
+            <button
+              type="button"
+              className="btn-primary scenario-touch"
+              disabled={working}
+              onClick={createProject}
+            >
+              <Plus size={16} aria-hidden="true" /> 새 시나리오
+            </button>
+          </div>
+          <ul className="scenario-list-grid" aria-label="시나리오 목록">
+            {scenarios.map((item) => {
+              const cuts = item.scenes.flatMap((s) => {
+                const cut = featuredImage(s);
+                return cut ? [cut] : [];
+              });
+              const cover = cuts[0];
+              const name = item.title.trim() || '이름 없는 시나리오';
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    className="scenario-list-card"
+                    aria-label={`${name} 열기`}
+                    onClick={() => openProject(item.id)}
+                  >
+                    <span className="scenario-board-image">
+                      {cover ? (
+                        <img src={thumbnailUrl(cover.base, cover.image)} alt="" loading="lazy" />
+                      ) : (
+                        <Clapperboard size={22} strokeWidth={1.6} aria-hidden="true" />
+                      )}
+                    </span>
+                    <span className="scenario-list-meta">
+                      <strong>{name}</strong>
+                      <span className="scenario-list-facts">
+                        <span>씬 {item.scenes.length}개</span>
+                        <span>대표 컷 {cuts.length}개</span>
+                        <span>캐릭터 {item.characters.length}명</span>
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : !project ? (
         <div className="scenario-start">
           <Clapperboard size={36} strokeWidth={1.5} aria-hidden="true" />
           <p>공통 모델과 화풍을 정하고, 씬을 추가해 스토리보드를 만들어 보세요.</p>
@@ -319,48 +484,40 @@ export default function Scenario() {
         </div>
       ) : (
         <>
-          <div className="scenario-project">
-            <div className="scenario-project-top">
-              <label className="scenario-field">
-                <span>시나리오 이름</span>
-                <input
-                  className="field scenario-name"
-                  value={project.title}
-                  maxLength={80}
-                  disabled={working}
-                  onChange={(e) =>
-                    updateProject(project.id, (p) => ({ ...p, title: e.target.value }))
-                  }
-                />
-              </label>
-              <IconButton
-                icon={Trash2}
-                danger
-                label="이 시나리오 삭제"
-                className="scenario-touch self-end"
-                disabled={working || project.scenes.some((item) => pending(latest.get(item.id)))}
-                onClick={() => setRemove('project')}
-              />
-            </div>
-            {scenarios.length > 1 && (
-              <SelectControl
-                aria-label="열 시나리오"
-                value={project.id}
-                disabled={working}
-                onChange={(e) => {
-                  const next = scenarios.find(({ id }) => id === e.target.value);
-                  setProjectId(e.target.value);
-                  setSceneId('');
-                  setTab(next?.scenes.length ? 'scenes' : 'settings');
-                }}
-              >
-                {scenarios.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title.trim() || '이름 없는 시나리오'}
-                  </option>
-                ))}
-              </SelectControl>
-            )}
+          <div className="scenario-bar">
+            <button
+              type="button"
+              className="btn-secondary scenario-touch scenario-back"
+              onClick={() => {
+                setProjectId('');
+                setSceneId('');
+              }}
+            >
+              <ChevronLeft size={16} aria-hidden="true" />
+              <span>시나리오 목록</span>
+            </button>
+            <DraftInput
+              className="field scenario-name"
+              aria-label="시나리오 이름"
+              value={project.title}
+              maxLength={80}
+              disabled={working}
+              placeholder="시나리오 이름"
+              onValueChange={(title) => updateProject(project.id, (p) => ({ ...p, title }))}
+            />
+            <p className="scenario-bar-facts">
+              <span>씬 {project.scenes.length}개</span>
+              <span>대표 컷 {chosenCount}개</span>
+              <span>캐릭터 {project.characters.length}명</span>
+            </p>
+            <IconButton
+              icon={Trash2}
+              danger
+              label="이 시나리오 삭제"
+              className="scenario-touch"
+              disabled={working || project.scenes.some((item) => pending(latest.get(item.id)))}
+              onClick={() => setRemove('project')}
+            />
           </div>
           <div role="tablist" aria-label="시나리오 작업" className="scenario-tabs">
             {tabs.map((item, i) => (
@@ -421,6 +578,14 @@ export default function Scenario() {
                 editModel={editModel}
                 loading={connectionState === 'connecting'}
                 disabled={working}
+                action={scenarioAction}
+                errors={errors}
+                shotJobs={latest}
+                selectedCharacter={characterId}
+                onSelectCharacter={setCharacterId}
+                onCharacterImage={(id, target, file) => void uploadCharacterImage(id, target, file)}
+                onGenerateCharacterImage={(id, slot) => void generateCharacterImage(id, slot)}
+                onPreview={setPreview}
                 onChange={(patch) => {
                   updateProject(project.id, (item) => ({ ...item, ...patch }));
                   setDrafts({});
@@ -492,11 +657,26 @@ export default function Scenario() {
                               aria-current={scene?.id === item.id || undefined}
                               onClick={() => openScene(item.id)}
                             >
-                              <span className="scenario-scene-number">
-                                {String(i + 1).padStart(2, '0')}
+                              <span className="scenario-scene-thumb">
+                                {featured ? (
+                                  <img
+                                    src={thumbnailUrl(featured.base, featured.image)}
+                                    alt=""
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <Image size={16} strokeWidth={1.6} aria-hidden="true" />
+                                )}
+                                <span className="scenario-scene-number">
+                                  {String(i + 1).padStart(2, '0')}
+                                </span>
                               </span>
-                              <span className="scenario-list-title">{sceneTitle(item)}</span>
-                              <small>{state}</small>
+                              <span className="scenario-scene-meta">
+                                <span className="scenario-list-title">{sceneTitle(item)}</span>
+                                <small data-state={state}>
+                                  {item.mode === 'edit' ? '이어 만들기' : '새로 생성'} · {state}
+                                </small>
+                              </span>
                             </button>
                           </li>
                         );
@@ -560,6 +740,9 @@ export default function Scenario() {
                         });
                       }}
                       onPreview={setPreview}
+                      editModels={editModels}
+                      defaultEditModel={editModel}
+                      onOpenCharacter={openCharacter}
                     />
                   ) : (
                     <div className="scenario-empty">

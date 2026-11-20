@@ -43,6 +43,8 @@ export type Generation = {
   workflow: Workflow | null;
   upscale?: UpscaleSpec | null;
   editSource?: ImageRef;
+  // Further Qwen2.1 edit references after editSource, seen as <image2>, <image3>, ...
+  editReferences?: ImageRef[];
 };
 // Upscales an existing output image with an upscale model, then optionally re-samples it
 // at low denoise with the original model and prompt to restore fine detail.
@@ -95,6 +97,7 @@ export function baseSettings(s: Generation): Generation {
 export function reusableSettings(input: Generation): Generation {
   const settings = baseSettings(structuredClone(input));
   delete settings.editSource;
+  delete settings.editReferences;
   return settings;
 }
 // LoadImage resolves "path [output]" from ComfyUI's output folder without uploading.
@@ -221,12 +224,13 @@ export const DEFAULT_PROMPT_ASSEMBLE: PromptAssembleElement[] = [
   },
 ];
 
-export function hasPromptAttribute(prompt: string, attribute: string): boolean {
-  const target = attribute.trim().toLowerCase();
+export function hasPromptAttribute(prompt: string, attribute: string, exactCase = false): boolean {
+  const fold = (text: string) => (exactCase ? text : text.toLowerCase());
+  const target = fold(attribute.trim());
   if (!target) return false;
   return prompt
     .split(',')
-    .map((part) => part.trim().toLowerCase())
+    .map((part) => fold(part.trim()))
     .some((part) => part === target);
 }
 
@@ -591,6 +595,22 @@ export function buildWorkflow(s: Generation): Workflow {
       };
       w['2'].inputs.vae = ['9', 0];
       w['2'].inputs['images.image_1'] = ['51', 0];
+      // Character references keep their own framing, limited to about one megapixel.
+      (s.editReferences || []).slice(0, 15).forEach((ref, i) => {
+        const load = String(60 + i * 2),
+          scale = String(61 + i * 2);
+        w[load] = { class_type: 'LoadImage', inputs: { image: annotatedImage(ref) } };
+        w[scale] = {
+          class_type: 'ImageScaleToTotalPixels',
+          inputs: {
+            image: [load, 0],
+            upscale_method: 'lanczos',
+            megapixels: 1,
+            resolution_steps: 1,
+          },
+        };
+        w['2'].inputs[`images.image_${i + 2}`] = [scale, 0];
+      });
       w['5'].inputs.latent_image = ['2', 2];
       delete w['4'];
       if (s.batch > 1) {
