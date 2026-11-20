@@ -6,7 +6,7 @@ FROM node:24-slim AS builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json tsconfig.json tsconfig.tsbuildinfo* vite.config.ts index.html object-info.mjs scenario-prompt.mjs ./
+COPY package.json package-lock.json tsconfig.json tsconfig.tsbuildinfo* vite.config.ts index.html object-info.mjs scenario-prompt.mjs state-db.mjs ./
 COPY public ./public
 COPY src ./src
 
