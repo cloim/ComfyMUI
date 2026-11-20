@@ -51,7 +51,7 @@ function validateThumbParams(filename, subfolder, type) {
   return true;
 }
 
-app.use(scenarioPromptApp(sameOrigin));
+app.use(scenarioPromptApp(sameOrigin, { store: stateDb }));
 
 // Cache files are named <hash of the image>-<version>.webp so a reused file name with a
 // new version never gets the old thumbnail, and every version can be removed together.

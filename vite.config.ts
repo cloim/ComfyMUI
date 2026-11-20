@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { objectInfoMiddleware } from './object-info.mjs';
 import { scenarioPromptApp } from './scenario-prompt.mjs';
+import { openStateDb } from './state-db.mjs';
 export default defineConfig({
   plugins: [
     react(),
@@ -12,15 +13,22 @@ export default defineConfig({
     {
       name: 'dev-thumbnail-proxy',
       configureServer(server) {
+        // Same database file as `npm start`, so Settings > AI 연결 is saved in dev too.
+        // Vite restarts on config edits; the old handle is closed with its server.
+        const store = openStateDb(process.env.STATE_DB || 'data/comfymui.db');
+        server.httpServer?.once('close', () => store.close());
         server.middlewares.use(
-          scenarioPromptApp((req: { headers: { origin?: string; host?: string } }) => {
-            if (!req.headers.origin) return true;
-            try {
-              return new URL(req.headers.origin).host === req.headers.host;
-            } catch {
-              return false;
-            }
-          }),
+          scenarioPromptApp(
+            (req: { headers: { origin?: string; host?: string } }) => {
+              if (!req.headers.origin) return true;
+              try {
+                return new URL(req.headers.origin).host === req.headers.host;
+              } catch {
+                return false;
+              }
+            },
+            { store },
+          ),
         );
         server.middlewares.use(
           objectInfoMiddleware(process.env.COMFY_URL || 'http://127.0.0.1:8188', { prewarm: true }),

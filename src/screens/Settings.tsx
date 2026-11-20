@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Bot,
   type LucideIcon,
 } from 'lucide-react';
 import { useStudioSelector } from '../studio';
@@ -29,6 +30,7 @@ import {
 } from '../domain';
 import { usePwa } from '../pwa';
 import { SyncConflicts } from '../components/SyncConflicts';
+import { AiSettingsSection } from '../components/AiSettingsSection';
 import {
   Section,
   Spinner,
@@ -40,12 +42,14 @@ import {
   X,
 } from '../components/ui';
 
-type SettingsCategory = 'connection' | 'prompt' | 'app';
+type SettingsCategory = 'connection' | 'ai' | 'prompt' | 'app';
 
-const SETTINGS_TABS: { id: SettingsCategory; label: string; icon: LucideIcon }[] = [
-  { id: 'connection', label: '연결 설정', icon: Link2 },
-  { id: 'prompt', label: '기본 프롬프트 설정', icon: WandSparkles },
-  { id: 'app', label: '앱 및 알림', icon: Smartphone },
+// `short` is shown on phone widths so four tabs fit; the full label stays the tab's name.
+const SETTINGS_TABS: { id: SettingsCategory; label: string; short: string; icon: LucideIcon }[] = [
+  { id: 'connection', label: '연결 설정', short: '연결', icon: Link2 },
+  { id: 'ai', label: 'AI 연결', short: 'AI', icon: Bot },
+  { id: 'prompt', label: '기본 프롬프트 설정', short: '프롬프트', icon: WandSparkles },
+  { id: 'app', label: '앱 및 알림', short: '앱·알림', icon: Smartphone },
 ];
 
 export default function Settings() {
@@ -92,7 +96,7 @@ export default function Settings() {
   }));
   const [activeTab, setActiveTab] = useState<SettingsCategory>(() => {
     const param = new URLSearchParams(window.location.search).get('tab');
-    return param === 'prompt' || param === 'app' || param === 'connection' ? param : 'connection';
+    return SETTINGS_TABS.some((t) => t.id === param) ? (param as SettingsCategory) : 'connection';
   });
   const panelId = useId();
   const [base, setBase] = useState(connection.base);
@@ -404,6 +408,7 @@ export default function Settings() {
             key={t.id}
             type="button"
             role="tab"
+            aria-label={t.label}
             aria-selected={activeTab === t.id}
             aria-controls={panelId}
             tabIndex={activeTab === t.id ? 0 : -1}
@@ -430,7 +435,8 @@ export default function Settings() {
             }`}
           >
             <t.icon size={15} className="hidden shrink-0 sm:inline" />
-            <span>{t.label}</span>
+            <span className="sm:hidden">{t.short}</span>
+            <span className="hidden sm:inline">{t.label}</span>
           </button>
         ))}
       </div>
@@ -532,6 +538,8 @@ export default function Settings() {
             </Section>
           </>
         )}
+
+        {activeTab === 'ai' && <AiSettingsSection />}
 
         {activeTab === 'prompt' && (
           <>

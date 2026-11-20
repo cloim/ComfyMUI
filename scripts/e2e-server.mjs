@@ -329,6 +329,12 @@ const mock = createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' });
     return res.end(MOCK_IMAGE_SVG);
   }
+  // OpenAI-compatible model list for the Settings AI connection check.
+  if (req.method === 'GET' && url.pathname === '/v1/models') {
+    if (req.headers.authorization && req.headers.authorization !== 'Bearer e2e-key')
+      return send({ error: 'Invalid key' }, 401);
+    return send({ object: 'list', data: [{ id: 'scenario-test-model' }, { id: 'other-model' }] });
+  }
   if (req.method === 'GET' && url.pathname === '/api/lm/loras/list') {
     let items = [...mockLoras];
     const search = (url.searchParams.get('search') || '').trim().toLowerCase();
