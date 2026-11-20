@@ -9,7 +9,6 @@ import {
   Plus,
   WifiOff,
   Check,
-  Layers2,
   Box,
   Clapperboard,
 } from 'lucide-react';
@@ -19,8 +18,7 @@ import { HeaderSlotProvider } from './components/HeaderActions';
 import Create, { GenerateControls } from './screens/Create';
 import Gallery from './screens/Gallery';
 import Presets, { PresetEditor } from './screens/Presets';
-import Loras from './screens/Loras';
-import Models from './screens/Models';
+import ModelLibrary from './screens/ModelLibrary';
 import Settings from './screens/Settings';
 import { usePwa } from './pwa';
 import { SyncConflicts } from './components/SyncConflicts';
@@ -29,7 +27,6 @@ const nav = [
   { path: '/create', label: '만들기', icon: Sparkles },
   { path: '/scenario', label: '시나리오', icon: Clapperboard },
   { path: '/models', label: '모델', icon: Box },
-  { path: '/loras', label: 'LoRA', icon: Layers2 },
   { path: '/gallery', label: '기록', icon: Images },
   { path: '/presets', label: '프리셋', icon: Bookmark },
   { path: '/settings', label: '설정', icon: Settings2 },
@@ -201,11 +198,9 @@ function Shell() {
         <main
           id="main"
           tabIndex={-1}
-          className={`min-h-0 flex-1 outline-none ${['/gallery', '/presets', '/loras', '/models'].includes(location.pathname) ? 'overflow-hidden' : 'overflow-y-auto'}`}
+          className={`min-h-0 flex-1 outline-none ${['/gallery', '/presets', '/models'].includes(location.pathname) ? 'overflow-hidden' : 'overflow-y-auto'}`}
           data-ui-audit-scroll-root={
-            !['/gallery', '/presets', '/loras', '/models'].includes(location.pathname)
-              ? ''
-              : undefined
+            !['/gallery', '/presets', '/models'].includes(location.pathname) ? '' : undefined
           }
         >
           <HeaderSlotProvider value={headerSlot}>
@@ -226,8 +221,8 @@ function Shell() {
                   </Suspense>
                 }
               />
-              <Route path="/models" element={<Models />} />
-              <Route path="/loras" element={<Loras />} />
+              <Route path="/models" element={<ModelLibrary />} />
+              <Route path="/loras" element={<Navigate to="/models?tab=lora" replace />} />
               <Route path="/gallery" element={<Gallery />} />
               <Route path="/presets" element={<Presets />} />
               <Route path="/settings" element={<Settings />} />

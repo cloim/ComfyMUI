@@ -39,7 +39,7 @@ Docker Compose를 사용하면 ComfyUI GPU 서비스와 ComfyMUI Node.js 서비�
 - **Named Volume (2개)**:
   - `comfy-data`: ComfyUI 영속 데이터 (`models/`, `output/`, `input/`, `user/`, `temp/`)
   - `comfymui-data`: ComfyMUI 영속 데이터 (SQLite DB 및 썸네일 캐시)
-- **로컬 모델 연결**: 호스트의 기존 모델 폴더(`HOST_MODELS_DIR`, 기본값: `E:/Models`)를 읽기·쓰기 bind mount로 연결하며, `extra_model_paths.yaml`을 통해 `comfy-data/models`와 함께 검색합니다. 신규 모델 다운로드는 `comfy-data/models`에 기본 저장됩니다. 모델과 LoRA의 CivitAI 다운로드에서 저장 위치를 Docker 볼륨 또는 로컬 모델 폴더로 선택할 수 있으며, 자동 분류는 선택한 저장 위치 아래에 적용됩니다.
+- **로컬 모델 연결**: 호스트의 기존 모델 폴더(`HOST_MODELS_DIR`, 기본값: `E:/Models`)를 읽기·쓰기 bind mount로 연결하며, `extra_model_paths.yaml`을 통해 `comfy-data/models`와 함께 검색합니다. 신규 모델 다운로드는 `comfy-data/models`에 기본 저장됩니다. `모델` 메뉴의 Checkpoints와 LoRA 탭에서 CivitAI 다운로드 시 저장 위치를 Docker 볼륨 또는 로컬 모델 폴더로 선택할 수 있으며, 자동 분류는 선택한 저장 위치 아래에 적용됩니다.
 - **출력 폴더 공유**: `comfy-data` 볼륨이 ComfyMUI에도 공유되어 갤러리 조회와 이미지 삭제 쓰기 권한이 유지됩니다.
 
 #### 1. 환경 설정

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type UIEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -56,7 +56,8 @@ import { HeaderActionButton, HeaderActions } from '../components/HeaderActions';
 import { DownloadLocation, orderDownloadRoots } from '../components/DownloadLocation';
 import { DownloadTray } from '../components/DownloadTray';
 
-export default function Models() {
+// `tabs` is placed at the start of the filter toolbar (the 모델 menu's library tabs).
+export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
   const {
     connection,
     info,
@@ -705,6 +706,7 @@ export default function Models() {
         data-ui-audit-row
         className="flex flex-none flex-wrap items-center gap-2 border-b border-line bg-paper px-4 py-3 sm:px-5 lg:px-6"
       >
+        {tabs}
         <label className="relative w-full min-w-0 sm:w-64 lg:w-72">
           <Search
             size={15}
