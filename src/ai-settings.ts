@@ -14,13 +14,13 @@ export type AiSettingsUpdate = {
   apiKey?: string;
 };
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
+async function call<T>(path: string, init?: RequestInit, timeoutMs = 20000): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
       ...init,
       headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     throw new Error('앱 서버에 연결할 수 없어요');
@@ -35,6 +35,16 @@ export const loadAiSettings = () => call<AiSettings>('/api/settings/ai');
 
 export const saveAiSettings = (update: AiSettingsUpdate) =>
   call<AiSettings>('/api/settings/ai', { method: 'PUT', body: JSON.stringify(update) });
+
+// Slightly longer than the server's limit so its error message reaches the screen.
+export async function translatePrompt(text: string) {
+  const result = await call<{ prompt: string }>(
+    '/api/prompt/translate',
+    { method: 'POST', body: JSON.stringify({ text }) },
+    125000,
+  );
+  return result.prompt;
+}
 
 export async function listAiModels(baseUrl: string, apiKey?: string) {
   const result = await call<{ models: string[] }>('/api/settings/ai/models', {

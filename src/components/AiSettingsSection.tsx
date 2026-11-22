@@ -98,7 +98,8 @@ export function AiSettingsSection() {
     >
       <div className="flex flex-col gap-4">
         <p className="text-xs leading-relaxed text-muted">
-          시나리오의 AI 프롬프트 작성에 사용할 OpenAI 호환 텍스트 모델을 연결해 주세요
+          시나리오의 AI 프롬프트 작성과 만들기의 프롬프트 번역에 사용할 OpenAI 호환 텍스트 모델을
+          연결해 주세요
         </p>
         {loadError && (
           <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700">
@@ -252,6 +253,8 @@ export function AiSettingsSection() {
             API 키는 앱 서버에만 저장되고 브라우저에는 다시 표시되지 않아요
             <br />
             AI 프롬프트를 만들 때 장면 묘사, 화풍과 캐릭터 묘사가 이 서버로 전송돼요
+            <br />
+            프롬프트를 번역할 때는 입력한 프롬프트가 이 서버로 전송돼요
             <br />
             주소를 비우고 저장하면 저장한 연결을 지워요
           </p>

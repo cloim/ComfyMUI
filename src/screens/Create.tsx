@@ -20,8 +20,10 @@ import {
   ArrowUp,
   ArrowDown,
   Dices,
+  Languages,
 } from 'lucide-react';
 import { useStudio, useStudioSelector } from '../studio';
+import { translatePrompt } from '../ai-settings';
 import {
   hasPromptAttribute,
   togglePromptAttribute,
@@ -117,6 +119,32 @@ export default function Create() {
       setRandomizing(false);
     }
   }
+  const [translating, setTranslating] = useState(false);
+  const latestPositive = useRef(s.positive);
+  latestPositive.current = s.positive;
+
+  async function handleTranslatePrompt() {
+    const source = s.positive;
+    if (!/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(source)) {
+      notify('번역할 한국어 묘사를 입력해 주세요');
+      return;
+    }
+    setTranslating(true);
+    try {
+      const translated = await translatePrompt(source);
+      // Text typed while the model was working is never replaced.
+      if (latestPositive.current !== source) {
+        notify('번역 중 프롬프트가 바뀌어서 결과를 적용하지 않았어요');
+        return;
+      }
+      patch({ positive: translated });
+      notify('영문 프롬프트로 번역했어요');
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setTranslating(false);
+    }
+  }
   const [advanced, setAdvanced] = useState(false);
   const [advancedTab, setAdvancedTab] = useState('settings');
   function openAdvanced(tab = 'settings') {
@@ -178,6 +206,8 @@ export default function Create() {
               }
               onRandomAssemble={handleRandomPrompt}
               randomizing={randomizing}
+              onTranslate={handleTranslatePrompt}
+              translating={translating}
             />
             <label htmlFor="positive" className="sr-only">
               그리고 싶은 장면
@@ -423,6 +453,8 @@ function PromptAssembleBar({
   onToggleAttribute,
   onRandomAssemble,
   randomizing,
+  onTranslate,
+  translating,
 }: {
   elements: PromptAssembleElement[];
   selectedId: string;
@@ -431,6 +463,8 @@ function PromptAssembleBar({
   onToggleAttribute: (attr: string) => void;
   onRandomAssemble?: () => void;
   randomizing?: boolean;
+  onTranslate?: () => void;
+  translating?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -540,18 +574,33 @@ function PromptAssembleBar({
             aria-hidden="true"
           />
         </div>
-        {onRandomAssemble && (
-          <button
-            type="button"
-            aria-label="등록한 LoRA 기준 어셈블 랜덤 조합"
-            title="등록한 LoRA 기준 어셈블 랜덤 조합"
-            disabled={randomizing}
-            onClick={onRandomAssemble}
-            className="btn-secondary flex h-9 w-9 shrink-0 items-center justify-center p-0 text-olive hover:text-olive active:scale-95 disabled:opacity-50"
-          >
-            <Dices size={16} />
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onRandomAssemble && (
+            <button
+              type="button"
+              aria-label="등록한 LoRA 기준 어셈블 랜덤 조합"
+              title="등록한 LoRA 기준 어셈블 랜덤 조합"
+              disabled={randomizing}
+              onClick={onRandomAssemble}
+              className="btn-secondary flex h-9 w-9 shrink-0 items-center justify-center p-0 text-olive hover:text-olive active:scale-95 disabled:opacity-50"
+            >
+              <Dices size={16} />
+            </button>
+          )}
+          {onTranslate && (
+            <button
+              type="button"
+              aria-label="한국어 묘사를 영문 프롬프트로 번역"
+              title="한국어 묘사를 영문 프롬프트로 번역"
+              aria-busy={translating}
+              disabled={translating}
+              onClick={onTranslate}
+              className="btn-secondary flex h-9 w-9 shrink-0 items-center justify-center p-0 text-olive hover:text-olive active:scale-95 disabled:opacity-50"
+            >
+              {translating ? <Spinner /> : <Languages size={16} />}
+            </button>
+          )}
+        </div>
       </div>
       {open &&
         currentElement &&

@@ -133,6 +133,36 @@ it('reports authentication failures from the model list', async () => {
   expect((await res.json()).error.message).toContain('API 키');
 });
 
+it('translates a prompt with the saved connection and removes model reasoning', async () => {
+  const fetcher = vi.fn(async () =>
+    Response.json({
+      choices: [{ message: { content: '<think>plan</think>\n a cat on a roof, Mira_v2 ' } }],
+    }),
+  );
+  const { call } = await serve({}, fetcher);
+  expect((await call('/api/prompt/translate', 'POST', { text: '지붕 위 고양이' })).status).toBe(
+    503,
+  );
+  await call('/api/settings/ai', 'PUT', {
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    model: 'local-model',
+  });
+
+  const res = await call('/api/prompt/translate', 'POST', { text: '지붕 위 고양이, Mira_v2' });
+  expect(await res.json()).toEqual({ prompt: 'a cat on a roof, Mira_v2' });
+  const [url, init] = fetcher.mock.calls[0] as unknown as [URL, RequestInit];
+  expect(String(url)).toBe('http://127.0.0.1:11434/v1/chat/completions');
+  const body = JSON.parse(String(init.body));
+  expect(body.model).toBe('local-model');
+  expect(body.messages[1].content).toBe('지붕 위 고양이, Mira_v2');
+});
+
+it('rejects an empty translation request', async () => {
+  const { call, fetcher } = await serve();
+  expect((await call('/api/prompt/translate', 'POST', { text: '  ' })).status).toBe(400);
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
 it('explains that host.docker.internal works only inside a container', async () => {
   const fetcher = vi.fn(async () => {
     throw new TypeError('fetch failed', { cause: { code: 'ENOTFOUND' } });
