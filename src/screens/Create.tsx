@@ -469,10 +469,10 @@ function PromptAssembleBar({
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [menuStyle, setMenuStyle] = useState<{ left: number; top: number; width: number }>({
+  const [menuStyle, setMenuStyle] = useState<{ left: number; top: number; minWidth: number }>({
     left: 16,
     top: 16,
-    width: 200,
+    minWidth: 180,
   });
 
   const currentElement = elements.find((el) => el.id === selectedId) || elements[0];
@@ -484,20 +484,28 @@ function PromptAssembleBar({
     if (!open) return;
     const syncPosition = () => {
       const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const width = Math.max(180, Math.min(rect.width, window.innerWidth - 24));
+      const menu = menuRef.current;
+      if (!rect || !menu) return;
+      // The menu grows to its longest option, so it can be wider than a narrow trigger.
+      const available = window.innerWidth - 24;
+      const minWidth = Math.min(available, Math.max(180, rect.width));
+      const width = Math.min(available, Math.max(minWidth, menu.offsetWidth));
       const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.left));
-      const estimatedHeight = Math.min(240, (currentElement?.attributes.length || 1) * 34 + 12);
+      const height = menu.offsetHeight;
       const top =
-        rect.bottom + estimatedHeight + 12 > window.innerHeight && rect.top > estimatedHeight + 12
-          ? rect.top - estimatedHeight - 6
+        rect.bottom + height + 12 > window.innerHeight && rect.top > height + 12
+          ? rect.top - height - 6
           : rect.bottom + 6;
-      setMenuStyle({ left, top, width });
+      setMenuStyle({ left, top, minWidth });
     };
     syncPosition();
+    // A selected option turns bold and can change the menu's size.
+    const resizeObserver = new ResizeObserver(syncPosition);
+    if (menuRef.current) resizeObserver.observe(menuRef.current);
     window.addEventListener('resize', syncPosition);
     window.addEventListener('scroll', syncPosition, true);
     return () => {
+      resizeObserver.disconnect();
       window.removeEventListener('resize', syncPosition);
       window.removeEventListener('scroll', syncPosition, true);
     };
@@ -612,7 +620,7 @@ function PromptAssembleBar({
             aria-label={`${currentElement.name} 속성 목록`}
             data-ui-audit-overlay
             style={menuStyle}
-            className="fixed z-[2100] flex max-h-60 flex-col gap-0.5 overflow-y-auto rounded-lg border border-line bg-white p-1 shadow-xl"
+            className="fixed z-[2100] flex max-h-60 w-max max-w-[calc(100vw-24px)] flex-col gap-0.5 overflow-y-auto rounded-lg border border-line bg-white p-1 shadow-xl"
           >
             {currentElement.attributes.map((attr) => {
               const active = hasPromptAttribute(positive, attr);
@@ -627,7 +635,7 @@ function PromptAssembleBar({
                     active ? 'bg-lime/25 font-semibold text-olive' : 'text-ink hover:bg-paper'
                   }`}
                 >
-                  <span className="min-w-0 truncate">{attr}</span>
+                  <span className="min-w-0 break-words">{attr}</span>
                   <span
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                       active ? 'border-olive bg-olive text-white' : 'border-line bg-white'
