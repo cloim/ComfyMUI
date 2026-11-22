@@ -21,9 +21,18 @@ import {
   ArrowDown,
   Dices,
   Languages,
+  X,
 } from 'lucide-react';
 import { useStudio, useStudioSelector } from '../studio';
 import { translatePrompt } from '../ai-settings';
+import {
+  loadTranslationPair,
+  pairAfterEdit,
+  pairAfterTranslate,
+  saveTranslationPair,
+  swapTranslationPair,
+  type TranslationPair,
+} from '../prompt-translation';
 import {
   hasPromptAttribute,
   togglePromptAttribute,
@@ -122,6 +131,23 @@ export default function Create() {
   const [translating, setTranslating] = useState(false);
   const latestPositive = useRef(s.positive);
   latestPositive.current = s.positive;
+  const [translationPair, setTranslationPair] = useState<TranslationPair | null>(
+    loadTranslationPair,
+  );
+  useEffect(() => saveTranslationPair(translationPair), [translationPair]);
+  const visiblePair = translationPair?.current === s.positive ? translationPair : null;
+
+  function editPositive(next: string) {
+    setTranslationPair((pair) => pairAfterEdit(pair, s.positive, next));
+    patch({ positive: next });
+  }
+
+  function swapTranslation() {
+    if (!visiblePair) return;
+    const next = swapTranslationPair(visiblePair);
+    setTranslationPair(next);
+    patch({ positive: next.current });
+  }
 
   async function handleTranslatePrompt() {
     const source = s.positive;
@@ -137,6 +163,7 @@ export default function Create() {
         notify('번역 중 프롬프트가 바뀌어서 결과를 적용하지 않았어요');
         return;
       }
+      setTranslationPair((pair) => pairAfterTranslate(pair, source, translated));
       patch({ positive: translated });
       notify('영문 프롬프트로 번역했어요');
     } catch (e) {
@@ -201,9 +228,7 @@ export default function Create() {
               selectedId={selectedAssembleId}
               onSelectId={setSelectedAssembleId}
               positive={s.positive}
-              onToggleAttribute={(attr) =>
-                patch({ positive: togglePromptAttribute(s.positive, attr) })
-              }
+              onToggleAttribute={(attr) => editPositive(togglePromptAttribute(s.positive, attr))}
               onRandomAssemble={handleRandomPrompt}
               randomizing={randomizing}
               onTranslate={handleTranslatePrompt}
@@ -217,12 +242,43 @@ export default function Create() {
               id="positive"
               className="field min-h-24 resize-y leading-relaxed"
               value={s.positive}
-              onChange={(e) => patch({ positive: e.target.value })}
+              onChange={(e) => editPositive(e.target.value)}
               placeholder="어떤 장면을 만들고 싶으세요?"
             />
+            {visiblePair && (
+              <div className="mt-2 rounded-lg bg-paper px-2.5 py-1.5 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-muted">
+                    {visiblePair.showing === 'translated' ? '한국어 원문' : '영문 번역'}
+                  </span>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={swapTranslation}
+                      className="flex min-h-8 items-center gap-1 rounded-md px-2 font-semibold text-olive hover:bg-white active:scale-95"
+                    >
+                      <ArrowLeftRight size={14} />
+                      {visiblePair.showing === 'translated' ? '원문으로 전환' : '번역문으로 전환'}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="보관한 번역 닫기"
+                      title="보관한 번역 닫기"
+                      onClick={() => setTranslationPair(null)}
+                      className="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-white hover:text-ink active:scale-95"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+                <p className="max-h-16 overflow-y-auto whitespace-pre-wrap break-words pb-1 leading-relaxed text-ink">
+                  {visiblePair.other}
+                </p>
+              </div>
+            )}
             <RecentPromptHelper
               value={s.positive}
-              onChange={(val) => patch({ positive: val })}
+              onChange={editPositive}
               textareaRef={promptTextareaRef}
             />
             <button
