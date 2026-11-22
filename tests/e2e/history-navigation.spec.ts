@@ -1,7 +1,33 @@
 import { test, expect, type Page } from '@playwright/test';
+import { defaults, type Job } from '../../src/domain';
+
+const firstImageTime = 1800000000000;
+const firstJob: Job = {
+  id: 'prompt-first',
+  requestToken: 'request-first',
+  base: '/comfy',
+  status: 'complete',
+  progress: 100,
+  createdAt: firstImageTime - 30_000,
+  startedAt: firstImageTime - 13_000,
+  completedAt: firstImageTime - 500,
+  settings: { ...defaults, positive: '슬라이드 첫 장' },
+  images: [{ filename: 'history-0.png', subfolder: '', type: 'output' }],
+};
 
 test.beforeEach(async ({ page }) => {
   // Keep these navigation tests independent of saved settings and generation services.
+  await page.addInitScript(
+    (job) => localStorage.setItem('cm-jobs', JSON.stringify([job])),
+    firstJob,
+  );
+  const deletedFiles = new Set<string>();
+  await page.route('**/api/outputs/delete', (route) => {
+    const files = route.request().postDataJSON().files as { filename: string }[];
+    const deleted = files.map((file) => file.filename);
+    for (const filename of deleted) deletedFiles.add(filename);
+    return route.fulfill({ json: { deleted, missing: [], failed: [] } });
+  });
   await page.route('**/api/state', (route) =>
     route.fulfill({
       json:
@@ -18,21 +44,24 @@ test.beforeEach(async ({ page }) => {
     route.fulfill({
       json: {
         available: true,
-        items: ['슬라이드 첫 장', '제외할 장면', '슬라이드 마지막 장'].map((positive, i) => ({
-          filename: `history-${i}.png`,
-          subfolder: '',
-          type: 'output',
-          mtime: 1800000000000 - i * 1000,
-          size: 100,
-          settings: {
-            positive,
-            seed: i + 100,
-            model: 'Flux1.D/test-model.safetensors',
-            architecture: 'flux',
-            width: 512,
-            height: 768,
-          },
-        })),
+        items: ['슬라이드 첫 장', '제외할 장면', '슬라이드 마지막 장']
+          .map((positive, i) => ({
+            filename: `history-${i}.png`,
+            subfolder: '',
+            type: 'output',
+            mtime: firstImageTime - i * 1000,
+            size: i === 0 ? 1_572_864 : 100,
+            requestToken: i === 0 ? firstJob.requestToken : undefined,
+            settings: {
+              positive,
+              seed: i + 100,
+              model: 'Flux1.D/test-model.safetensors',
+              architecture: 'flux',
+              width: 512,
+              height: 768,
+            },
+          }))
+          .filter((file) => !deletedFiles.has(file.filename)),
       },
     }),
   );
@@ -56,9 +85,16 @@ test('history arrows and keys follow filtered images and reuse the displayed set
   const previous = dialog.getByRole('button', { name: '이전 이미지', exact: true });
   const next = dialog.getByRole('button', { name: '다음 이미지', exact: true });
   await expect(dialog.getByRole('status')).toHaveText('1 / 2');
+  await expect(dialog.getByText('최근 생성', { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText('생성 소요 시간', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('12.5초', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('파일 크기', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('1.5 MB', { exact: true })).toBeVisible();
   await expect(previous).toBeDisabled();
   await next.click();
   await expect(dialog).toContainText('슬라이드 마지막 장');
+  await expect(dialog.getByText('정보 없음', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('100 B', { exact: true })).toBeVisible();
   await expect(dialog.getByRole('img', { name: '생성한 이미지', exact: true })).toHaveAttribute(
     'src',
     /history-2.png/,
@@ -78,6 +114,22 @@ test('history arrows and keys follow filtered images and reuse the displayed set
   await expect(page.getByLabel('그리고 싶은 장면', { exact: true })).toHaveValue(
     '슬라이드 마지막 장',
   );
+});
+
+test('history without a gallery index reads the original size from image headers', async ({
+  page,
+}) => {
+  await page.route('**/api/gallery', (route) => route.fulfill({ json: { available: false } }));
+  await page.route('**/comfy/view?*', (route) =>
+    route.request().method() === 'HEAD'
+      ? route.fulfill({ headers: { 'content-type': 'image/png', 'content-length': '2048' } })
+      : route.fallback(),
+  );
+  await page.reload();
+  await page.getByRole('button', { name: '완료 이미지 상세 보기' }).click();
+  const dialog = page.getByRole('dialog', { name: '생성 기록', exact: true });
+  await expect(dialog.getByText('12.5초', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('2 KB', { exact: true })).toBeVisible();
 });
 
 async function touchSwipe(page: Page, dx: number, dy = 0) {
@@ -167,18 +219,6 @@ test('detail modal displays delete icon button on top right of image and trigger
 test('deleting image in detail modal shows next image, or closes modal if no next image', async ({
   page,
 }) => {
-  await page.route('**/api/outputs/delete', async (route) => {
-    const postData = route.request().postDataJSON();
-    const filenames = (postData?.files || []).map((f: { filename: string }) => f.filename);
-    await route.fulfill({
-      json: {
-        deleted: filenames,
-        missing: [],
-        failed: [],
-      },
-    });
-  });
-
   // Open the first image
   await page.getByRole('button', { name: '완료 이미지 상세 보기' }).first().click();
   const dialog = page.getByRole('dialog', { name: '생성 기록', exact: true });

@@ -1,20 +1,107 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { imageUrl } from '../api';
 import type { Job } from '../domain';
+import { formatBytes } from '../lora-manager';
 import { Result } from './Result';
+
+export function HistoryResult({
+  job,
+  durationMs,
+  indexedSize,
+  onDelete,
+}: {
+  job: Job;
+  durationMs: number | null;
+  indexedSize?: number;
+  onDelete: () => void;
+}) {
+  const image = job.status === 'complete' ? job.images[0] : undefined;
+  const hasIndexedSize = indexedSize != null && Number.isFinite(indexedSize) && indexedSize >= 0;
+  const sizeUrl = !hasIndexedSize && image ? imageUrl(job.base, image) : '';
+  const [measuredSize, setMeasuredSize] = useState<{ url: string; bytes: number | null }>();
+
+  useEffect(() => {
+    if (!sizeUrl) return;
+    const controller = new AbortController();
+    const storeSize = (bytes: number | null) => {
+      if (!controller.signal.aborted) setMeasuredSize({ url: sizeUrl, bytes });
+    };
+    // Direct ComfyUI connections can report the original size without transferring the image.
+    fetch(sizeUrl, {
+      method: 'HEAD',
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]),
+    })
+      .then((response) => {
+        const length = Number(response.headers.get('Content-Length') ?? NaN);
+        const isImage = response.headers.get('Content-Type')?.startsWith('image/');
+        const encoding = response.headers.get('Content-Encoding');
+        storeSize(
+          response.ok &&
+            isImage &&
+            (!encoding || encoding === 'identity') &&
+            Number.isSafeInteger(length) &&
+            length >= 0
+            ? length
+            : null,
+        );
+      })
+      .catch(() => storeSize(null));
+    return () => controller.abort();
+  }, [sizeUrl]);
+
+  const bytes = hasIndexedSize
+    ? indexedSize
+    : sizeUrl && measuredSize?.url === sizeUrl
+      ? measuredSize.bytes
+      : undefined;
+  const duration =
+    durationMs == null
+      ? '정보 없음'
+      : (durationMs / 1000).toLocaleString('ko-KR', {
+          style: 'unit',
+          unit: 'second',
+          maximumFractionDigits: 1,
+        });
+
+  return (
+    <Result
+      job={job}
+      onDelete={onDelete}
+      heading={
+        <dl className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+          <div className="flex items-baseline gap-1.5">
+            <dt>생성 소요 시간</dt>
+            <dd className="font-semibold text-ink">{duration}</dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <dt>파일 크기</dt>
+            <dd className="font-semibold text-ink">
+              {bytes != null
+                ? formatBytes(bytes)
+                : sizeUrl && bytes === undefined
+                  ? '확인 중'
+                  : '정보 없음'}
+            </dd>
+          </div>
+        </dl>
+      }
+    />
+  );
+}
 
 export function HistoryDetail({
   job,
   index,
   count,
   onNavigate,
-  onDelete,
+  children,
 }: {
   job: Job;
   index: number;
   count: number;
   onNavigate: (direction: -1 | 1) => void;
-  onDelete?: () => void;
+  children: ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const slide = useRef<HTMLDivElement>(null);
@@ -146,7 +233,7 @@ export function HistoryDetail({
       </div>
       <div className="overflow-hidden">
         <div ref={slide} className="[&_img]:touch-pan-y [&_img]:touch-pinch-zoom">
-          <Result key={job.id} job={job} onDelete={onDelete} />
+          {children}
         </div>
       </div>
     </div>

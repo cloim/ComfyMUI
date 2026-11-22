@@ -15,12 +15,12 @@ import { useStudio } from '../studio';
 import { type Job } from '../domain';
 import { imageUrl, thumbnailUrl } from '../api';
 import { Modal, Empty, IconButton, SelectControl, Spinner } from '../components/ui';
-import { HistoryDetail } from '../components/HistoryDetail';
-import { Result } from '../components/Result';
+import { HistoryDetail, HistoryResult } from '../components/HistoryDetail';
 import { CompareViewer } from '../components/CompareViewer';
 import { HeaderActions, HeaderActionButton } from '../components/HeaderActions';
 import { SetPreviewModal } from '../components/SetPreviewModal';
-import { splitBatches } from '../gallery';
+import { isGalleryJob, splitBatches } from '../gallery';
+import { getJobDurationMs } from '../estimate';
 import {
   galleryWindow,
   galleryRowHeight,
@@ -213,6 +213,32 @@ export default function Gallery() {
   const detail =
     jobs.find((j) => j.id === selected) ||
     (selected ? jobs.find((j) => j.id.startsWith(`${selected}#`)) : undefined);
+  const detailImage = detail?.images[0];
+  const detailFile =
+    detail && isGalleryJob(detail) && detailImage
+      ? gallery?.files.find(
+          (file) =>
+            file.mtime === detailImage.v &&
+            file.filename === detailImage.filename &&
+            file.subfolder === detailImage.subfolder,
+        )
+      : undefined;
+  const timingJob = detailFile
+    ? detailFile.requestToken &&
+      localJobs.find(
+        (job) =>
+          job.base === detail?.base && (job.requestToken || job.id) === detailFile.requestToken,
+      )
+    : detail;
+  const detailResult = detail && (
+    <HistoryResult
+      key={detail.id}
+      job={detail}
+      durationMs={timingJob ? getJobDurationMs(timingJob) : null}
+      indexedSize={detailFile?.size}
+      onDelete={() => setRemove(detail)}
+    />
+  );
   const imageJobs = shown.filter((j) => j.status === 'complete' && j.images.length > 0);
   const imageIndex = imageJobs.findIndex((j) => j.id === detail?.id);
   const isSelecting = selectedIds.size > 0;
@@ -628,10 +654,11 @@ export default function Gallery() {
                 const next = imageJobs[imageIndex + direction];
                 if (imageIndex >= 0 && next) setSelected(next.id);
               }}
-              onDelete={() => setRemove(detail)}
-            />
+            >
+              {detailResult}
+            </HistoryDetail>
           ) : (
-            <Result key={detail.id} job={detail} onDelete={() => setRemove(detail)} />
+            detailResult
           ))}
       </Modal>
 

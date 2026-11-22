@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Download,
   RotateCcw,
@@ -26,11 +26,13 @@ export function Result({
   job,
   fallback,
   compact = false,
+  heading,
   onDelete,
 }: {
   job?: Job;
   fallback?: Job;
   compact?: boolean;
+  heading?: ReactNode;
   onDelete?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -116,8 +118,8 @@ export function Result({
   return (
     <div className={`flex min-w-0 flex-col ${compact ? '' : 'gap-3.5'}`}>
       {!compact && (
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold">{job ? '최근 생성' : '생성 결과'}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          {heading ?? <h2 className="text-sm font-bold">{job ? '최근 생성' : '생성 결과'}</h2>}
           <span className="flex items-center gap-1.5 text-xs text-muted">
             <Clock3 size={13} />
             {job
