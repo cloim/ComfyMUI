@@ -1,4 +1,11 @@
-import { useState, useEffect, useLayoutEffect, useRef, type ComponentProps } from 'react';
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type ComponentProps,
+  type RefObject,
+} from 'react';
 import { createPortal } from 'react-dom';
 import {
   Box,
@@ -73,6 +80,61 @@ import {
   qualityProfiles,
 } from '../models';
 
+const POSITIVE_HEIGHT_KEY = 'cm-prompt-height';
+const NEGATIVE_HEIGHT_KEY = 'cm-negative-prompt-height';
+
+function loadTextareaHeight(key: string, min: number, max: number): number | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < min) return null;
+    return Math.min(Math.round(parsed), max);
+  } catch {
+    return null;
+  }
+}
+
+function saveTextareaHeight(key: string, height: number) {
+  try {
+    localStorage.setItem(key, String(height));
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+function usePersistedTextareaHeight(
+  ref: RefObject<HTMLTextAreaElement | null>,
+  key: string,
+  min: number,
+  max: number,
+  active = true,
+) {
+  const [height, setHeight] = useState<number | null>(() => loadTextareaHeight(key, min, max));
+  const lastSaved = useRef<number | null>(height);
+
+  useEffect(() => {
+    if (!active) return;
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (!el.style.height || el.offsetHeight === 0) return;
+      const raw = Number.parseFloat(el.style.height);
+      if (!Number.isFinite(raw)) return;
+      const clamped = Math.min(Math.max(Math.round(raw), min), max);
+      if (clamped !== lastSaved.current) {
+        lastSaved.current = clamped;
+        saveTextareaHeight(key, clamped);
+        setHeight(clamped);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, key, min, max, active]);
+
+  return height ? { height: `${height}px` } : undefined;
+}
+
 export default function Create() {
   const {
     settings: s,
@@ -96,6 +158,7 @@ export default function Create() {
     notify: state.notify,
   }));
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const negativeTextareaRef = useRef<HTMLTextAreaElement>(null);
   const loraListCache = useRef<LoraItem[] | null>(null);
   const [randomizing, setRandomizing] = useState(false);
 
@@ -192,6 +255,14 @@ export default function Create() {
   }
   const [addLora, setAddLora] = useState(false);
   const [negative, setNegative] = useState(false);
+  const positiveStyle = usePersistedTextareaHeight(promptTextareaRef, POSITIVE_HEIGHT_KEY, 96, 800);
+  const negativeStyle = usePersistedTextareaHeight(
+    negativeTextareaRef,
+    NEGATIVE_HEIGHT_KEY,
+    64,
+    600,
+    negative,
+  );
   const patch = (v: Partial<Generation>) => setSettings((s) => ({ ...s, ...v }));
   // The batch size control was removed; multiple images come from the 연속 queue instead.
   useEffect(() => {
@@ -253,6 +324,7 @@ export default function Create() {
               ref={promptTextareaRef}
               id="positive"
               className="field min-h-24 resize-y leading-relaxed"
+              style={positiveStyle}
               value={s.positive}
               onValueChange={editPositive}
               placeholder="어떤 장면을 만들고 싶으세요?"
@@ -307,8 +379,10 @@ export default function Create() {
                   네거티브 프롬프트
                 </label>
                 <DraftTextarea
+                  ref={negativeTextareaRef}
                   id="negative"
                   className="field mt-1.5 min-h-16 resize-y text-xs leading-relaxed"
+                  style={negativeStyle}
                   value={s.negative}
                   onValueChange={(v) => patch({ negative: v })}
                   placeholder="이미지에서 제외할 요소"

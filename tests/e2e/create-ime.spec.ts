@@ -61,3 +61,34 @@ test('번역 보관함이 열린 상태에서도 프롬프트 한글 IME 조합�
   await page.getByRole('button', { name: '원문으로 전환', exact: true }).click();
   await expect(prompt).toHaveValue('한글');
 });
+
+test('프롬프트 입력란의 조정된 높이가 새로고침 후에도 유지된다', async ({ page }) => {
+  await page.goto('/create');
+  const positive = page.locator('#positive');
+  await expect(positive).toBeVisible();
+
+  // Simulate user dragging the native vertical resize handle on positive prompt.
+  await positive.evaluate((el: HTMLTextAreaElement) => {
+    el.style.height = '240px';
+  });
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('cm-prompt-height')))
+    .toBe('240');
+
+  // Open negative prompt and resize it too.
+  await page.getByRole('button', { name: '네거티브 프롬프트' }).click();
+  const negative = page.locator('#negative');
+  await expect(negative).toBeVisible();
+  await negative.evaluate((el: HTMLTextAreaElement) => {
+    el.style.height = '150px';
+  });
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('cm-negative-prompt-height')))
+    .toBe('150');
+
+  // Reload and verify both heights are restored.
+  await page.reload();
+  await expect(positive).toHaveCSS('height', '240px');
+  await page.getByRole('button', { name: '네거티브 프롬프트' }).click();
+  await expect(page.locator('#negative')).toHaveCSS('height', '150px');
+});
