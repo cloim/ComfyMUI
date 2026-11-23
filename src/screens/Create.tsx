@@ -61,6 +61,7 @@ import {
 } from '../components/ui';
 import { Result } from '../components/Result';
 import { PromptHelper } from '../components/PromptHelper';
+import { DraftTextarea } from '../components/DraftField';
 import ModelPanel from '../components/ModelPanel';
 import { LoraPicker } from '../components/LoraPicker';
 import { fetchLoraList, extractLoraTriggerWords, type LoraItem } from '../lora-manager';
@@ -129,22 +130,33 @@ export default function Create() {
     }
   }
   const [translating, setTranslating] = useState(false);
+  const prevStorePositive = useRef(s.positive);
   const latestPositive = useRef(s.positive);
-  latestPositive.current = s.positive;
+  if (s.positive !== prevStorePositive.current) {
+    prevStorePositive.current = s.positive;
+    latestPositive.current = s.positive;
+  }
   const [translationPair, setTranslationPair] = useState<TranslationPair | null>(
     loadTranslationPair,
   );
   useEffect(() => saveTranslationPair(translationPair), [translationPair]);
-  const visiblePair = translationPair?.current === s.positive ? translationPair : null;
+  const visiblePair =
+    translationPair &&
+    (translationPair.current === s.positive || translationPair.current === latestPositive.current)
+      ? translationPair
+      : null;
 
   function editPositive(next: string) {
-    setTranslationPair((pair) => pairAfterEdit(pair, s.positive, next));
+    const previous = latestPositive.current;
+    latestPositive.current = next;
+    setTranslationPair((pair) => pairAfterEdit(pair, previous, next));
     patch({ positive: next });
   }
 
   function swapTranslation() {
     if (!visiblePair) return;
     const next = swapTranslationPair(visiblePair);
+    latestPositive.current = next.current;
     setTranslationPair(next);
     patch({ positive: next.current });
   }
@@ -237,12 +249,12 @@ export default function Create() {
             <label htmlFor="positive" className="sr-only">
               그리고 싶은 장면
             </label>
-            <textarea
+            <DraftTextarea
               ref={promptTextareaRef}
               id="positive"
               className="field min-h-24 resize-y leading-relaxed"
               value={s.positive}
-              onChange={(e) => editPositive(e.target.value)}
+              onValueChange={editPositive}
               placeholder="어떤 장면을 만들고 싶으세요?"
             />
             {visiblePair && (
@@ -294,11 +306,11 @@ export default function Create() {
                 <label htmlFor="negative" className="sr-only">
                   네거티브 프롬프트
                 </label>
-                <textarea
+                <DraftTextarea
                   id="negative"
                   className="field mt-1.5 min-h-16 resize-y text-xs leading-relaxed"
                   value={s.negative}
-                  onChange={(e) => patch({ negative: e.target.value })}
+                  onValueChange={(v) => patch({ negative: v })}
                   placeholder="이미지에서 제외할 요소"
                 />
               </>

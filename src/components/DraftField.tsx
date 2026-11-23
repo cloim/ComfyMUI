@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type InputHTMLAttributes,
-  type TextareaHTMLAttributes,
-} from 'react';
+import { useEffect, useRef, useState, type ComponentPropsWithRef } from 'react';
 
 // Text fields bound to the shared studio store.
 // The store publishes a new value one render after the keystroke. A controlled field that
@@ -42,7 +36,7 @@ export function DraftInput({
   value,
   onValueChange,
   ...rest
-}: DraftProps<InputHTMLAttributes<HTMLInputElement>>) {
+}: DraftProps<ComponentPropsWithRef<'input'>>) {
   const [draft, change] = useDraft(value, onValueChange);
   return <input {...rest} value={draft} onChange={(e) => change(e.target.value)} />;
 }
@@ -51,7 +45,7 @@ export function DraftTextarea({
   value,
   onValueChange,
   ...rest
-}: DraftProps<TextareaHTMLAttributes<HTMLTextAreaElement>>) {
+}: DraftProps<ComponentPropsWithRef<'textarea'>>) {
   const [draft, change] = useDraft(value, onValueChange);
   return <textarea {...rest} value={draft} onChange={(e) => change(e.target.value)} />;
 }
