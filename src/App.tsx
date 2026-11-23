@@ -88,21 +88,62 @@ function Shell() {
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     const viewport = window.visualViewport;
-    const sync = () => {
-      if (viewport && viewport.scale === 1) {
-        document.documentElement.style.setProperty('--app-height', `${viewport.height}px`);
-        setKeyboardOpen(window.innerHeight - viewport.height > 140);
+    let baseWidth = window.innerWidth;
+    let baseHeight = Math.max(window.innerHeight, viewport?.height ?? 0);
+    const isEditableFocused = () => {
+      const el = document.activeElement;
+      if (!(el instanceof HTMLElement)) return false;
+      if (el.tagName === 'TEXTAREA' || el.isContentEditable) return true;
+      if (el.tagName === 'INPUT') {
+        const type = (el as HTMLInputElement).type;
+        return ![
+          'button',
+          'checkbox',
+          'color',
+          'file',
+          'hidden',
+          'image',
+          'radio',
+          'range',
+          'reset',
+          'submit',
+        ].includes(type);
       }
+      return false;
+    };
+    const sync = () => {
+      if (viewport && viewport.scale !== 1) return;
+      const width = window.innerWidth;
+      const height = viewport ? viewport.height : window.innerHeight;
+      const offsetTop = viewport ? Math.max(0, viewport.offsetTop) : 0;
+      if (width !== baseWidth || height > baseHeight) {
+        baseWidth = width;
+        baseHeight = Math.max(window.innerHeight, height);
+      }
+      document.documentElement.style.setProperty('--app-height', `${height}px`);
+      document.documentElement.style.setProperty('--app-offset-top', `${offsetTop}px`);
+      const visualShrink = window.innerHeight - height > 140;
+      const layoutShrink = isEditableFocused() && baseHeight - height > 140;
+      setKeyboardOpen(visualShrink || layoutShrink);
     };
     sync();
     viewport?.addEventListener('resize', sync);
+    viewport?.addEventListener('scroll', sync);
+    window.addEventListener('resize', sync);
+    window.addEventListener('focusin', sync);
+    window.addEventListener('focusout', sync);
     return () => {
       viewport?.removeEventListener('resize', sync);
+      viewport?.removeEventListener('scroll', sync);
+      window.removeEventListener('resize', sync);
+      window.removeEventListener('focusin', sync);
+      window.removeEventListener('focusout', sync);
       document.documentElement.style.removeProperty('--app-height');
+      document.documentElement.style.removeProperty('--app-offset-top');
     };
   }, []);
   return (
-    <div className="flex h-[var(--app-height,100dvh)] min-h-0 bg-paper text-ink">
+    <div className="fixed inset-x-0 top-[var(--app-offset-top,0px)] flex h-[var(--app-height,100dvh)] min-h-0 bg-paper text-ink">
       <a
         href="#main"
         className="sr-only z-[2000] rounded-lg bg-ink p-3 text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4"

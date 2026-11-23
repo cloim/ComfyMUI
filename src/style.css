@@ -22,6 +22,10 @@
   * {
     -webkit-tap-highlight-color: transparent;
   }
+  html,
+  body {
+    @apply bg-paper;
+  }
   body {
     @apply m-0 break-keep font-sans antialiased;
   }
