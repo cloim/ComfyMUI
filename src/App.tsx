@@ -11,6 +11,7 @@ import {
   Check,
   Box,
   Clapperboard,
+  Film,
 } from 'lucide-react';
 import { StudioProvider, useStudio } from './studio';
 import { IconButton } from './components/ui';
@@ -23,8 +24,10 @@ import Settings from './screens/Settings';
 import { usePwa } from './pwa';
 import { SyncConflicts } from './components/SyncConflicts';
 const Scenario = lazy(() => import('./screens/Scenario'));
+const Video = lazy(() => import('./screens/Video'));
 const nav = [
   { path: '/create', label: '만들기', icon: Sparkles },
+  { path: '/video', label: '영상', icon: Film },
   { path: '/scenario', label: '시나리오', icon: Clapperboard },
   { path: '/models', label: '모델', icon: Box },
   { path: '/gallery', label: '기록', icon: Images },
@@ -188,8 +191,8 @@ function Shell() {
             >
               {page?.label || '만들기'}
             </h1>
-            {active && location.pathname !== '/create' && (
-              <Link to="/create" className="chip text-olive">
+            {active && location.pathname !== (active.video ? '/video' : '/create') && (
+              <Link to={active.video ? '/video' : '/create'} className="chip text-olive">
                 생성 {active.progress}%
               </Link>
             )}
@@ -247,6 +250,20 @@ function Shell() {
           <HeaderSlotProvider value={headerSlot}>
             <Routes>
               <Route path="/create" element={<Create />} />
+              <Route
+                path="/video"
+                element={
+                  <Suspense
+                    fallback={
+                      <p role="status" className="p-4 text-xs">
+                        영상 화면을 불러오는 중
+                      </p>
+                    }
+                  >
+                    <Video />
+                  </Suspense>
+                }
+              />
               <Route
                 path="/scenario"
                 element={

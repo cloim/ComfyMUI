@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { imageUrl, thumbnailUrl } from '../src/api';
+import { completedJobPatch, imageUrl, thumbnailUrl } from '../src/api';
 import { validateThumbParams } from '../src/thumb';
 
 describe('Thumbnail API and security parameter validation', () => {
@@ -38,5 +38,20 @@ describe('Thumbnail API and security parameter validation', () => {
 
     // Invalid type
     expect(validateThumbParams('test.png', '', 'invalid')).toBe(false);
+  });
+});
+
+it('uses the MP4 from SaveVideo even when ComfyUI reports it in images', () => {
+  const video = { filename: 'clip.mp4', subfolder: 'video', type: 'output' };
+  const image = { filename: 'still.png', subfolder: '', type: 'output' };
+  const item = { outputs: { '1': { images: [image, video] } } };
+
+  expect(completedJobPatch(item, true)).toMatchObject({
+    status: 'complete',
+    videos: [video],
+  });
+  expect(completedJobPatch(item)).toMatchObject({
+    status: 'complete',
+    images: [image],
   });
 });

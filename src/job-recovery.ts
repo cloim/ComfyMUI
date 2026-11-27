@@ -31,7 +31,7 @@ export function jobStageLabel(job: Job): string {
   if (job.status === 'submitting') return '요청 전송';
   if (job.status === 'queued') return '서버 대기';
   if (job.status === 'running') {
-    if (job.stage === 'saving') return '이미지 변환·저장';
+    if (job.stage === 'saving') return job.video ? '영상 변환과 저장' : '이미지 변환·저장';
     if (job.stage === 'sampling' || job.progress > 0) return '샘플링';
     return '모델 준비';
   }

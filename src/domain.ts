@@ -139,6 +139,8 @@ export type Job = {
   status: 'submitting' | 'queued' | 'running' | 'complete' | 'error' | 'cancelled';
   progress: number;
   images: ImageRef[];
+  video?: true;
+  videos?: ImageRef[];
   livePreview?: string;
   error?: string;
   favorite?: boolean;

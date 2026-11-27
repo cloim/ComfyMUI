@@ -1,4 +1,4 @@
-import { request } from './api';
+import { uploadImage } from './api';
 import {
   hasPromptAttribute,
   newId,
@@ -580,30 +580,8 @@ export function pruneDeletedOutputs(
 }
 
 export async function uploadSceneReference(base: string, file: File): Promise<SceneImage> {
-  if (
-    !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
-    file.size > 20 * 1024 * 1024
-  ) {
-    throw new Error('20MB 이하의 JPG, PNG 또는 WebP 이미지를 선택해 주세요');
-  }
   const id = newId();
-  const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[file.type];
-  const body = new FormData();
-  body.set('image', file, `${id}.${extension}`);
-  body.set('subfolder', 'scenario');
-  body.set('type', 'input');
-  const uploaded = await request<{ name?: string; subfolder?: string; type?: string }>(
-    base,
-    '/upload/image',
-    { method: 'POST', body },
-  );
-  if (!uploaded.name || uploaded.type !== 'input')
-    throw new Error('업로드한 이미지를 확인해 주세요');
-  return {
-    id,
-    base,
-    image: { filename: uploaded.name, subfolder: uploaded.subfolder || '', type: uploaded.type },
-  };
+  return { id, base, image: await uploadImage(base, file, 'scenario', id) };
 }
 
 export async function convertScenarioPrompt(input: ReturnType<typeof scenarioPromptInput>) {

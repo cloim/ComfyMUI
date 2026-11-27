@@ -60,12 +60,13 @@ export default function Gallery() {
   // History is the ComfyUI output folder. Generations still running are shown first.
   // Without the folder (direct ComfyUI address) the local records are used.
   const jobs = useMemo(() => {
-    if (!gallery) return splitBatches(localJobs);
+    const imageJobs = localJobs.filter((job) => !job.video);
+    if (!gallery) return splitBatches(imageJobs);
     // A running job whose image is already in the folder is shown only once, as the file.
     const written = (j: Job) =>
       (writtenTimes.get(JSON.stringify([j.settings.seed, j.settings.positive])) || 0) >=
       j.createdAt - 60_000;
-    const active = localJobs.filter(
+    const active = imageJobs.filter(
       (j) => ['submitting', 'queued', 'running'].includes(j.status) && !written(j),
     );
     return [...active, ...fileJobs];

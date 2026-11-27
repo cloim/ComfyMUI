@@ -1,4 +1,4 @@
-import type { ImageRef, ObjectInfo, Workflow } from './domain';
+import type { ImageRef, Job, ObjectInfo, Workflow } from './domain';
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -101,12 +101,14 @@ export const submit = (
   client_id: string,
   pngInfo?: Record<string, unknown>,
   requestToken?: string,
+  promptId?: string,
 ) =>
   request<{ prompt_id: string }>(base, '/prompt', {
     method: 'POST',
     body: JSON.stringify({
       prompt,
       client_id,
+      ...(promptId && { prompt_id: promptId }),
       extra_data: {
         ...(pngInfo ? { extra_pnginfo: pngInfo } : {}),
         ...(requestToken ? { comfymui_request_id: requestToken } : {}),
@@ -114,13 +116,74 @@ export const submit = (
     }),
   });
 export type HistoryItem = {
-  outputs: Record<string, { images?: ImageRef[] }>;
+  outputs: Record<string, { images?: ImageRef[]; videos?: ImageRef[]; gifs?: ImageRef[] }>;
   status?: {
     completed: boolean;
     status_str: string;
     messages?: [string, Record<string, unknown>][];
   };
 };
+export function completedJobPatch(item: HistoryItem, video?: true): Partial<Job> | undefined {
+  if (item.status?.status_str === 'error') {
+    return {
+      status: 'error',
+      error: JSON.stringify(item.status.messages || '서버 생성 오류'),
+    };
+  }
+  const finishedAt = Date.now();
+  const files = Object.values(item.outputs || {})
+    .flatMap((node) =>
+      video
+        ? [...(node.videos || []), ...(node.gifs || []), ...(node.images || [])]
+        : node.images || [],
+    )
+    .filter((file) =>
+      video
+        ? file.type === 'output' && /\.mp4$/i.test(file.filename)
+        : !/\.mp4$/i.test(file.filename),
+    )
+    .map((file) => ({ ...file, v: finishedAt }));
+  if (files.length) {
+    return {
+      status: 'complete',
+      progress: 100,
+      error: undefined,
+      ...(video ? { videos: files } : { images: files }),
+    };
+  }
+  if (item.status?.completed) {
+    return {
+      status: 'error',
+      error: video
+        ? '생성은 끝났지만 MP4 파일이 없습니다. SaveVideo 출력을 확인해 주세요'
+        : '생성은 끝났지만 이미지 출력이 없습니다. SaveImage 출력을 확인해 주세요',
+    };
+  }
+}
+
+export async function uploadImage(
+  base: string,
+  file: File,
+  subfolder: string,
+  id: string,
+): Promise<ImageRef> {
+  const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[file.type];
+  if (!extension || file.size > 20 * 1024 * 1024) {
+    throw new Error('20MB 이하의 JPG, PNG 또는 WebP 이미지를 선택해 주세요');
+  }
+  const body = new FormData();
+  body.set('image', file, `${id}.${extension}`);
+  body.set('subfolder', subfolder);
+  body.set('type', 'input');
+  const uploaded = await request<{ name?: string; subfolder?: string; type?: string }>(
+    base,
+    '/upload/image',
+    { method: 'POST', body },
+  );
+  if (!uploaded.name || uploaded.type !== 'input')
+    throw new Error('업로드한 이미지를 확인해 주세요');
+  return { filename: uploaded.name, subfolder: uploaded.subfolder || '', type: uploaded.type };
+}
 export type Queue = {
   queue_running: [number, string, ...unknown[]][];
   queue_pending: [number, string, ...unknown[]][];

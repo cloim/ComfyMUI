@@ -573,7 +573,7 @@ export default function Create() {
 function RecentPromptHelper(props: Omit<ComponentProps<typeof PromptHelper>, 'jobs'>) {
   const recent = useRef<Job[]>([]);
   const jobs = useStudioSelector((state) => {
-    const next = state.jobs.slice(0, 50);
+    const next = state.jobs.filter((job) => !job.video).slice(0, 50);
     // Autocomplete depends only on recent prompt text, never on image progress.
     if (
       recent.current.length !== next.length ||
@@ -796,10 +796,11 @@ function PromptAssembleBar({
 }
 function PreviewPanel() {
   const jobs = useStudioSelector((state) => state.jobs);
+  const latestImage = jobs.find((job) => !job.video);
   const lastComplete = jobs.find((j) => j.status === 'complete' && j.images.length > 0);
   return (
     <div className="rounded-xl border border-line bg-white p-3.5 sm:p-4">
-      <Result key={jobs[0]?.id || 'sample'} job={jobs[0]} fallback={lastComplete} />
+      <Result key={latestImage?.id || 'sample'} job={latestImage} fallback={lastComplete} />
     </div>
   );
 }

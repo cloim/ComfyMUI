@@ -27,6 +27,7 @@ import {
   type DefaultPrompts,
   type PromptAssembleElement,
   type Generation,
+  type ImageRef,
   type Preset,
   type Job,
   type QueueItem,
@@ -38,12 +39,15 @@ import {
   normalizeBase,
   request,
   submit,
+  completedJobPatch,
+  uploadImage,
   websocketUrl,
   imageUrl,
   ApiError,
   type Queue,
   type HistoryItem,
 } from './api';
+import { buildLtxWorkflow, ltxModels, type LtxInput } from './ltx';
 import { startConnection } from './connection';
 import {
   catalog,
@@ -565,7 +569,7 @@ function useStudioState() {
       socket: WebSocket,
       timer: ReturnType<typeof setTimeout>,
       attempts = 0;
-    async function fetchHistoryOnce(promptId: string, base: string) {
+    async function fetchHistoryOnce({ id: promptId, base, video }: Job) {
       if (pendingHistoryRef.current.has(promptId)) return;
       pendingHistoryRef.current.add(promptId);
       try {
@@ -574,30 +578,8 @@ function useStudioState() {
           `/history/${encodeURIComponent(promptId)}`,
         );
         const item = h[promptId];
-        if (item) {
-          if (item.status?.status_str === 'error') {
-            updateJob(promptId, {
-              status: 'error',
-              error: JSON.stringify(item.status.messages || '서버 생성 오류'),
-            });
-            return;
-          }
-          const finishedAt = Date.now();
-          const images = Object.values(item.outputs || {})
-            .flatMap((n) => n.images || [])
-            .map((image) => ({ ...image, v: finishedAt }));
-          if (item.status?.completed || images.length) {
-            updateJob(
-              promptId,
-              images.length
-                ? { status: 'complete', progress: 100, images }
-                : {
-                    status: 'error',
-                    error: '생성은 끝났지만 이미지 출력이 없습니다. SaveImage 출력을 확인해 주세요',
-                  },
-            );
-          }
-        }
+        const patch = item && completedJobPatch(item, video);
+        if (patch) updateJob(promptId, patch);
       } catch {
         /* Poll fallback will retry */
       } finally {
@@ -631,10 +613,13 @@ function useStudioState() {
               return;
             const parsed = parseBinaryPreview(event.data);
             if (parsed) {
-              const runningJob = jobRef.current.find((j) =>
-                ['running', 'queued', 'submitting'].includes(j.status),
-              );
-              if (runningJob) {
+              const onServer = (j: Job) => j.base === connection.base;
+              const runningJob =
+                jobRef.current.find((j) => onServer(j) && j.status === 'running') ||
+                jobRef.current.find(
+                  (j) => onServer(j) && ['queued', 'submitting'].includes(j.status),
+                );
+              if (runningJob && !runningJob.video) {
                 lastPreviewAt.current = now;
                 const url = URL.createObjectURL(parsed.blob);
                 const prevUrl = activePreviewBlobRef.current;
@@ -674,7 +659,7 @@ function useStudioState() {
             const graph = buildWorkflow(j.settings);
             const node = graph[String(data.node)]?.class_type || '';
             updateJob(j.id, {
-              stage: /SaveImage|VAEDecode|ImageScale|ImageUpscale/i.test(node)
+              stage: /SaveImage|SaveVideo|CreateVideo|VAEDecode|ImageScale|ImageUpscale/i.test(node)
                 ? 'saving'
                 : /sampler/i.test(node)
                   ? 'sampling'
@@ -682,7 +667,7 @@ function useStudioState() {
             });
           }
           if ((type === 'executing' && data.node === null) || type === 'executed') {
-            void fetchHistoryOnce(j.id, j.base);
+            void fetchHistoryOnce(j);
           }
           if (type === 'execution_error' || type === 'execution_interrupted')
             updateJob(j.id, {
@@ -726,28 +711,8 @@ function useStudioState() {
             if (stopped) return;
             const item = h[j.id];
             if (item) {
-              if (item.status?.status_str === 'error') {
-                updateJob(j.id, {
-                  status: 'error',
-                  error: JSON.stringify(item.status.messages || '서버 생성 오류'),
-                });
-                continue;
-              }
-              const finishedAt = Date.now();
-              const images = Object.values(item.outputs || {})
-                .flatMap((n) => n.images || [])
-                .map((image) => ({ ...image, v: finishedAt }));
-              if (item.status?.completed || images.length)
-                updateJob(
-                  j.id,
-                  images.length
-                    ? { status: 'complete', progress: 100, images }
-                    : {
-                        status: 'error',
-                        error:
-                          '생성은 끝났지만 이미지 출력이 없습니다. SaveImage 출력을 확인해 주세요',
-                      },
-                );
+              const patch = completedJobPatch(item, j.video);
+              if (patch) updateJob(j.id, patch);
             } else {
               let q = queues.get(j.base);
               if (!q) {
@@ -800,6 +765,7 @@ function useStudioState() {
     input: Generation,
     isBatch = false,
     scenario?: Job['scenario'],
+    videoId?: string,
   ): Promise<boolean> {
     if (!online) {
       notify('네트워크 연결 후 다시 생성해 주세요');
@@ -820,7 +786,7 @@ function useStudioState() {
       }
     }
     if (snapshot.random && !snapshot.workflow) snapshot.seed = randomSeed();
-    const tempId = newId();
+    const tempId = videoId || newId();
     let workflow;
     try {
       workflow = buildWorkflow(snapshot);
@@ -830,7 +796,8 @@ function useStudioState() {
       notify((e as Error).message);
       return false;
     }
-    if (!snapshot.upscale && !isBatch && !scenario) setSettings(reusableSettings(snapshot));
+    if (!snapshot.upscale && !isBatch && !scenario && !videoId)
+      setSettings(reusableSettings(snapshot));
     setLivePreviewUrl('');
     lastPreviewAt.current = 0;
     const job: Job = {
@@ -843,6 +810,7 @@ function useStudioState() {
       images: [],
       requestToken: tempId,
       ...(scenario && { scenario }),
+      ...(videoId && { video: true }),
     };
     setJobs((all) => trimJobsPreservingFavorites([job, ...all], 500));
 
@@ -856,6 +824,7 @@ function useStudioState() {
           comfymui_request_id: tempId,
         },
         tempId,
+        videoId,
       );
       if (!response.prompt_id) throw new Error('서버의 작업 번호를 확인할 수 없습니다');
       updateJob(tempId, { id: response.prompt_id, status: 'queued' });
@@ -882,6 +851,55 @@ function useStudioState() {
         notify('생성 요청을 서버에 보냈어요');
       }
       return ok;
+    } finally {
+      submitLock.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function generateVideo(input: LtxInput, source?: File | { base: string; image: ImageRef }) {
+    if (submitLock.current) return false;
+    if (!online || connectionState !== 'connected' || !info) {
+      notify('ComfyUI 서버 연결을 확인해 주세요');
+      return false;
+    }
+    const { models } = ltxModels(info);
+    if (!models || !input.prompt.trim()) return false;
+    submitLock.current = true;
+    setBusy(true);
+    try {
+      const id = newId();
+      let image: ImageRef | undefined;
+      if (source instanceof File) {
+        image = await uploadImage(connection.base, source, 'video', id);
+      } else if (source) {
+        if (source.base !== connection.base)
+          throw new Error('원본 이미지가 저장된 ComfyUI 서버에 연결해 주세요');
+        image = source.image;
+      }
+      const seed = randomSeed();
+      return await submitSingleJob(
+        {
+          ...defaults,
+          model: models.model,
+          modelLoader: 'UNETLoader',
+          clip1: models.encoder,
+          vae: models.videoVae,
+          positive: input.prompt.trim(),
+          negative: '',
+          width: input.size.width,
+          height: input.size.height,
+          seed,
+          random: false,
+          workflow: buildLtxWorkflow(input, models, seed, `video/ComfyMUI_${id}`, image),
+        },
+        false,
+        undefined,
+        id,
+      );
+    } catch (error) {
+      notify((error as Error).message);
+      return false;
     } finally {
       submitLock.current = false;
       setBusy(false);
@@ -978,7 +996,19 @@ function useStudioState() {
         notify('서버에서 기존 요청을 찾았어요. 새 요청 없이 추적을 이어가요');
         return true;
       }
-      if (job.base === GALLERY_BASE) {
+      if (job.video) {
+        const history = await request<Record<string, HistoryItem>>(
+          job.base,
+          `/history/${encodeURIComponent(job.id)}`,
+        );
+        const item = history[job.id];
+        const patch = item && completedJobPatch(item, true);
+        if (patch) {
+          updateJob(job.id, { ...patch, submissionUncertain: false });
+          notify('서버에서 기존 영상 작업을 찾았어요');
+          return true;
+        }
+      } else if (job.base === GALLERY_BASE) {
         const index = await fetchGallery(true);
         if (index?.available) {
           setGallery(index);
@@ -1238,7 +1268,7 @@ function useStudioState() {
           ) {
             try {
               new Notification('ComfyMUI 생성 완료', {
-                body: `${j.settings.positive.slice(0, 50) || '새 이미지'} 생성이 끝났습니다`,
+                body: `${j.settings.positive.slice(0, 50) || (j.video ? '새 영상' : '새 이미지')} 생성이 끝났습니다`,
                 icon: '/icon-192.png',
               });
             } catch {}
@@ -1289,7 +1319,7 @@ function useStudioState() {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
-  const completedJobCount = jobs.filter((j) => j.status === 'complete').length;
+  const completedJobCount = jobs.filter((j) => !j.video && j.status === 'complete').length;
   useEffect(() => {
     void refreshGallery(true);
   }, [connection.base, completedJobCount]);
@@ -1388,6 +1418,7 @@ function useStudioState() {
     online,
     socketState,
     generate,
+    generateVideo,
     checkSubmission,
     busy,
     active,

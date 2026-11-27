@@ -10,6 +10,7 @@ import {
   Maximize2,
   Share2,
   Trash2,
+  Film,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { type Generation, type Job, reusableSettings } from '../domain';
@@ -401,6 +402,16 @@ export function Result({
           {job.status === 'complete' && (
             <>
               <div className="flex flex-wrap gap-1.5">
+                {job.images[0] && (
+                  <Link
+                    to="/video"
+                    state={{ base: job.base, image: job.images[0] }}
+                    className="btn-secondary flex-1 min-w-[112px]"
+                  >
+                    <Film size={14} />
+                    영상으로 만들기
+                  </Link>
+                )}
                 <Link to="/create" onClick={reuse} className="btn-secondary flex-1 min-w-[112px]">
                   <RotateCcw size={14} />
                   설정 재사용
