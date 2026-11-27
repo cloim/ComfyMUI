@@ -3,8 +3,10 @@ import {
   encoderLoader,
   families,
   isArtifactProneSampler,
+  isVideoFamily,
   type ModelFamily,
 } from './models';
+import { buildLtxWorkflow, validateVideo } from './ltx';
 export type Workflow = Record<
   string,
   { class_type: string; inputs: Record<string, unknown>; _meta?: { title?: string } }
@@ -45,6 +47,14 @@ export type Generation = {
   editSource?: ImageRef;
   // Further Qwen2.1 edit references after editSource, seen as <image2>, <image3>, ...
   editReferences?: ImageRef[];
+  // Video families only. Missing values use videoDefaults.
+  audioVae?: string;
+  seconds?: number;
+  fps?: number;
+  audio?: boolean;
+  frameStrength?: number;
+  // The first frame lives on the ComfyUI server that stored or received it.
+  firstFrame?: { base: string; image: ImageRef } | null;
 };
 // Upscales an existing output image with an upscale model, then optionally re-samples it
 // at low denoise with the original model and prompt to restore fine detail.
@@ -98,6 +108,7 @@ export function reusableSettings(input: Generation): Generation {
   const settings = baseSettings(structuredClone(input));
   delete settings.editSource;
   delete settings.editReferences;
+  if (!isVideoFamily(settings.architecture)) delete settings.firstFrame;
   return settings;
 }
 // LoadImage resolves "path [output]" from ComfyUI's output folder without uploading.
@@ -151,6 +162,11 @@ export type Job = {
   submissionUncertain?: boolean;
   scenario?: { sceneId: string; revision: string };
 };
+
+// The first saved file of a job: the MP4 of a video job, otherwise the first image.
+export function jobFile(job?: Pick<Job, 'video' | 'videos' | 'images'>): ImageRef | undefined {
+  return job?.video ? job.videos?.[0] : job?.images[0];
+}
 
 export function trimJobsPreservingFavorites(jobs: Job[], limit = 500): Job[] {
   if (jobs.length <= limit) return jobs;
@@ -363,8 +379,11 @@ export function validateGeneration(s: Generation) {
       throw new Error(`${key}: ${min}~${max} 범위의 ${integer ? '정수' : '값'}를 입력해 주세요`);
   }
   if (s.width % 8 || s.height % 8) throw new Error('해상도는 8의 배수로 입력해 주세요');
+  const video = isVideoFamily(s.architecture);
+  if (!s.workflow && video) validateVideo(s);
   const multiple = ['moss', 'qwen21'].includes(s.architecture) ? 32 : 16;
-  if (!s.workflow && (s.width % multiple || s.height % multiple))
+  // LTX pads to its latent grid and crops back, so video sizes only need multiples of 8.
+  if (!s.workflow && !video && (s.width % multiple || s.height % multiple))
     throw new Error(`이 계열의 해상도는 ${multiple}의 배수로 입력해 주세요`);
   if (!s.workflow && (!s.model || !s.positive.trim()))
     throw new Error('모델과 프롬프트를 입력해 주세요');
@@ -377,7 +396,7 @@ export function validateGeneration(s: Generation) {
     throw new Error('모델 구성과 guidance를 확인해 주세요');
   if (!s.workflow && s.architecture === 'flux' && (!s.clip1 || !s.clip2 || !s.vae))
     throw new Error('Flux의 CLIP 두 개와 VAE를 선택해 주세요');
-  if (!s.workflow && (!s.clip1 || !s.vae))
+  if (!s.workflow && (!s.clip1 || !s.vae || (s.architecture === 'ltx2' && !s.audioVae)))
     throw new Error('선택한 계열의 텍스트 인코더와 VAE를 확인해 주세요');
   for (const l of s.loras)
     if (!l.name || ![l.model, l.clip].every((v) => Number.isFinite(v) && v >= -2 && v <= 2))
@@ -461,7 +480,7 @@ export function buildWorkflow(s: Generation): Workflow {
   validateGeneration(s);
   if (s.workflow) return parseWorkflow(s.workflow);
   const profile = families.find((f) => f.id === s.architecture);
-  if (!profile) throw new Error('지원하는 네 계열에서 모델을 선택해 주세요');
+  if (!profile) throw new Error('지원하는 계열에서 모델을 선택해 주세요');
   const loader = s.modelLoader || 'CheckpointLoaderSimple';
   let modelNode: Workflow[string];
   // Only the MODEL output is used, so diffusion-only files in the checkpoints folder
@@ -496,6 +515,12 @@ export function buildWorkflow(s: Generation): Workflow {
       },
     };
   else throw new Error('선택한 계열의 모델 로더를 확인해 주세요');
+  if (profile.video)
+    return buildLtxWorkflow(
+      s,
+      modelNode,
+      s.firstFrame ? annotatedImage(s.firstFrame.image) : undefined,
+    );
   const w: Workflow = {
     '1': modelNode,
     '8': {

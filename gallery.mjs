@@ -1,12 +1,12 @@
-// Gallery index built from the ComfyUI output folder. Each image is described by the
-// generation data ComfyUI stores in the PNG (the API prompt, and ComfyMUI settings when
-// the app made it), so the folder itself is the history.
+// Gallery index built from the ComfyUI output folder. Each image or MP4 is described by
+// the generation data ComfyUI stores in the file (the API prompt, and ComfyMUI settings
+// when the app made it), so the folder itself is the history.
 import { open, readdir, lstat } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import { extname, join, resolve, relative, sep } from 'node:path';
 import { inflateSync } from 'node:zlib';
 
-const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+const OUTPUT_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.mp4']);
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const MAX_DEPTH = 4;
 const MAX_FILES = 5000;
@@ -53,7 +53,98 @@ export async function readPngText(path) {
   }
 }
 
-const SAMPLERS = ['KSampler', 'KSamplerAdvanced'];
+const MAX_MOOV = 16 * 1024 * 1024;
+
+// Child boxes of an MP4 box body: [type, body].
+function mp4Boxes(buffer) {
+  const boxes = [];
+  let position = 0;
+  while (position + 8 <= buffer.length) {
+    let size = buffer.readUInt32BE(position);
+    let header = 8;
+    if (size === 1 && position + 16 <= buffer.length) {
+      size = Number(buffer.readBigUInt64BE(position + 8));
+      header = 16;
+    } else if (size === 0) size = buffer.length - position;
+    if (size < header || position + size > buffer.length) break;
+    boxes.push([
+      buffer.toString('latin1', position + 4, position + 8),
+      buffer.subarray(position + header, position + size),
+    ]);
+    position += size;
+  }
+  return boxes;
+}
+
+// Tags of a QuickTime `meta` box written with movflags=use_metadata_tags: names in `keys`,
+// values in `ilst` items numbered by their key index.
+function mdtaTags(meta) {
+  // ISO files give `meta` a version and flags; QuickTime files do not.
+  const children = mp4Boxes(meta.toString('latin1', 4, 8) === 'hdlr' ? meta : meta.subarray(4));
+  const keys = children.find(([type]) => type === 'keys')?.[1];
+  const list = children.find(([type]) => type === 'ilst')?.[1];
+  if (!keys || !list || keys.length < 8) return {};
+  const names = [];
+  let position = 8;
+  for (let i = keys.readUInt32BE(4); i > 0 && position + 8 <= keys.length; i--) {
+    const size = keys.readUInt32BE(position);
+    if (size < 8 || position + size > keys.length) break;
+    names.push(keys.toString('utf8', position + 8, position + size));
+    position += size;
+  }
+  const out = {};
+  let offset = 0;
+  while (offset + 8 <= list.length) {
+    const size = list.readUInt32BE(offset);
+    if (size < 8 || offset + size > list.length) break;
+    const name = names[list.readUInt32BE(offset + 4) - 1];
+    const data = mp4Boxes(list.subarray(offset + 8, offset + size)).find(
+      ([type]) => type === 'data',
+    )?.[1];
+    if (name && data && data.length >= 8) out[name] = data.toString('utf8', 8);
+    offset += size;
+  }
+  return out;
+}
+
+// Metadata tags of an MP4. ComfyUI's SaveVideo stores the prompt and extra_pnginfo there.
+export async function readMp4Tags(path) {
+  const file = await open(path, 'r');
+  try {
+    const { size } = await file.stat();
+    let position = 0;
+    for (let i = 0; i < 64 && position + 8 <= size; i++) {
+      const head = Buffer.alloc(16);
+      await file.read(head, 0, 16, position);
+      let boxSize = head.readUInt32BE(0);
+      let header = 8;
+      if (boxSize === 1) {
+        boxSize = Number(head.readBigUInt64BE(8));
+        header = 16;
+      } else if (boxSize === 0) boxSize = size - position;
+      if (boxSize < header) break;
+      if (head.toString('latin1', 4, 8) === 'moov') {
+        if (boxSize - header > MAX_MOOV) return {};
+        const moov = Buffer.alloc(boxSize - header);
+        await file.read(moov, 0, moov.length, position + header);
+        const out = {};
+        for (const [type, body] of mp4Boxes(moov)) {
+          if (type === 'meta') Object.assign(out, mdtaTags(body));
+          if (type === 'udta')
+            for (const [inner, meta] of mp4Boxes(body))
+              if (inner === 'meta') Object.assign(out, mdtaTags(meta));
+        }
+        return out;
+      }
+      position += boxSize;
+    }
+    return {};
+  } finally {
+    await file.close();
+  }
+}
+
+const SAMPLERS = ['KSampler', 'KSamplerAdvanced', 'SamplerCustom'];
 const MODEL_LOADERS = {
   CheckpointLoaderSimple: 'ckpt_name',
   UNETLoader: 'unet_name',
@@ -115,7 +206,7 @@ export function summarizePrompt(prompt) {
     }
     if (node.class_type === 'VAELoader') summary.vae = i.vae_name;
     if (node.class_type === 'FluxGuidance') summary.guidance = i.guidance;
-    if (/Empty.*LatentImage/.test(node.class_type)) {
+    if (/Empty.*Latent(Image|Video)/.test(node.class_type)) {
       summary.width = i.width;
       summary.height = i.height;
     }
@@ -139,12 +230,15 @@ function parseJson(text) {
 }
 
 async function describe(path) {
-  if (extname(path).toLowerCase() !== '.png') return {};
-  const text = await readPngText(path).catch(() => ({}));
+  const extension = extname(path).toLowerCase();
+  if (extension !== '.png' && extension !== '.mp4') return {};
+  const video = extension === '.mp4';
+  const text = await (video ? readMp4Tags(path) : readPngText(path)).catch(() => ({}));
   const settings = text.comfymui ? parseJson(text.comfymui) : null;
   const summary = text.prompt ? summarizePrompt(parseJson(text.prompt)) : null;
   const requestToken = text.comfymui_request_id ? parseJson(text.comfymui_request_id) : null;
   return {
+    ...(video ? { video: true } : {}),
     ...(typeof requestToken === 'string' ? { requestToken } : {}),
     ...(settings && typeof settings === 'object' ? { settings } : {}),
     ...(summary ? { summary } : {}),
@@ -165,7 +259,7 @@ async function walk(dir, subfolder, depth, found) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
       await walk(path, subfolder ? `${subfolder}/${entry.name}` : entry.name, depth + 1, found);
-    } else if (entry.isFile() && IMAGE_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+    } else if (entry.isFile() && OUTPUT_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
       found.push({ path, filename: entry.name, subfolder });
     }
   }
@@ -301,13 +395,16 @@ async function updatePaths(dir, index, paths) {
       info?.isDirectory() ||
       info?.isSymbolicLink() ||
       (!info &&
-        (!IMAGE_EXTENSIONS.has(extname(path).toLowerCase()) ||
+        (!OUTPUT_EXTENSIONS.has(extname(path).toLowerCase()) ||
           [...index.entries.keys()].some((key) => key.startsWith(path + sep))))
     ) {
       index.full = true;
       continue;
     }
-    if (rel.split(sep).length - 1 > MAX_DEPTH || !IMAGE_EXTENSIONS.has(extname(path).toLowerCase()))
+    if (
+      rel.split(sep).length - 1 > MAX_DEPTH ||
+      !OUTPUT_EXTENSIONS.has(extname(path).toLowerCase())
+    )
       continue;
     const parts = rel.split(sep);
     const filename = parts.pop();

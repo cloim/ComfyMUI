@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useStudioSelector } from '../studio';
 import { options } from '../domain';
-import { assetFamily, type ModelFamily } from '../models';
+import { assetFamily, familyFolder, withFamilyFolders, type ModelFamily } from '../models';
 import {
   addLoraTags,
   appendTriggerWords,
@@ -110,12 +110,7 @@ export default function Loras({ tabs }: { tabs?: ReactNode } = {}) {
   const [showNsfw, setShowNsfw] = useState(false);
 
   // Facets & Tag management states
-  const [folders, setFolders] = useState<string[]>([
-    'Flux1.D/commons',
-    'Flux1.D/illust',
-    'Krea2',
-    'Qwen',
-  ]);
+  const [folders, setFolders] = useState<string[]>(() => withFamilyFolders([]));
   const [roots, setRoots] = useState<string[]>([]);
   const [topTags, setTopTags] = useState<{ tag: string; count: number }[]>([
     { tag: 'concept', count: 25 },
@@ -187,7 +182,7 @@ export default function Loras({ tabs }: { tabs?: ReactNode } = {}) {
         fetchLoraRoots(connection.base).catch(() => []),
         fetchLoraTopTags(connection.base, 150).catch(() => []),
       ]);
-      if (fList.length) setFolders(fList);
+      setFolders(withFamilyFolders(fList));
       if (rList.length) {
         const ordered = orderDownloadRoots(rList);
         setRoots(ordered);
@@ -667,6 +662,22 @@ export default function Loras({ tabs }: { tabs?: ReactNode } = {}) {
     }
   }
 
+  function autoFolderFor(version?: Pick<CivitaiVersion, 'baseModel' | 'files'>, fileId?: number) {
+    const files = version?.files || [];
+    const file =
+      files.find((f) => f.id === fileId)?.name ||
+      files.find((f) => f.primary)?.name ||
+      files[0]?.name ||
+      '';
+    const family = inferFamilyFromLoraItem({
+      base_model: version?.baseModel || '',
+      folder: '',
+      file_name: file,
+      file_path: file,
+    });
+    return family ? familyFolder(family, folders) : null;
+  }
+
   async function handleStartDownload(opts?: {
     modelId?: number;
     modelVersionId: number;
@@ -685,18 +696,20 @@ export default function Loras({ tabs }: { tabs?: ReactNode } = {}) {
       return;
     }
 
+    const airFileId =
+      lookupAir?.fileId && lookupAir.modelVersionId === versionId ? lookupAir.fileId : undefined;
+    const version = selectedVer || remoteVersions.find((v) => v.id === versionId);
+    // Automatic sorting saves in the family folder; unknown families use the server's paths.
+    const autoFolder = autoFolderFor(version, airFileId);
     const chosenFolder =
       opts?.folderOverride !== undefined
         ? opts.folderOverride
         : targetFolder === 'auto'
-          ? ''
+          ? autoFolder || ''
           : targetFolder === 'custom'
             ? customSubfolder.trim()
             : targetFolder;
-    const useDefault = opts?.folderOverride === undefined && targetFolder === 'auto';
-    const airFileId =
-      lookupAir?.fileId && lookupAir.modelVersionId === versionId ? lookupAir.fileId : undefined;
-    const version = selectedVer || remoteVersions.find((v) => v.id === versionId);
+    const useDefault = opts?.folderOverride === undefined && targetFolder === 'auto' && !autoFolder;
     const name =
       [version?.model?.name || activeLora?.model_name, version?.name].filter(Boolean).join(' ') ||
       `CivitAI #${versionId}`;
@@ -1568,7 +1581,7 @@ export default function Loras({ tabs }: { tabs?: ReactNode } = {}) {
                     value={targetFolder}
                     onChange={(e) => setTargetFolder(e.target.value)}
                   >
-                    <option value="auto">기본 경로 자동 분류 (권장)</option>
+                    <option value="auto">계열 폴더 자동 분류 (권장)</option>
                     <option value="">루트 폴더 직접 저장</option>
                     {folders.map((f) => (
                       <option key={f} value={f}>
@@ -1577,6 +1590,21 @@ export default function Loras({ tabs }: { tabs?: ReactNode } = {}) {
                     ))}
                     <option value="custom">새 하위 폴더 직접 입력</option>
                   </SelectControl>
+                  {targetFolder === 'auto' && (
+                    <span className="text-2xs font-normal text-muted">
+                      {(() => {
+                        const folder = autoFolderFor(
+                          selectedLookupVersion,
+                          lookupAir?.modelVersionId === selectedLookupVersion.id
+                            ? lookupAir.fileId
+                            : undefined,
+                        );
+                        return folder
+                          ? `${folder} 폴더에 저장해요`
+                          : '계열을 알 수 없어 LoRA Manager 기본 경로에 저장해요';
+                      })()}
+                    </span>
+                  )}
                 </label>
 
                 {targetFolder === 'custom' ? (

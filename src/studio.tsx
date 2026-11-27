@@ -47,7 +47,6 @@ import {
   type Queue,
   type HistoryItem,
 } from './api';
-import { buildLtxWorkflow, ltxModels, type LtxInput } from './ltx';
 import { startConnection } from './connection';
 import {
   catalog,
@@ -55,6 +54,7 @@ import {
   validateSelection,
   families,
   isArtifactProneSampler,
+  isVideoFamily,
   type FamilyAssignments,
 } from './models';
 import { parseBinaryPreview } from './preview';
@@ -765,7 +765,6 @@ function useStudioState() {
     input: Generation,
     isBatch = false,
     scenario?: Job['scenario'],
-    videoId?: string,
   ): Promise<boolean> {
     if (!online) {
       notify('네트워크 연결 후 다시 생성해 주세요');
@@ -785,19 +784,24 @@ function useStudioState() {
         return false;
       }
     }
+    const video = !snapshot.workflow && !snapshot.upscale && isVideoFamily(snapshot.architecture);
+    if (video && snapshot.firstFrame && snapshot.firstFrame.base !== connection.base) {
+      notify('첫 프레임 이미지가 저장된 ComfyUI 서버에 연결하거나 다른 이미지를 선택해 주세요');
+      return false;
+    }
     if (snapshot.random && !snapshot.workflow) snapshot.seed = randomSeed();
-    const tempId = videoId || newId();
+    const tempId = newId();
     let workflow;
     try {
       workflow = buildWorkflow(snapshot);
       if (scenario) workflow['7'].inputs.filename_prefix = `scenario/ComfyMUI_${tempId}`;
+      if (video) workflow['18'].inputs.filename_prefix = `video/ComfyMUI_${tempId}`;
       validateAgainstServer(workflow, info!);
     } catch (e) {
       notify((e as Error).message);
       return false;
     }
-    if (!snapshot.upscale && !isBatch && !scenario && !videoId)
-      setSettings(reusableSettings(snapshot));
+    if (!snapshot.upscale && !isBatch && !scenario) setSettings(reusableSettings(snapshot));
     setLivePreviewUrl('');
     lastPreviewAt.current = 0;
     const job: Job = {
@@ -810,7 +814,7 @@ function useStudioState() {
       images: [],
       requestToken: tempId,
       ...(scenario && { scenario }),
-      ...(videoId && { video: true }),
+      ...(video && { video: true }),
     };
     setJobs((all) => trimJobsPreservingFavorites([job, ...all], 500));
 
@@ -824,7 +828,8 @@ function useStudioState() {
           comfymui_request_id: tempId,
         },
         tempId,
-        videoId,
+        // A video is looked up by this id in the server history when its submission is uncertain.
+        video ? tempId : undefined,
       );
       if (!response.prompt_id) throw new Error('서버의 작업 번호를 확인할 수 없습니다');
       updateJob(tempId, { id: response.prompt_id, status: 'queued' });
@@ -857,53 +862,50 @@ function useStudioState() {
     }
   }
 
-  async function generateVideo(input: LtxInput, source?: File | { base: string; image: ImageRef }) {
-    if (submitLock.current) return false;
-    if (!online || connectionState !== 'connected' || !info) {
+  // Uploads a first frame for video families to the connected server.
+  async function uploadFirstFrame(file: File) {
+    if (connectionState !== 'connected') {
       notify('ComfyUI 서버 연결을 확인해 주세요');
       return false;
     }
-    const { models } = ltxModels(info);
-    if (!models || !input.prompt.trim()) return false;
-    submitLock.current = true;
-    setBusy(true);
     try {
-      const id = newId();
-      let image: ImageRef | undefined;
-      if (source instanceof File) {
-        image = await uploadImage(connection.base, source, 'video', id);
-      } else if (source) {
-        if (source.base !== connection.base)
-          throw new Error('원본 이미지가 저장된 ComfyUI 서버에 연결해 주세요');
-        image = source.image;
-      }
-      const seed = randomSeed();
-      return await submitSingleJob(
-        {
-          ...defaults,
-          model: models.model,
-          modelLoader: 'UNETLoader',
-          clip1: models.encoder,
-          vae: models.videoVae,
-          positive: input.prompt.trim(),
-          negative: '',
-          width: input.size.width,
-          height: input.size.height,
-          seed,
-          random: false,
-          workflow: buildLtxWorkflow(input, models, seed, `video/ComfyMUI_${id}`, image),
-        },
-        false,
-        undefined,
-        id,
-      );
+      const image = await uploadImage(connection.base, file, 'video', newId());
+      setSettings((prev) => ({ ...prev, firstFrame: { base: connection.base, image } }));
+      return true;
     } catch (error) {
       notify((error as Error).message);
       return false;
-    } finally {
-      submitLock.current = false;
-      setBusy(false);
     }
+  }
+
+  // Starts a video from a generated image with an installed video model.
+  function startVideoFrom(job: Job) {
+    const image = job.images[0];
+    if (!image) return false;
+    const list = catalog(info, familyAssignments, modelOrder).filter((e) =>
+      isVideoFamily(e.family),
+    );
+    const entry =
+      list.find((e) => e.name === settings.model && e.family === settings.architecture) || list[0];
+    if (!entry) {
+      notify('영상 모델이 없어요. 모델 메뉴에서 LTX 영상 모델을 설치하거나 계열을 지정해 주세요');
+      return false;
+    }
+    const { width, height } = job.settings;
+    // The frame is center-cropped, so the clip follows the image orientation.
+    const size =
+      width === height
+        ? { width: 768, height: 768 }
+        : height > width
+          ? { width: 720, height: 1280 }
+          : { width: 1280, height: 720 };
+    setSettings((prev) => ({
+      ...selectModel(prev, entry, info, familyAssignments),
+      ...size,
+      firstFrame: { base: job.base, image },
+    }));
+    notify('이미지를 첫 프레임으로 영상 설정을 준비했어요');
+    return true;
   }
 
   function removeFromQueue(id: string) {
@@ -1116,8 +1118,12 @@ function useStudioState() {
     },
   });
 
+  // A listing requested before a delete may still contain the deleted files.
+  const galleryDeletes = useRef(0);
   async function refreshGallery(force = false) {
+    const deletes = galleryDeletes.current;
     const next = await fetchGallery(force);
+    if (deletes !== galleryDeletes.current) return refreshGallery(force);
     if (next) setGallery(next.available ? next : null);
   }
 
@@ -1138,6 +1144,7 @@ function useStudioState() {
         failed = result.failed.length;
         const removed = new Set([...result.deleted, ...result.missing]);
         deletedFiles = result.deleted.length;
+        galleryDeletes.current++;
         setGallery((prev) =>
           prev ? { ...prev, files: prev.files.filter((f) => !removed.has(galleryKey(f))) } : prev,
         );
@@ -1147,7 +1154,8 @@ function useStudioState() {
         setJobs((all) =>
           all.filter(
             (j) =>
-              j.base !== GALLERY_BASE || !j.images.some((image) => removed.has(outputKey(image))),
+              j.base !== GALLERY_BASE ||
+              ![...j.images, ...(j.videos || [])].some((file) => removed.has(outputKey(file))),
           ),
         );
       } catch (e) {
@@ -1177,7 +1185,7 @@ function useStudioState() {
       failed > 0
         ? `${done}개를 삭제했어요\n${failed}개 파일은 지우지 못했어요`
         : deletedFiles > 0
-          ? `이미지 ${done}개를 삭제했어요`
+          ? `파일 ${done}개를 삭제했어요`
           : `${done}개 기록을 삭제했어요`,
     );
     return failed === 0;
@@ -1418,7 +1426,8 @@ function useStudioState() {
     online,
     socketState,
     generate,
-    generateVideo,
+    uploadFirstFrame,
+    startVideoFrom,
     checkSubmission,
     busy,
     active,

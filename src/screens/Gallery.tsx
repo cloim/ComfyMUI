@@ -9,10 +9,11 @@ import {
   Download,
   RefreshCw,
   Sparkles,
+  Film,
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useStudio } from '../studio';
-import { type Job } from '../domain';
+import { jobFile, type Job } from '../domain';
 import { imageUrl, thumbnailUrl } from '../api';
 import { Modal, Empty, IconButton, SelectControl, Spinner } from '../components/ui';
 import { HistoryDetail, HistoryResult } from '../components/HistoryDetail';
@@ -60,13 +61,12 @@ export default function Gallery() {
   // History is the ComfyUI output folder. Generations still running are shown first.
   // Without the folder (direct ComfyUI address) the local records are used.
   const jobs = useMemo(() => {
-    const imageJobs = localJobs.filter((job) => !job.video);
-    if (!gallery) return splitBatches(imageJobs);
+    if (!gallery) return splitBatches(localJobs);
     // A running job whose image is already in the folder is shown only once, as the file.
     const written = (j: Job) =>
       (writtenTimes.get(JSON.stringify([j.settings.seed, j.settings.positive])) || 0) >=
       j.createdAt - 60_000;
-    const active = imageJobs.filter(
+    const active = localJobs.filter(
       (j) => ['submitting', 'queued', 'running'].includes(j.status) && !written(j),
     );
     return [...active, ...fileJobs];
@@ -214,7 +214,7 @@ export default function Gallery() {
   const detail =
     jobs.find((j) => j.id === selected) ||
     (selected ? jobs.find((j) => j.id.startsWith(`${selected}#`)) : undefined);
-  const detailImage = detail?.images[0];
+  const detailImage = jobFile(detail);
   const detailFile =
     detail && isGalleryJob(detail) && detailImage
       ? gallery?.files.find(
@@ -240,7 +240,7 @@ export default function Gallery() {
       onDelete={() => setRemove(detail)}
     />
   );
-  const imageJobs = shown.filter((j) => j.status === 'complete' && j.images.length > 0);
+  const imageJobs = shown.filter((j) => j.status === 'complete' && Boolean(jobFile(j)));
   const imageIndex = imageJobs.findIndex((j) => j.id === detail?.id);
   const isSelecting = selectedIds.size > 0;
 
@@ -284,14 +284,15 @@ export default function Gallery() {
   };
 
   const handleBatchDownload = async () => {
-    const targets = jobs.filter((j) => selectedIds.has(j.id) && j.images[0]);
+    const targets = jobs.filter((j) => selectedIds.has(j.id) && jobFile(j));
     if (targets.length === 0) return;
-    notify(`${targets.length}개 이미지 다운로드를 시작했어요`);
+    notify(`${targets.length}개 파일 다운로드를 시작했어요`);
     for (const j of targets) {
-      const url = imageUrl(j.base, j.images[0]);
+      const file = jobFile(j)!;
+      const url = imageUrl(j.base, file);
       const a = document.createElement('a');
       a.href = url;
-      a.download = j.images[0].filename || 'image.png';
+      a.download = file.filename || (j.video ? 'video.mp4' : 'image.png');
       a.target = '_blank';
       a.click();
       await new Promise((r) => setTimeout(r, 200));
@@ -300,7 +301,7 @@ export default function Gallery() {
 
   const handleCompareSelected = () => {
     const selectedJobs = jobs.filter((j) => selectedIds.has(j.id));
-    if (selectedJobs.length === 2) {
+    if (selectedJobs.length === 2 && selectedJobs.every((j) => !j.video)) {
       setComparingPair([selectedJobs[0], selectedJobs[1]]);
     }
   };
@@ -391,6 +392,7 @@ export default function Gallery() {
               <option value="krea2">Krea2 계열</option>
               <option value="moss">MOSS 계열</option>
               <option value="qwen21">Qwen2.5 계열</option>
+              <option value="ltx2">LTX 2.5 영상</option>
             </SelectControl>
           </div>
           <div className="w-28 shrink-0 sm:w-36">
@@ -462,7 +464,7 @@ export default function Gallery() {
                       type="button"
                       role="checkbox"
                       aria-checked={isChecked}
-                      aria-label="이미지 선택"
+                      aria-label={j.video ? '영상 선택' : '이미지 선택'}
                       onClick={() => toggleSelectJob(j.id)}
                       className="absolute left-1.5 top-1.5 z-10 flex h-9 w-9 items-center justify-center"
                     >
@@ -486,9 +488,25 @@ export default function Gallery() {
                           setSelected(j.id);
                         }
                       }}
-                      aria-label={`${labels[j.status]} 이미지 상세 보기`}
+                      aria-label={`${labels[j.status]} ${j.video ? '영상' : '이미지'} 상세 보기`}
                     >
-                      {j.status === 'complete' && j.images[0] ? (
+                      {j.status === 'complete' && j.video && j.videos?.[0] ? (
+                        <>
+                          {/* The first frame stands in for a thumbnail. */}
+                          <video
+                            className="pointer-events-none h-full w-full object-contain"
+                            src={`${imageUrl(j.base, j.videos[0])}#t=0.1`}
+                            preload="metadata"
+                            muted
+                            playsInline
+                            aria-label={j.settings.positive.slice(0, 100)}
+                          />
+                          <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-ink/80 px-2 py-0.5 text-2xs font-semibold text-white">
+                            <Film size={12} aria-hidden="true" />
+                            영상
+                          </span>
+                        </>
+                      ) : j.status === 'complete' && j.images[0] ? (
                         <img
                           loading="lazy"
                           className="h-full w-full object-contain"
@@ -538,7 +556,7 @@ export default function Gallery() {
                       </div>
                       {!isSelecting && (
                         <div className="-mr-1 flex items-center">
-                          {j.status === 'complete' && Boolean(j.images[0]) && (
+                          {j.status === 'complete' && !j.video && Boolean(j.images[0]) && (
                             <IconButton
                               icon={Sparkles}
                               label="대표 이미지로 설정"
@@ -611,7 +629,7 @@ export default function Gallery() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            {selectedIds.size === 2 && (
+            {selectedIds.size === 2 && jobs.every((j) => !selectedIds.has(j.id) || !j.video) && (
               <button
                 type="button"
                 onClick={handleCompareSelected}
@@ -624,7 +642,7 @@ export default function Gallery() {
             <button
               type="button"
               onClick={handleBatchDownload}
-              aria-label="선택 이미지 저장"
+              aria-label="선택 항목 저장"
               className="inline-flex min-h-9 min-w-9 items-center justify-center gap-1 rounded-xl border border-line bg-stone px-2.5 text-xs font-semibold text-ink hover:bg-stone sm:px-3"
             >
               <Download size={14} aria-hidden="true" />
@@ -633,7 +651,7 @@ export default function Gallery() {
             <button
               type="button"
               onClick={() => setBatchRemoveConfirm(true)}
-              aria-label="선택 이미지 삭제"
+              aria-label="선택 항목 삭제"
               className="inline-flex min-h-9 min-w-9 items-center justify-center gap-1 rounded-xl bg-red-600 px-2.5 text-xs font-bold text-white hover:bg-red-700 sm:px-3"
             >
               <Trash2 size={14} aria-hidden="true" />
@@ -665,7 +683,13 @@ export default function Gallery() {
 
       {/* Single Delete Confirm Modal */}
       <Modal
-        title={gallery ? '이미지를 삭제할까요?' : '기록을 삭제할까요?'}
+        title={
+          gallery
+            ? remove?.video
+              ? '영상을 삭제할까요?'
+              : '이미지를 삭제할까요?'
+            : '기록을 삭제할까요?'
+        }
         open={Boolean(remove)}
         onClose={() => {
           if (!deleting) setRemove(null);
@@ -689,7 +713,7 @@ export default function Gallery() {
         <p className="text-xs leading-relaxed text-muted">
           {gallery ? (
             <>
-              ComfyUI output 폴더의 이미지 파일을 삭제해요
+              ComfyUI output 폴더의 {remove?.video ? '영상' : '이미지'} 파일을 삭제해요
               <br />
               삭제한 파일은 되돌릴 수 없어요
             </>
@@ -701,7 +725,7 @@ export default function Gallery() {
 
       {/* Batch Delete Confirm Modal */}
       <Modal
-        title={`선택한 ${selectedIds.size}개 ${gallery ? '이미지를' : '기록을'} 삭제할까요?`}
+        title={`선택한 ${selectedIds.size}개 ${gallery ? '파일을' : '기록을'} 삭제할까요?`}
         open={batchRemoveConfirm}
         onClose={() => {
           if (!deleting) setBatchRemoveConfirm(false);
@@ -729,7 +753,7 @@ export default function Gallery() {
         <p className="text-xs leading-relaxed text-muted">
           {gallery ? (
             <>
-              선택한 이미지 파일을 ComfyUI output 폴더에서 삭제해요
+              선택한 이미지와 영상 파일을 ComfyUI output 폴더에서 삭제해요
               <br />
               삭제한 파일은 되돌릴 수 없어요
             </>

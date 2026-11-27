@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { closeGalleryIndexes, invalidateGallery, listGallery } from '../gallery.mjs';
+import { mp4WithTags } from '../scripts/mp4-fixture.mjs';
 
 const folders: string[] = [];
 async function folder() {
@@ -26,6 +27,50 @@ afterEach(async () => {
 });
 
 describe('gallery index', () => {
+  it('indexes MP4 videos with the settings ComfyUI stores in their metadata tags', async () => {
+    const dir = await folder();
+    await mkdir(join(dir, 'video'));
+    const prompt = {
+      '1': { class_type: 'UNETLoader', inputs: { unet_name: 'LTX 2.5/redgraft.safetensors' } },
+      '2': { class_type: 'CLIPLoader', inputs: { clip_name: 'gemma.safetensors', type: 'ltxv' } },
+      '5': { class_type: 'CLIPTextEncode', inputs: { text: 'waves roll', clip: ['2', 0] } },
+      '7': { class_type: 'LTXVConditioning', inputs: { positive: ['5', 0], negative: ['5', 0] } },
+      '8': { class_type: 'EmptyLTXVLatentVideo', inputs: { width: 1280, height: 736 } },
+      '13': { class_type: 'SamplerCustom', inputs: { noise_seed: 5, cfg: 1, positive: ['7', 0] } },
+    };
+    await writeFile(
+      join(dir, 'video', 'app.mp4'),
+      mp4WithTags({
+        prompt: JSON.stringify(prompt),
+        comfymui: JSON.stringify({ architecture: 'ltx2', positive: '파도', seed: 9 }),
+        comfymui_request_id: JSON.stringify('req-1'),
+      }),
+    );
+    await writeFile(
+      join(dir, 'video', 'other.mp4'),
+      mp4WithTags({ prompt: JSON.stringify(prompt) }),
+    );
+    await writeFile(join(dir, 'video', 'plain.mp4'), mp4WithTags({}));
+    const items = await listGallery(dir);
+    const byName = Object.fromEntries(
+      items.map((item: { filename: string }) => [item.filename, item]),
+    );
+    expect(byName['app.mp4']).toMatchObject({
+      subfolder: 'video',
+      video: true,
+      requestToken: 'req-1',
+      settings: { architecture: 'ltx2', positive: '파도', seed: 9 },
+    });
+    expect(byName['other.mp4'].summary).toMatchObject({
+      positive: 'waves roll',
+      seed: 5,
+      model: 'LTX 2.5/redgraft.safetensors',
+      clipType: 'ltxv',
+      width: 1280,
+    });
+    expect(byName['plain.mp4']).toMatchObject({ video: true, external: true });
+  });
+
   it('reuses a clean snapshot and preserves metadata objects for unchanged files on reconciliation', async () => {
     const dir = await folder();
     await writeFile(join(dir, 'first.png'), png('first'));

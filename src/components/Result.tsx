@@ -13,7 +13,8 @@ import {
   Film,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { type Generation, type Job, reusableSettings } from '../domain';
+import { type Generation, type Job, jobFile as resultFile, reusableSettings } from '../domain';
+import { videoOptions } from '../ltx';
 import { classifyJobError, jobStageLabel, lowerMemorySettings } from '../job-recovery';
 import { imageUrl } from '../api';
 import { useStudio } from '../studio';
@@ -23,18 +24,21 @@ import { ImageViewer } from './ImageViewer';
 import { UpscaleDialog } from './UpscaleDialog';
 import { SetPreviewModal } from './SetPreviewModal';
 // `fallback` is the latest completed job, shown while `job` has no image yet (running, failed or cancelled).
+// `video` sets the empty state copy before the first job.
 export function Result({
   job,
   fallback,
   compact = false,
   heading,
   onDelete,
+  video = false,
 }: {
   job?: Job;
   fallback?: Job;
   compact?: boolean;
   heading?: ReactNode;
   onDelete?: () => void;
+  video?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
@@ -58,6 +62,7 @@ export function Result({
     info,
     reconnect,
     checkSubmission,
+    startVideoFrom,
   } = useStudio();
   const [upscaling, setUpscaling] = useState(false);
   const [plan, setPlan] = useState<{
@@ -91,12 +96,16 @@ export function Result({
     }
   }
   const previewImg = active ? job?.livePreview || livePreviewUrl || null : null;
-  const hasImage = (j?: Job): j is Job => j?.status === 'complete' && Boolean(j.images[0]);
+  const hasImage = (j?: Job): j is Job => j?.status === 'complete' && Boolean(resultFile(j));
   const shown = hasImage(job) ? job : hasImage(fallback) ? fallback : undefined;
   const showingFallback = Boolean(shown && shown !== job);
-  const source = shown ? imageUrl(shown.base, shown.images[0]) : '';
-  const generatedImage = Boolean(shown);
+  const shownFile = resultFile(shown);
+  const source = shown && shownFile ? imageUrl(shown.base, shownFile) : '';
+  const shownVideo = Boolean(shown?.video);
+  const isVideo = job ? Boolean(job.video) : video;
+  const generatedImage = Boolean(shown) && !shownVideo;
   const canExpand = !active && !imageFailed && generatedImage;
+  const clip = job?.video ? videoOptions(job.settings) : null;
   const frameRatio = shown
     ? `${shown.settings.width} / ${shown.settings.height}`
     : compact
@@ -111,7 +120,7 @@ export function Result({
   const labels = {
     submitting: '요청을 보내고 있어요',
     queued: '서버에서 순서를 기다려요',
-    running: '이미지를 만들고 있어요',
+    running: isVideo ? '영상을 만들고 있어요' : '이미지를 만들고 있어요',
     complete: '생성 완료',
     error: '생성을 다시 확인해 주세요',
     cancelled: '대기 취소됨',
@@ -138,10 +147,25 @@ export function Result({
       >
         {!previewImg && !source && (
           <div className="absolute inset-0 flex items-center justify-center p-4 text-center text-xs text-muted">
-            아직 생성한 이미지가 없어요
+            {isVideo ? '아직 생성한 영상이 없어요' : '아직 생성한 이미지가 없어요'}
           </div>
         )}
-        {(previewImg || source) &&
+        {!previewImg && source && shownVideo && (
+          <video
+            key={`${source}-${imageRetry}`}
+            aria-label={showingFallback ? '직전에 생성한 영상' : '생성한 영상'}
+            src={source}
+            width={shown!.settings.width}
+            height={shown!.settings.height}
+            controls={!active}
+            playsInline
+            preload="metadata"
+            onError={() => setImageFailed(true)}
+            onLoadedData={() => setImageFailed(false)}
+            className={`h-full w-full bg-black object-contain ${active ? 'opacity-35 blur-sm' : ''}`}
+          />
+        )}
+        {(previewImg || (source && !shownVideo)) &&
           (canExpand ? (
             <button
               type="button"
@@ -203,7 +227,7 @@ export function Result({
         )}
         {!previewImg && !active && showingFallback && (
           <span className="absolute left-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-2xs font-semibold text-ink shadow-sm">
-            직전 생성 이미지
+            {shownVideo ? '직전 생성 영상' : '직전 생성 이미지'}
           </span>
         )}
         {onDelete && (
@@ -294,7 +318,9 @@ export function Result({
             onClick={(e) => e.stopPropagation()}
           >
             <Image size={22} />
-            <p className="text-xs">이미지를 불러오려면 서버 연결을 확인해 주세요</p>
+            <p className="text-xs">
+              {shownVideo ? '영상을' : '이미지를'} 불러오려면 서버 연결을 확인해 주세요
+            </p>
             <button
               className="btn-secondary"
               onClick={() => {
@@ -302,18 +328,22 @@ export function Result({
                 setImageRetry((n) => n + 1);
               }}
             >
-              이미지 다시 불러오기
+              {shownVideo ? '영상 다시 불러오기' : '이미지 다시 불러오기'}
             </button>
           </div>
         )}
         {!shown && !job && !compact && (
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#172921]/85 to-transparent px-4 pb-4 pt-12 text-white">
             <p className="font-display text-base font-bold leading-snug">
-              상상은 가볍게
+              {video ? '한 장면에서' : '상상은 가볍게'}
               <br />
-              디테일은 원하는 만큼
+              {video ? '움직임이 시작돼요' : '디테일은 원하는 만큼'}
             </p>
-            <p className="mt-1.5 text-xs text-white/85">프롬프트에서 나만의 장면이 시작돼요</p>
+            <p className="mt-1.5 text-xs text-white/85">
+              {video
+                ? '프롬프트에 장면과 카메라의 움직임을 적어 보세요'
+                : '프롬프트에서 나만의 장면이 시작돼요'}
+            </p>
           </div>
         )}
       </div>
@@ -328,6 +358,7 @@ export function Result({
                 ? `업스케일 ${job.settings.upscale.sourceWidth} × ${job.settings.upscale.sourceHeight} → `
                 : ''}
               {job.settings.width} × {job.settings.height}
+              {clip && ` | ${clip.seconds}초 ${clip.fps}fps`}
               {!job.settings.upscale && ` | ${job.settings.steps} steps`}
             </span>
           </div>
@@ -402,10 +433,12 @@ export function Result({
           {job.status === 'complete' && (
             <>
               <div className="flex flex-wrap gap-1.5">
-                {job.images[0] && (
+                {!job.video && job.images[0] && (
                   <Link
-                    to="/video"
-                    state={{ base: job.base, image: job.images[0] }}
+                    to="/create"
+                    onClick={(e) => {
+                      if (!startVideoFrom(job)) e.preventDefault();
+                    }}
                     className="btn-secondary flex-1 min-w-[112px]"
                   >
                     <Film size={14} />
@@ -429,36 +462,40 @@ export function Result({
                   <Sparkles size={14} />
                   변형 생성
                 </button>
-                <button
-                  className="btn-secondary flex-1 min-w-[112px]"
-                  onClick={() => setUpscaling(true)}
-                >
-                  <Maximize2 size={14} />
-                  업스케일
-                </button>
-                <button
-                  className="btn-secondary flex-1 min-w-[112px]"
-                  onClick={() => setPreviewModalOpen(true)}
-                >
-                  <Sparkles size={14} />
-                  대표 이미지 설정
-                </button>
-                <button
-                  className="btn-secondary flex-1 min-w-[112px]"
-                  onClick={() => void shareImage(job)}
-                >
-                  <Share2 size={14} />
-                  공유
-                </button>
+                {!job.video && (
+                  <>
+                    <button
+                      className="btn-secondary flex-1 min-w-[112px]"
+                      onClick={() => setUpscaling(true)}
+                    >
+                      <Maximize2 size={14} />
+                      업스케일
+                    </button>
+                    <button
+                      className="btn-secondary flex-1 min-w-[112px]"
+                      onClick={() => setPreviewModalOpen(true)}
+                    >
+                      <Sparkles size={14} />
+                      대표 이미지 설정
+                    </button>
+                    <button
+                      className="btn-secondary flex-1 min-w-[112px]"
+                      onClick={() => void shareImage(job)}
+                    >
+                      <Share2 size={14} />
+                      공유
+                    </button>
+                  </>
+                )}
                 <a
                   className="btn-secondary flex-1 min-w-[112px]"
                   href={source}
-                  download={job.images[0]?.filename}
+                  download={resultFile(job)?.filename}
                   target="_blank"
                   rel="noreferrer"
                 >
                   <Download size={14} />
-                  이미지 저장
+                  {job.video ? 'MP4 저장' : '이미지 저장'}
                 </a>
               </div>
               {job.images.length > 1 && (
@@ -487,7 +524,7 @@ export function Result({
           )}
         </div>
       )}
-      {job?.status === 'complete' && (
+      {job?.status === 'complete' && !job.video && (
         <UpscaleDialog job={job} open={upscaling} onClose={() => setUpscaling(false)} />
       )}
       <Modal

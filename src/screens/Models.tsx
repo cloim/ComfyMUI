@@ -18,7 +18,16 @@ import {
   X,
 } from 'lucide-react';
 import { useStudioSelector } from '../studio';
-import { assetFamily, families, selectModel, type ModelEntry, type ModelFamily } from '../models';
+import {
+  assetFamily,
+  families,
+  familyFolder,
+  isVideoFamily,
+  selectModel,
+  withFamilyFolders,
+  type ModelEntry,
+  type ModelFamily,
+} from '../models';
 import {
   addModelTags,
   deleteModelFile,
@@ -108,7 +117,7 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
   const [showNsfw, setShowNsfw] = useState(false);
 
   // Facets & Tag management states
-  const [folders, setFolders] = useState<string[]>(['Flux1.D', 'Krea2', 'Qwen']);
+  const [folders, setFolders] = useState<string[]>(() => withFamilyFolders([]));
   const [roots, setRoots] = useState<string[]>([]);
   const [topTags, setTopTags] = useState<{ tag: string; count: number }[]>([
     { tag: 'flux', count: 10 },
@@ -156,6 +165,7 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
   const [targetFolder, setTargetFolder] = useState('auto');
   const [customSubfolder, setCustomSubfolder] = useState('');
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const listRequest = useRef(0);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -171,7 +181,7 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
         fetchModelRoots(connection.base).catch(() => []),
         fetchModelTopTags(connection.base, 150).catch(() => []),
       ]);
-      if (fList.length) setFolders(fList);
+      setFolders(withFamilyFolders(fList));
       if (rList.length) {
         const ordered = orderDownloadRoots(rList);
         setRoots(ordered);
@@ -184,6 +194,7 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
   }
 
   async function loadModels(targetPage = 1, append = false) {
+    const requestId = ++listRequest.current;
     if (append) {
       setLoadingMore(true);
     } else {
@@ -202,6 +213,7 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
         favoritesOnly,
         updatesOnly,
       });
+      if (requestId !== listRequest.current) return;
 
       if (append) {
         setItems((prev) => [...prev, ...(res.items || [])]);
@@ -212,15 +224,20 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
       setTotal(res.total || 0);
       setPage(targetPage);
     } catch (e) {
-      setApiError((e as Error).message);
+      if (requestId === listRequest.current) setApiError((e as Error).message);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (requestId === listRequest.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }
 
   useEffect(() => {
     void loadModels(1, false);
+    return () => {
+      listRequest.current++;
+    };
   }, [
     connection.base,
     debouncedSearch,
@@ -284,13 +301,17 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
       return;
     }
 
-    const isCheckpoint = item.sub_type === 'checkpoint' && !/\.gguf$/i.test(item.file_path || '');
-    const preferredFamily: ModelFamily = isCheckpoint
-      ? 'flux'
-      : (editFamily && activeModel?.file_path === item.file_path ? editFamily : null) ||
-        assetFamily('model', comfyName, familyAssignments) ||
-        inferFamilyFromModelItem(item) ||
-        settings.architecture;
+    const chosenFamily: ModelFamily =
+      (editFamily && activeModel?.file_path === item.file_path ? editFamily : null) ||
+      assetFamily('model', comfyName, familyAssignments) ||
+      inferFamilyFromModelItem(item) ||
+      settings.architecture;
+    // CivitAI lists LTX models as checkpoints, but they load as diffusion models.
+    const isCheckpoint =
+      item.sub_type === 'checkpoint' &&
+      !/\.gguf$/i.test(item.file_path || '') &&
+      !isVideoFamily(chosenFamily);
+    const preferredFamily: ModelFamily = isCheckpoint ? 'flux' : chosenFamily;
 
     const nextAssignments = {
       ...familyAssignments,
@@ -518,7 +539,8 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
     if (!clean || clean === activeModel.file_name) return;
     setSavingDetail(true);
     try {
-      await renameModelFile(connection.base, activeModel.file_path, clean);
+      const res = await renameModelFile(connection.base, activeModel.file_path, clean);
+      if (!res.success) throw new Error('모델 파일명을 변경하지 못했어요');
       refreshModels();
       await loadModels(1, false);
       setActiveModel(null);
@@ -548,7 +570,8 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
       : matchedRoot.replace(/\/+$/, '');
     setSavingDetail(true);
     try {
-      await moveModelFile(connection.base, activeModel.file_path, targetDir);
+      const res = await moveModelFile(connection.base, activeModel.file_path, targetDir);
+      if (!res.success) throw new Error('모델 폴더를 이동하지 못했어요');
       refreshModels();
       await loadModels(1, false);
       setActiveModel(null);
@@ -563,7 +586,8 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     try {
-      await deleteModelFile(connection.base, deleteTarget.file_path);
+      const res = await deleteModelFile(connection.base, deleteTarget.file_path);
+      if (!res.success) throw new Error('모델 파일을 삭제하지 못했어요');
       refreshModels();
       setDeleteTarget(null);
       setActiveModel(null);
@@ -617,6 +641,22 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
     }
   }
 
+  function autoFolderFor(version?: Pick<CivitaiVersion, 'baseModel' | 'files'>, fileId?: number) {
+    const files = version?.files || [];
+    const file =
+      files.find((f) => f.id === fileId)?.name ||
+      files.find((f) => f.primary)?.name ||
+      files[0]?.name ||
+      '';
+    const family = inferFamilyFromModelItem({
+      base_model: version?.baseModel || '',
+      folder: '',
+      file_name: file,
+      file_path: file,
+    });
+    return family ? familyFolder(family, folders) : null;
+  }
+
   async function handleStartDownload(opts?: {
     modelId?: number;
     modelVersionId: number;
@@ -635,18 +675,20 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
       return;
     }
 
+    const airFileId =
+      lookupAir?.fileId && lookupAir.modelVersionId === versionId ? lookupAir.fileId : undefined;
+    const version = selectedVer || remoteVersions.find((v) => v.id === versionId);
+    // Automatic sorting saves in the family folder; unknown families use the server's paths.
+    const autoFolder = autoFolderFor(version, airFileId);
     const chosenFolder =
       opts?.folderOverride !== undefined
         ? opts.folderOverride
         : targetFolder === 'auto'
-          ? ''
+          ? autoFolder || ''
           : targetFolder === 'custom'
             ? customSubfolder.trim()
             : targetFolder;
-    const useDefault = opts?.folderOverride === undefined && targetFolder === 'auto';
-    const airFileId =
-      lookupAir?.fileId && lookupAir.modelVersionId === versionId ? lookupAir.fileId : undefined;
-    const version = selectedVer || remoteVersions.find((v) => v.id === versionId);
+    const useDefault = opts?.folderOverride === undefined && targetFolder === 'auto' && !autoFolder;
     const name =
       [version?.model?.name || activeModel?.model_name, version?.name].filter(Boolean).join(' ') ||
       `CivitAI #${versionId}`;
@@ -1408,7 +1450,7 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
                 value={civitaiQuery}
                 onChange={(e) => setCivitaiQuery(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') void handleLookupCivitai();
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) void handleLookupCivitai();
                 }}
                 placeholder="urn:air:flux1:checkpoint:civitai:705606@992100"
                 className="field min-w-0 flex-1 font-mono"
@@ -1473,7 +1515,7 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
                     value={targetFolder}
                     onChange={(e) => setTargetFolder(e.target.value)}
                   >
-                    <option value="auto">기본 경로 자동 분류 (권장)</option>
+                    <option value="auto">계열 폴더 자동 분류 (권장)</option>
                     <option value="">루트 폴더 직접 저장</option>
                     {folders.map((f) => (
                       <option key={f} value={f}>
@@ -1482,6 +1524,21 @@ export default function Models({ tabs }: { tabs?: ReactNode } = {}) {
                     ))}
                     <option value="custom">새 하위 폴더 직접 입력</option>
                   </SelectControl>
+                  {targetFolder === 'auto' && (
+                    <span className="text-2xs font-normal text-muted">
+                      {(() => {
+                        const folder = autoFolderFor(
+                          selectedLookupVersion,
+                          lookupAir?.modelVersionId === selectedLookupVersion.id
+                            ? lookupAir.fileId
+                            : undefined,
+                        );
+                        return folder
+                          ? `${folder} 폴더에 저장해요`
+                          : '계열을 알 수 없어 LoRA Manager 기본 경로에 저장해요';
+                      })()}
+                    </span>
+                  )}
                 </label>
 
                 {targetFolder === 'custom' ? (

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 for (const kind of ['model', 'lora'] as const) {
   for (const storage of ['volume', 'local'] as const) {
-    test(`${kind} CivitAI download keeps ${storage} destination with automatic folders`, async ({
+    test(`${kind} CivitAI download keeps ${storage} destination in the family folder`, async ({
       page,
       request,
     }) => {
@@ -50,15 +50,17 @@ for (const kind of ['model', 'lora'] as const) {
         expect(box!.x).toBeGreaterThanOrEqual(0);
         expect(box!.x + box!.width).toBeLessThanOrEqual(width);
       }
+      // Automatic sorting follows the family folder convention.
+      await expect(dialog.getByText('Flux1.D 폴더에 저장해요')).toBeVisible();
       const download = page.waitForRequest(
         (r) => r.method() === 'POST' && r.url().endsWith('/api/lm/download-model'),
       );
       await dialog.getByRole('button', { name: '선택 버전 다운로드' }).click();
       expect((await download).postDataJSON()).toMatchObject({
         model_root: root,
-        use_default_paths: true,
+        use_default_paths: false,
         use_save_dir_as_root: true,
-        relative_path: '',
+        relative_path: 'Flux1.D',
       });
     });
   }

@@ -19,7 +19,7 @@ import { thumbnailUrl } from '../api';
 import { newId, type Job, type ObjectInfo } from '../domain';
 import {
   compatibleAssets,
-  families,
+  imageFamilies,
   selectModel,
   type FamilyAssignments,
   type ModelEntry,
@@ -587,7 +587,7 @@ function CharacterEditor({
           {character.lora && !family && (
             <option value={character.lora}>{fileName(character.lora)} (계열 확인 필요)</option>
           )}
-          {families.map(({ id }) => {
+          {imageFamilies.map(({ id }) => {
             const names = compatibleAssets(info, 'lora', id, assignments);
             return (
               names.length > 0 && (

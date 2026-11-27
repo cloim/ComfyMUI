@@ -16,10 +16,7 @@ export function galleryWindow(
   if (count <= 80) return { start: 0, end: count, top: 0, bottom: 0 };
   const visibleRows = Math.ceil(viewportHeight / rowHeight);
   const maxFirst = Math.max(0, rows - visibleRows - overscan * 2);
-  const first = Math.min(
-    maxFirst,
-    Math.max(0, Math.floor(scrollTop / rowHeight) - overscan),
-  );
+  const first = Math.min(maxFirst, Math.max(0, Math.floor(scrollTop / rowHeight) - overscan));
   const last = Math.min(rows, Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan);
   return {
     start: first * columns,
@@ -45,7 +42,9 @@ export function readGalleryView(): GalleryView {
     if (!raw || typeof raw !== 'object') return empty;
     return {
       search: typeof raw.search === 'string' ? raw.search : '',
-      family: ['all', 'flux', 'krea2', 'moss', 'qwen21'].includes(raw.family) ? raw.family : 'all',
+      family: ['all', 'flux', 'krea2', 'moss', 'qwen21', 'ltx2'].includes(raw.family)
+        ? raw.family
+        : 'all',
       lora: ['all', 'with_lora', 'without_lora'].includes(raw.lora) ? raw.lora : 'all',
       scrollTop:
         typeof raw.scrollTop === 'number' && Number.isFinite(raw.scrollTop)

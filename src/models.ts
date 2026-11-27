@@ -1,12 +1,75 @@
 import type { Generation, ObjectInfo } from './domain';
 
+// Video families render MP4 clips with the LTX workflow instead of still images.
+// `folder` is the family's folder under diffusion_models.
 export const families = [
-  { id: 'flux', label: 'Flux1.d', clipType: 'flux', steps: 24, cfg: 1 },
-  { id: 'krea2', label: 'krea2', clipType: 'krea2', steps: 8, cfg: 1 },
-  { id: 'moss', label: 'moss', clipType: 'moss_image', steps: 24, cfg: 4 },
-  { id: 'qwen21', label: 'qwen 2.1', clipType: 'qwen_image', steps: 28, cfg: 4 },
+  {
+    id: 'flux',
+    label: 'Flux1.d',
+    clipType: 'flux',
+    steps: 24,
+    cfg: 1,
+    video: false,
+    folder: 'Flux1.D',
+  },
+  {
+    id: 'krea2',
+    label: 'krea2',
+    clipType: 'krea2',
+    steps: 8,
+    cfg: 1,
+    video: false,
+    folder: 'Krea2',
+  },
+  {
+    id: 'moss',
+    label: 'moss',
+    clipType: 'moss_image',
+    steps: 24,
+    cfg: 4,
+    video: false,
+    folder: 'MOSS',
+  },
+  {
+    id: 'qwen21',
+    label: 'qwen 2.1',
+    clipType: 'qwen_image',
+    steps: 28,
+    cfg: 4,
+    video: false,
+    folder: 'Qwen 2.1',
+  },
+  {
+    id: 'ltx2',
+    label: 'LTX 2.5',
+    clipType: 'ltxv',
+    steps: 8,
+    cfg: 1,
+    video: true,
+    folder: 'LTX 2.5',
+  },
 ] as const;
+// The family folder a download is saved in, keeping a spelling the server already uses.
+export function familyFolder(family: ModelFamily, existing: readonly string[] = []): string {
+  const folder = families.find((f) => f.id === family)!.folder;
+  if (existing.includes(folder)) return folder;
+  const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return existing.find((name) => !name.includes('/') && key(name) === key(folder)) || folder;
+}
+// Server folders plus the family folders, which are offered before they exist.
+export function withFamilyFolders(folders: readonly string[]): string[] {
+  const known = new Set(folders.map((f) => f.toLowerCase()));
+  return [...folders, ...families.map((f) => f.folder).filter((f) => !known.has(f.toLowerCase()))];
+}
 export type ModelFamily = (typeof families)[number]['id'];
+export function isVideoFamily(family: string): boolean {
+  return families.some((f) => f.id === family && f.video);
+}
+// Scenarios, edits and upscales produce still images, so they offer only these families.
+export const imageFamilies = families.filter((f) => !f.video);
+// Size presets when a generation switches between still images and video.
+export const videoSize = { width: 1280, height: 720 };
+export const imageSize = { width: 768, height: 1024 };
 
 export const INCOMPATIBLE_SDE_SAMPLERS = [
   'dpmpp_2m_sde',
@@ -72,6 +135,14 @@ export const qualityProfiles: Record<ModelFamily, QualityRecommendation> = {
     badge: 'Qwen VL 멀티모달 DiT',
     reason:
       'Qwen VL 인코더의 정밀한 묘사력을 극대화하여 미세 질감과 이목구비 선명도를 완벽하게 살려줘요.',
+  },
+  ltx2: {
+    sampler: 'euler',
+    scheduler: 'simple',
+    steps: 8,
+    cfg: 1.0,
+    badge: 'LTX 2.5 증류 영상 모델',
+    reason: '증류 모델은 euler 8스텝과 CFG 1에서 전용 스케줄로 가장 안정적인 움직임을 만들어요.',
   },
 };
 
@@ -157,12 +228,17 @@ export type ModelEntry = {
 
 export function inferFamily(name: string): ModelFamily | null {
   const n = name.replaceAll('\\', '/').toLowerCase();
+  if (/ltx[ ._-]?2|redgraft/.test(n)) return 'ltx2';
   if (/flux[ ._-]?2|klein/.test(n)) return null;
   if (/krea[ ._-]?2/.test(n)) return 'krea2';
   if (/moss/.test(n)) return 'moss';
   if (/qwen[_ .-]?(?:image[_ .-]?)?2[._-]?1/.test(n)) return 'qwen21';
   if (/flux/.test(n)) return 'flux';
   return null;
+}
+// CivitAI names LTX 2.x bases like "LTXV2" or "LTXV 2.5". Older LTX-Video is not supported.
+export function ltxBaseFamily(baseModel: string): ModelFamily | null {
+  return /ltxv?[ ._-]?2(?:[._]\d)?(?:$|[^b\d])/i.test(baseModel) ? 'ltx2' : null;
 }
 export function assetFamily(
   kind: string,
@@ -195,6 +271,13 @@ export function catalog(
     for (const name of comboOptions(info, source.loader, source.field)) {
       const family = assetFamily('model', name, assignments);
       if (!family) continue;
+      // LTX files are diffusion-only; a shared checkpoints path must not load them as checkpoints.
+      if (
+        isVideoFamily(family) &&
+        source.loader === 'CheckpointLoaderSimple' &&
+        comboOptions(info, 'UNETLoader', 'unet_name').includes(name)
+      )
+        continue;
       // These models require reference-image or specialized Nunchaku workflows.
       if (/nunchaku|svdq|kontext|(^|[\\/])edit([\\/])/i.test(name)) continue;
       const key = name.replaceAll('\\', '/');
@@ -212,7 +295,10 @@ export function catalog(
 }
 export function sortModelEntries(entries: ModelEntry[], modelOrder: string[] = []): ModelEntry[] {
   const compareDefault = (a: ModelEntry, b: ModelEntry) => {
-    const familyCompare = a.family.localeCompare(b.family, undefined, { numeric: true, sensitivity: 'base' });
+    const familyCompare = a.family.localeCompare(b.family, undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    });
     if (familyCompare !== 0) return familyCompare;
     return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
   };
@@ -241,7 +327,7 @@ export function applyModelReorder(
 }
 export function compatibleAssets(
   info: ObjectInfo | null,
-  kind: 'lora' | 'clip' | 'vae',
+  kind: 'lora' | 'clip' | 'vae' | 'audio',
   family: ModelFamily,
   assignments: FamilyAssignments = {},
 ): string[] {
@@ -250,7 +336,7 @@ export function compatibleAssets(
       ? comboOptions(info, 'LoraLoaderModelOnly', 'lora_name').concat(
           comboOptions(info, 'LoraLoader', 'lora_name'),
         )
-      : kind === 'vae'
+      : kind === 'vae' || kind === 'audio'
         ? comboOptions(info, 'VAELoader', 'vae_name')
         : ['CLIPLoader', 'CLIPLoaderGGUF', 'DualCLIPLoader', 'DualCLIPLoaderGGUF'].flatMap(
             (node) =>
@@ -262,15 +348,23 @@ export function compatibleAssets(
                 : comboOptions(info, node, 'clip_name'),
           );
   return [...new Set(names)].filter((name) => {
+    const n = name.replaceAll('\\', '/').toLowerCase();
+    // LTX 2.5 needs a video VAE and an audio VAE; both are classified as VAE.
+    if (kind === 'audio' || (kind === 'vae' && family === 'ltx2')) {
+      if (family !== 'ltx2' || /audio/.test(n) !== (kind === 'audio')) return false;
+      const assigned = assignments['vae:' + name];
+      if (families.some((f) => f.id === assigned)) return assigned === family;
+      return /ltx[ ._-]?2/.test(n) && /vae/.test(n);
+    }
     const assigned = assignments[kind + ':' + name];
     if (families.some((f) => f.id === assigned)) return assigned === family;
     if (kind === 'lora') return inferFamily(name) === family;
-    const n = name.replaceAll('\\', '/').toLowerCase();
     if (kind === 'clip') {
       if (family === 'flux')
         return /clip_l|t5xxl|t5[-_]/.test(n) && !/(wan|qwen|krea2|moss)/.test(n);
       if (family === 'krea2') return /qwen3[._-]?vl[_ .-]?4b/.test(n);
       if (family === 'moss') return /qwen3[._-]?5[_ .-]?9b/.test(n);
+      if (family === 'ltx2') return /gemma/.test(n);
       return /qwen3[._-]?vl[_ .-]?8b/.test(n);
     }
     if (family === 'flux') return /(^|\/)ae\.[^.]+$/.test(n) && !/flux2/.test(n);
@@ -297,10 +391,24 @@ export function selectModel(
 ): Generation {
   const profile = families.find((f) => f.id === entry.family)!;
   const clips = compatibleAssets(info, 'clip', entry.family, assignments),
-    vaes = compatibleAssets(info, 'vae', entry.family, assignments);
+    vaes = compatibleAssets(info, 'vae', entry.family, assignments),
+    audios = compatibleAssets(info, 'audio', entry.family, assignments);
   const same = s.architecture === entry.family;
+  const video = isVideoFamily(entry.family);
+  // Crossing between images and video keeps the orientation with a size that suits the medium.
+  const size =
+    video === isVideoFamily(s.architecture)
+      ? {}
+      : video
+        ? s.height > s.width
+          ? { width: videoSize.height, height: videoSize.width }
+          : videoSize
+        : s.width > s.height
+          ? { width: imageSize.height, height: imageSize.width }
+          : imageSize;
   return {
     ...s,
+    ...size,
     architecture: entry.family,
     model: entry.name,
     modelLoader: entry.loader,
@@ -327,6 +435,12 @@ export function selectModel(
         : entry.family === 'krea2'
           ? vaes.find((v) => /qwen_image_vae/i.test(v)) || vaes[0] || ''
           : vaes[0] || '',
+    audioVae:
+      entry.family === 'ltx2'
+        ? same && s.audioVae && audios.includes(s.audioVae)
+          ? s.audioVae
+          : audios[0] || ''
+        : '',
     ...(!same || isArtifactProneSampler(s.sampler)
       ? {
           steps: profile.steps,
@@ -354,7 +468,7 @@ export function validateSelection(
 ) {
   if (s.workflow) return;
   const entry = selectedEntry(s, info, assignments);
-  if (!entry) throw new Error('지원하는 네 계열에서 모델을 선택해 주세요');
+  if (!entry) throw new Error('지원하는 계열에서 모델을 선택해 주세요');
   if (entry.family !== s.architecture)
     throw new Error('모델 계열을 확인하고 모델을 다시 선택해 주세요');
   for (const l of s.loras)
@@ -365,7 +479,9 @@ export function validateSelection(
   if (
     !clips.includes(s.clip1) ||
     (s.architecture === 'flux' && !clips.includes(s.clip2)) ||
-    !vaes.includes(s.vae)
+    !vaes.includes(s.vae) ||
+    (s.architecture === 'ltx2' &&
+      !compatibleAssets(info, 'audio', s.architecture, assignments).includes(s.audioVae || ''))
   )
     throw new Error('선택한 계열의 텍스트 인코더와 VAE 설치를 확인해 주세요');
 }

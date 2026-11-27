@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { imageUrl } from '../api';
-import type { Job } from '../domain';
+import { jobFile, type Job } from '../domain';
 import { formatBytes } from '../lora-manager';
 import { Result } from './Result';
 
@@ -16,7 +16,7 @@ export function HistoryResult({
   indexedSize?: number;
   onDelete: () => void;
 }) {
-  const image = job.status === 'complete' ? job.images[0] : undefined;
+  const image = job.status === 'complete' ? jobFile(job) : undefined;
   const hasIndexedSize = indexedSize != null && Number.isFinite(indexedSize) && indexedSize >= 0;
   const sizeUrl = !hasIndexedSize && image ? imageUrl(job.base, image) : '';
   const [measuredSize, setMeasuredSize] = useState<{ url: string; bytes: number | null }>();
@@ -34,7 +34,7 @@ export function HistoryResult({
     })
       .then((response) => {
         const length = Number(response.headers.get('Content-Length') ?? NaN);
-        const isImage = response.headers.get('Content-Type')?.startsWith('image/');
+        const isImage = /^(image|video)\//.test(response.headers.get('Content-Type') || '');
         const encoding = response.headers.get('Content-Encoding');
         storeSize(
           response.ok &&

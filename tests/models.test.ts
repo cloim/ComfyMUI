@@ -14,6 +14,7 @@ import {
   validateSelection,
   comboOptions,
   families,
+  imageFamilies,
   qualityProfiles,
   checkQualityIssues,
   getOptimalQualitySettings,
@@ -135,7 +136,8 @@ describe('four directly supported families', () => {
     });
   });
   it('exposes exactly the requested four families and excludes older Qwen and reference-image models', () => {
-    expect(families.map((f) => f.id)).toEqual(['flux', 'krea2', 'moss', 'qwen21']);
+    expect(imageFamilies.map((f) => f.id)).toEqual(['flux', 'krea2', 'moss', 'qwen21']);
+    expect(families.filter((f) => f.video).map((f) => f.id)).toEqual(['ltx2']);
     const models = catalog(info);
     expect(models).toHaveLength(8);
     expect(models.filter((e) => e.format === 'GGUF')).toHaveLength(3);
@@ -151,7 +153,7 @@ describe('four directly supported families', () => {
       moss: ['qwen3.5_9b', 'flux2-vae'],
       qwen21: ['qwen3vl_8b', 'qwen_image_2.1_vae'],
     };
-    for (const family of families) {
+    for (const family of imageFamilies) {
       const s = selectModel(
         defaults,
         catalog(info).find((e) => e.family === family.id)!,
@@ -191,7 +193,7 @@ describe('four directly supported families', () => {
   });
 });
 describe('family-specific native graphs', () => {
-  it.each(families.map((f) => f.id))(
+  it.each(imageFamilies.map((f) => f.id))(
     'builds %s with matching text encoder, VAE and unchanged geometry',
     (family) => {
       const s = selectModel(

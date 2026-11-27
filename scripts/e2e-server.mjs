@@ -1,10 +1,11 @@
 // Isolated ComfyUI protocol fixture, used only by npm run test:e2e.
 import { createServer } from 'node:http';
-import { writeFileSync, mkdtempSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { crc32, deflateSync } from 'node:zlib';
 import { join } from 'node:path';
 import { WebSocketServer } from 'ws';
+import { mp4WithTags } from './mp4-fixture.mjs';
 
 const jobs = new Map();
 // Generated images are written here so the app server can sync records with real files.
@@ -168,6 +169,7 @@ const schema = {
           'Krea2/krea2_turbo.safetensors',
           'moss_image_sft.safetensors',
           'qwen_image_2.1.safetensors',
+          'LTX 2.5/REDGraft-ltx25-sulphur2-int8-convrot-ComfyMCP.safetensors',
         ]),
         weight_dtype: choices(['default']),
       },
@@ -190,8 +192,9 @@ const schema = {
           'Qwen/qwen3vl_4b.safetensors',
           'qwen3.5_9b_gptq.safetensors',
           'qwen3vl_8b.safetensors',
+          'gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors',
         ]),
-        type: choices(['krea2', 'moss_image', 'qwen_image']),
+        type: choices(['krea2', 'moss_image', 'qwen_image', 'ltxv']),
       },
     },
   },
@@ -203,6 +206,8 @@ const schema = {
           'Qwen/qwen_image_vae.safetensors',
           'flux2-vae_small.safetensors',
           'qwen_image_2.1_vae.safetensors',
+          'ltx-2.5-video-vae-conv-bf16.safetensors',
+          'ltx-2.5-audio-vae-bf16.safetensors',
         ]),
       },
     },
@@ -330,6 +335,24 @@ schema.LoraLoaderModelOnly = {
     },
   },
 };
+// LTX video nodes. Only node presence and required inputs are checked by the app.
+for (const node of [
+  'LTXVConditioning',
+  'EmptyLTXVLatentVideo',
+  'LTXVEmptyLatentAudio',
+  'LTXVConcatAVLatent',
+  'LTXVSeparateAVLatent',
+  'ManualSigmas',
+  'LTXVScheduler',
+  'SamplerCustom',
+  'VAEDecodeTiled',
+  'LTXVAudioVAEDecode',
+  'LTXVImgToVideoInplace',
+  'CreateVideo',
+])
+  schema[node] = { input: { required: {} } };
+schema.KSamplerSelect = { input: { required: { sampler_name: choices(['euler', 'heun']) } } };
+schema.SaveVideo = { input: { required: {} }, output_node: true };
 const mock = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const send = (body, status = 200) => {
@@ -653,7 +676,11 @@ const mock = createServer(async (req, res) => {
       return send('comfymui-state.json');
     }
     if (url.pathname === '/prompt') {
-      const text = data.prompt?.['2']?.inputs?.text || data.prompt?.['2']?.inputs?.prompt || '';
+      const text =
+        data.prompt?.['2']?.inputs?.text ||
+        data.prompt?.['2']?.inputs?.prompt ||
+        data.prompt?.['5']?.inputs?.text ||
+        '';
       if (text.includes('reject'))
         return send(
           {
@@ -662,9 +689,13 @@ const mock = createServer(async (req, res) => {
           },
           400,
         );
-      if (!data.client_id || !data.prompt?.['7'])
+      // Images save in node 7, videos in node 18 with a client chosen prompt id.
+      if (
+        !data.client_id ||
+        !(data.prompt?.['7'] || data.prompt?.['18']?.class_type === 'SaveVideo')
+      )
         return send({ error: { message: 'API contract mismatch' } }, 400);
-      const id = crypto.randomUUID();
+      const id = data.prompt_id || crypto.randomUUID();
       jobs.set(id, {
         start: Date.now(),
         prompt: data.prompt,
@@ -986,6 +1017,24 @@ const mock = createServer(async (req, res) => {
           },
         },
       });
+    if (j.prompt['18']?.class_type === 'SaveVideo') {
+      // SaveVideo stores the prompt and each extra_pnginfo entry as JSON metadata tags.
+      if (!j.filesWritten) {
+        mkdirSync(join(outputDir, 'video'), { recursive: true });
+        const tags = { prompt: JSON.stringify(j.prompt) };
+        for (const [key, value] of Object.entries(j.pngInfo)) tags[key] = JSON.stringify(value);
+        writeFileSync(join(outputDir, 'video', `mock-${id}.mp4`), mp4WithTags(tags));
+        j.filesWritten = true;
+      }
+      return send({
+        [id]: {
+          outputs: {
+            18: { images: [{ filename: `mock-${id}.mp4`, subfolder: 'video', type: 'output' }] },
+          },
+          status: { completed: true, status_str: 'success' },
+        },
+      });
+    }
     const batchSize = j.prompt['4']?.inputs?.batch_size || j.prompt['52']?.inputs?.amount || 1;
     const images = Array.from({ length: batchSize }, (_, i) => ({
       filename: `mock-${id}-${i}.png`,

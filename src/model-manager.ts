@@ -6,6 +6,8 @@ import {
   comboOptions,
   families,
   inferFamily,
+  isVideoFamily,
+  ltxBaseFamily,
   modelSources,
   type FamilyAssignments,
   type ModelEntry,
@@ -94,6 +96,8 @@ export function inferFamilyFromModelItem(
   if (fromPath) return fromPath;
 
   const bm = (item.base_model || '').toLowerCase();
+  const ltx = ltxBaseFamily(bm);
+  if (ltx) return ltx;
   if (bm.includes('krea')) return 'krea2';
   if (bm.includes('moss')) return 'moss';
   if (bm.includes('qwen')) return 'qwen21';
@@ -239,7 +243,8 @@ export function resolveComfyModelEntry(
   if (!family) return null;
 
   const isGguf = /\.gguf$/i.test(item.file_path || '') || /\.gguf$/i.test(comfyName);
-  const isCheckpoint = item.sub_type === 'checkpoint' && !isGguf;
+  // CivitAI lists LTX models as checkpoints, but they load as diffusion models.
+  const isCheckpoint = item.sub_type === 'checkpoint' && !isGguf && !isVideoFamily(family);
 
   if (isCheckpoint && family !== 'flux') {
     return null;
@@ -486,4 +491,3 @@ export function compareModelManagerItems(
 export function sortModelManagerItems(items: ModelManagerItem[]): ModelManagerItem[] {
   return [...items].sort(compareModelManagerItems);
 }
-

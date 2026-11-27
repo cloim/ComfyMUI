@@ -1,7 +1,7 @@
 import { defaults, type Generation, type Job, type Lora } from './domain';
-import { families, inferFamily, type ModelFamily } from './models';
+import { families, inferFamily, isVideoFamily, type ModelFamily } from './models';
 
-// One image in the ComfyUI output folder, described by the app server (gallery.mjs).
+// One image or MP4 in the ComfyUI output folder, described by the app server (gallery.mjs).
 export type GallerySummary = Partial<{
   positive: string;
   negative: string;
@@ -33,6 +33,7 @@ export type GalleryFile = {
   summary?: GallerySummary;
   // No generation data in the file (made outside ComfyUI or saved without metadata).
   external?: boolean;
+  video?: boolean;
 };
 export type GalleryIndex = { available: boolean; files: GalleryFile[] };
 
@@ -66,13 +67,17 @@ const str = (value: unknown, fallback: string) => (typeof value === 'string' ? v
 // Settings to reuse an image. App-made images carry the exact settings; others are
 // rebuilt from the workflow ComfyUI saved in the PNG.
 export function gallerySettings(file: GalleryFile, fallbackNegative: string): Generation {
+  // Videos made before video families existed were recorded with an image family.
+  const videoFamily = (family: ModelFamily) =>
+    file.video && !isVideoFamily(family) ? 'ltx2' : family;
   if (file.settings && typeof file.settings === 'object') {
-    return { ...defaults, ...file.settings, workflow: null };
+    const settings = { ...defaults, ...file.settings, workflow: null };
+    return { ...settings, architecture: videoFamily(settings.architecture) };
   }
   const s = file.summary || {};
   return {
     ...defaults,
-    architecture: familyOf(s),
+    architecture: videoFamily(familyOf(s)),
     modelLoader: str(s.modelLoader, defaults.modelLoader),
     model: str(s.model, ''),
     clip1: str(s.clip1, ''),
@@ -103,6 +108,7 @@ export function galleryKey(file: Pick<GalleryFile, 'filename' | 'subfolder'>) {
 
 // Gallery screens and the result view work on Job objects, so each file becomes one.
 export function galleryJob(file: GalleryFile, fallbackNegative: string): Job {
+  const ref = { filename: file.filename, subfolder: file.subfolder, type: 'output', v: file.mtime };
   return {
     id: `file:${galleryKey(file)}@${file.mtime}`,
     createdAt: file.mtime,
@@ -112,7 +118,7 @@ export function galleryJob(file: GalleryFile, fallbackNegative: string): Job {
     base: GALLERY_BASE,
     status: 'complete',
     progress: 100,
-    images: [{ filename: file.filename, subfolder: file.subfolder, type: 'output', v: file.mtime }],
+    ...(file.video ? { video: true as const, videos: [ref], images: [] } : { images: [ref] }),
   };
 }
 

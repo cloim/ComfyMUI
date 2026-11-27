@@ -22,7 +22,7 @@ import { ScenarioSettings, type CharacterImageTarget } from '../components/Scena
 import { IconButton, Modal, SelectControl } from '../components/ui';
 import { DraftInput } from '../components/DraftField';
 import { reorderQueue, type Job } from '../domain';
-import { catalog, selectModel } from '../models';
+import { catalog, isVideoFamily, selectModel } from '../models';
 import {
   CHARACTER_SHOTS,
   characterJobId,
@@ -130,8 +130,10 @@ export default function Scenario() {
   const [preview, setPreview] = useState<SceneImage | null>(null);
   const [remove, setRemove] = useState<'project' | 'scene' | null>(null);
   const editor = useRef<HTMLDivElement>(null);
+  // Scenes are still images, so video families are left out.
   const entries = useMemo(
-    () => catalog(info, familyAssignments, modelOrder),
+    () =>
+      catalog(info, familyAssignments, modelOrder).filter((entry) => !isVideoFamily(entry.family)),
     [info, familyAssignments, modelOrder],
   );
   const latest = useMemo(() => {

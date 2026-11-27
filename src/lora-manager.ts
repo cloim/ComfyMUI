@@ -1,5 +1,5 @@
 import { request } from './api';
-import { inferFamily, type ModelFamily } from './models';
+import { inferFamily, ltxBaseFamily, type ModelFamily } from './models';
 
 export type LoraCivitaiMeta = {
   id?: number;
@@ -224,6 +224,8 @@ export function inferFamilyFromLoraItem(
   item: Pick<LoraItem, 'base_model' | 'folder' | 'file_name' | 'file_path'>,
 ): ModelFamily | null {
   const bm = (item.base_model || '').toLowerCase();
+  const ltx = ltxBaseFamily(bm);
+  if (ltx) return ltx;
   if (bm.includes('krea')) return 'krea2';
   if (bm.includes('moss')) return 'moss';
   if (bm.includes('qwen')) return 'qwen21';
@@ -759,4 +761,3 @@ export function compareLoraItems(
 export function sortLoraItems(items: LoraItem[]): LoraItem[] {
   return [...items].sort(compareLoraItems);
 }
-

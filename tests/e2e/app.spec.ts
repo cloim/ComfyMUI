@@ -328,9 +328,11 @@ test('family-first model selection, GGUF submission and manual LoRA classificati
     ),
   ).toBe('flux');
 });
-test('exactly four families generate directly with their native graph', async ({ page }) => {
+test('four image families generate directly with their native graph', async ({ page }) => {
   await connect(page);
-  await expect(page.getByLabel('모델 계열', { exact: true }).locator('option')).toHaveCount(4);
+  const familySelect = page.getByLabel('모델 계열', { exact: true });
+  await expect(familySelect.locator('optgroup[label="이미지"] option')).toHaveCount(4);
+  await expect(familySelect.locator('optgroup[label="영상"] option')).toHaveCount(1);
   for (const [family, clipType, latent, positive] of [
     ['flux', 'flux', 'EmptySD3LatentImage', 'CLIPTextEncode'],
     ['krea2', 'krea2', 'EmptySD3LatentImage', 'CLIPTextEncode'],
@@ -759,9 +761,10 @@ test('sidebar cleanup, prompt assemble multi-select, model dropdown, LoRA keyboa
   await expect(listbox).toBeVisible();
   await listbox.getByRole('option', { name: 'eye-level', exact: true }).click();
   await listbox.getByRole('option', { name: 'bird-eye', exact: true }).click();
-  const promptText = await page.getByLabel('그리고 싶은 장면', { exact: true }).inputValue();
-  expect(promptText).toContain('eye-level');
-  expect(promptText).toContain('bird-eye');
+  // The prompt field applies a selection after it renders, so wait for both attributes.
+  const promptField = page.getByLabel('그리고 싶은 장면', { exact: true });
+  await expect(promptField).toHaveValue(/eye-level/);
+  await expect(promptField).toHaveValue(/bird-eye/);
   await page.keyboard.press('Escape');
 
   // 5. LoRA 강도 클릭하여 키보드 입력 지원 확인
@@ -1100,7 +1103,9 @@ test('model download keeps tracking after the app loses the request', async ({ p
 
   // 창은 바로 닫히고 진행 목록이 생긴다
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByText(/백그라운드에서 다운로드를 시작했어요|다운로드를 완료했어요/)).toBeVisible();
+  await expect(
+    page.getByText(/백그라운드에서 다운로드를 시작했어요|다운로드를 완료했어요/),
+  ).toBeVisible();
 
   // 진행률 API와 라이브러리 등록을 확인해 완료 처리하고 목록을 새로고침한다
   await expect(page.getByText(/다운로드를 완료했어요/)).toBeVisible({ timeout: 15000 });

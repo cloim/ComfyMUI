@@ -29,6 +29,7 @@ import {
   Dices,
   Languages,
   X,
+  Film,
 } from 'lucide-react';
 import { useStudio, useStudioSelector } from '../studio';
 import { translatePrompt } from '../ai-settings';
@@ -76,9 +77,12 @@ import {
   compatibleAssets,
   selectedEntry,
   isArtifactProneSampler,
+  isVideoFamily,
   families,
   qualityProfiles,
 } from '../models';
+import { imageUrl } from '../api';
+import { ltxFrameRates, ltxFrames, ltxSizes, videoOptions } from '../ltx';
 
 const POSITIVE_HEIGHT_KEY = 'cm-prompt-height';
 const NEGATIVE_HEIGHT_KEY = 'cm-negative-prompt-height';
@@ -268,12 +272,16 @@ export default function Create() {
   useEffect(() => {
     if (s.batch !== 1) patch({ batch: 1 });
   }, [s.batch]);
-  const ratios = [
-    { name: '정사각', ratio: '1:1', w: 1024, h: 1024 },
-    { name: '세로', ratio: '3:4', w: 768, h: 1024 },
-    { name: '가로', ratio: '4:3', w: 1024, h: 768 },
-    { name: '와이드', ratio: '16:9', w: 1024, h: 576 },
-  ];
+  const video = isVideoFamily(s.architecture);
+  const ratios = video
+    ? ltxSizes
+    : [
+        { name: '정사각', ratio: '1:1', w: 1024, h: 1024 },
+        { name: '세로', ratio: '3:4', w: 768, h: 1024 },
+        { name: '가로', ratio: '4:3', w: 1024, h: 768 },
+        { name: '와이드', ratio: '16:9', w: 1024, h: 576 },
+      ];
+  const sizeRange = video ? { min: 256, max: 1920 } : { min: 64, max: 4096 };
   const currentRatio = ratios.find((r) => r.w === s.width && r.h === s.height);
   const ratioValue = currentRatio ? `${currentRatio.w}x${currentRatio.h}` : 'custom';
   const loras = compatibleAssets(info, 'lora', s.architecture, familyAssignments);
@@ -327,7 +335,9 @@ export default function Create() {
               style={positiveStyle}
               value={s.positive}
               onValueChange={editPositive}
-              placeholder="어떤 장면을 만들고 싶으세요?"
+              placeholder={
+                video ? '장면과 카메라의 움직임을 묘사해 주세요' : '어떤 장면을 만들고 싶으세요?'
+              }
             />
             {visiblePair && (
               <div className="mt-2 rounded-lg bg-paper px-2.5 py-1.5 text-xs">
@@ -385,8 +395,13 @@ export default function Create() {
                   style={negativeStyle}
                   value={s.negative}
                   onValueChange={(v) => patch({ negative: v })}
-                  placeholder="이미지에서 제외할 요소"
+                  placeholder={video ? '영상에서 제외할 요소' : '이미지에서 제외할 요소'}
                 />
+                {video && s.cfg <= 1 && (
+                  <p className="mt-1.5 text-2xs text-muted">
+                    영상은 고급 설정의 CFG가 1보다 클 때 네거티브 프롬프트를 적용해요
+                  </p>
+                )}
               </>
             )}
           </Section>
@@ -492,7 +507,10 @@ export default function Create() {
               </button>
             )}
           </Section>
-          <Section title="이미지 설정" icon={SlidersHorizontal}>
+          <Section
+            title={video ? '영상 설정' : '이미지 설정'}
+            icon={video ? Film : SlidersHorizontal}
+          >
             <div className="grid grid-cols-1 items-end gap-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
               <Field label="비율">
                 <SelectControl
@@ -523,8 +541,7 @@ export default function Create() {
                   label="너비"
                   value={s.width}
                   onChange={(width) => patch({ width })}
-                  min={64}
-                  max={4096}
+                  {...sizeRange}
                   step={8}
                 />
                 <IconButton
@@ -537,12 +554,12 @@ export default function Create() {
                   label="높이"
                   value={s.height}
                   onChange={(height) => patch({ height })}
-                  min={64}
-                  max={4096}
+                  {...sizeRange}
                   step={8}
                 />
               </div>
             </div>
+            {video && <VideoSettings />}
           </Section>
         </fieldset>
         <button
@@ -567,6 +584,138 @@ export default function Create() {
       </aside>
       <Advanced open={advanced} initialTab={advancedTab} onClose={() => setAdvanced(false)} />
       <LoraPicker open={addLora} onClose={() => setAddLora(false)} />
+    </div>
+  );
+}
+// Length, frame rate, audio and first frame of a video family, below its size.
+function VideoSettings() {
+  const {
+    settings: s,
+    setSettings,
+    uploadFirstFrame,
+  } = useStudioSelector((state) => ({
+    settings: state.settings,
+    setSettings: state.setSettings,
+    uploadFirstFrame: state.uploadFirstFrame,
+  }));
+  const [uploading, setUploading] = useState(false);
+  const patch = (v: Partial<Generation>) => setSettings((prev) => ({ ...prev, ...v }));
+  const { seconds, fps, audio, frameStrength } = videoOptions(s);
+  const frames = ltxFrames(seconds, fps);
+  const heavy = s.width * s.height * frames > 1280 * 720 * 145;
+  return (
+    <div className="mt-3.5 flex flex-col gap-3 border-t border-line pt-3.5">
+      <div className="flex flex-col gap-1.5">
+        <div
+          data-ui-audit-row
+          className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-end gap-2.5"
+        >
+          <Numeric
+            label="길이 (초)"
+            value={seconds}
+            onChange={(seconds) => patch({ seconds })}
+            min={1}
+            max={20}
+            step={0.5}
+          />
+          <Field label="FPS">
+            <SelectControl
+              aria-label="FPS"
+              value={fps}
+              onChange={(e) => patch({ fps: Number(e.target.value) })}
+            >
+              {ltxFrameRates.map((rate) => (
+                <option key={rate} value={rate}>
+                  {rate} FPS
+                </option>
+              ))}
+            </SelectControl>
+          </Field>
+        </div>
+        {Number.isFinite(frames / fps) && (
+          <p className="text-2xs text-muted">
+            {frames}프레임, 약 {(frames / fps).toFixed(2)}초
+          </p>
+        )}
+        {heavy && (
+          <p className="text-2xs leading-relaxed text-muted">
+            HD 6초보다 메모리를 많이 사용해요. 서버에서 메모리 오류가 나면 해상도나 길이를 줄여
+            주세요
+          </p>
+        )}
+      </div>
+      <label className="flex min-h-7 items-center justify-between gap-2.5 text-xs font-medium">
+        MP4에 오디오 포함
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-olive"
+          checked={audio}
+          onChange={(e) => patch({ audio: e.target.checked })}
+        />
+      </label>
+      <Field label="첫 프레임 (선택)">
+        {s.firstFrame ? (
+          <div className="flex min-w-0 flex-col gap-2.5 rounded-lg bg-paper p-2.5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <img
+                src={imageUrl(s.firstFrame.base, s.firstFrame.image)}
+                alt="첫 프레임 이미지"
+                className="h-14 w-14 shrink-0 rounded-md bg-stone object-cover"
+              />
+              <span className="min-w-0 flex-1 truncate text-xs" title={s.firstFrame.image.filename}>
+                {s.firstFrame.image.filename}
+              </span>
+              <IconButton
+                icon={X}
+                label="첫 프레임 해제"
+                className="shrink-0"
+                onClick={() => patch({ firstFrame: null })}
+              />
+            </div>
+            <Numeric
+              label="첫 프레임 강도"
+              value={frameStrength}
+              onChange={(frameStrength) => patch({ frameStrength })}
+              min={0}
+              max={1}
+              step={0.05}
+              help="1이면 첫 프레임을 그대로 유지하고, 낮출수록 프롬프트에 맞게 다시 그려요."
+            />
+          </div>
+        ) : (
+          <label
+            className={`flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg border border-dashed border-line p-3 text-left ${uploading ? 'opacity-60' : ''}`}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-stone">
+              {uploading ? <Spinner /> : <Upload size={16} className="text-muted" />}
+            </span>
+            <span>
+              <span className="block text-xs font-medium">이미지에서 영상 시작하기</span>
+              <span className="mt-0.5 block text-2xs text-muted">
+                JPG, PNG, WebP 최대 20MB | 설정한 비율로 가운데를 잘라요
+              </span>
+            </span>
+            <input
+              type="file"
+              aria-label="첫 프레임 이미지 선택"
+              accept="image/jpeg,image/png,image/webp"
+              className="sr-only"
+              disabled={uploading}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                setUploading(true);
+                try {
+                  await uploadFirstFrame(file);
+                } finally {
+                  setUploading(false);
+                }
+              }}
+            />
+          </label>
+        )}
+      </Field>
     </div>
   );
 }
@@ -794,13 +943,50 @@ function PromptAssembleBar({
     </div>
   );
 }
+// Shows the latest result of the selected family's medium; earlier videos can be picked
+// here because the history screen lists only images.
 function PreviewPanel() {
-  const jobs = useStudioSelector((state) => state.jobs);
-  const latestImage = jobs.find((job) => !job.video);
-  const lastComplete = jobs.find((j) => j.status === 'complete' && j.images.length > 0);
+  const { jobs, video } = useStudioSelector((state) => ({
+    jobs: state.jobs,
+    video: isVideoFamily(state.settings.architecture),
+  }));
+  const [pickedId, setPickedId] = useState('');
+  const sameKind = jobs.filter((job) => Boolean(job.video) === video);
+  // A new generation replaces the picked earlier video.
+  const newestId = sameKind[0]?.id;
+  useEffect(() => setPickedId(''), [newestId]);
+  const latest = sameKind.find((job) => job.id === pickedId) || sameKind[0];
+  const lastComplete = sameKind.find(
+    (j) => j.status === 'complete' && (j.video ? Boolean(j.videos?.length) : j.images.length > 0),
+  );
+  const recent = video ? sameKind.slice(0, 20) : [];
   return (
-    <div className="rounded-xl border border-line bg-white p-3.5 sm:p-4">
-      <Result key={latestImage?.id || 'sample'} job={latestImage} fallback={lastComplete} />
+    <div className="flex flex-col gap-2.5 rounded-xl border border-line bg-white p-3.5 sm:p-4">
+      {recent.length > 1 && (
+        <SelectControl
+          aria-label="최근 생성 영상"
+          value={latest?.id || ''}
+          onChange={(e) => setPickedId(e.target.value)}
+        >
+          {recent.map((job) => (
+            <option key={job.id} value={job.id}>
+              {new Date(job.createdAt).toLocaleString('ko-KR', {
+                month: 'numeric',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}{' '}
+              | {job.settings.positive.slice(0, 40) || '(프롬프트 없음)'}
+            </option>
+          ))}
+        </SelectControl>
+      )}
+      <Result
+        key={latest?.id || (video ? 'video-sample' : 'sample')}
+        job={latest}
+        fallback={latest?.id === sameKind[0]?.id ? lastComplete : undefined}
+        video={video}
+      />
     </div>
   );
 }
@@ -828,6 +1014,8 @@ export function GenerateControls() {
   const count = clampRuns(Number(countText));
   const entry = selectedEntry(s, info, familyAssignments);
   const unavailable = !s.workflow && (!entry || entry.family !== s.architecture);
+  const video = !s.workflow && isVideoFamily(s.architecture);
+  const unit = video ? '개' : '장';
   const disabled = busy || unavailable || !online;
   function run() {
     if (disabled) return;
@@ -852,14 +1040,14 @@ export function GenerateControls() {
         )}
         <label
           className="relative w-[60px] shrink-0 sm:w-[68px]"
-          title="장 수 | 2장 이상이면 Seed를 바꿔 이어서 생성"
+          title={`${video ? '개수' : '장 수'} | 2${unit} 이상이면 Seed를 바꿔 이어서 생성`}
         >
           <input
             type="number"
             inputMode="numeric"
             min={1}
             step={1}
-            aria-label="장 수"
+            aria-label={video ? '개수' : '장 수'}
             value={countText}
             onChange={(e) => setCountText(e.target.value)}
             onBlur={() => setCountText(String(count))}
@@ -869,7 +1057,7 @@ export function GenerateControls() {
             className="field pr-6 text-center font-mono [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
           <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-2xs text-muted">
-            장
+            {unit}
           </span>
         </label>
         <button
@@ -879,16 +1067,18 @@ export function GenerateControls() {
           className="btn-primary shrink-0 whitespace-nowrap px-3"
         >
           <span className="flex items-center gap-1.5">
-            {busy ? <Spinner /> : <Sparkles size={15} />}
+            {busy ? <Spinner /> : video ? <Film size={15} /> : <Sparkles size={15} />}
             <span className="sm:hidden">{active ? '추가' : '생성'}</span>
-            <span className="hidden sm:inline">{active ? '대기열에 추가' : '이미지 생성'}</span>
+            <span className="hidden sm:inline">
+              {active ? '대기열에 추가' : video ? '영상 생성' : '이미지 생성'}
+            </span>
           </span>
           <span className="hidden rounded bg-white/15 px-1.5 py-0.5 text-2xs font-normal sm:inline">
             {active
               ? `${active.status === 'queued' ? '대기 중' : '생성 중'} ${active.progress}%`
               : s.workflow
                 ? 'API'
-                : `${count}장`}
+                : `${count}${unit}`}
           </span>
         </button>
       </div>
@@ -983,6 +1173,7 @@ function Advanced({
   const patch = (v: Partial<Generation>) => setSettings((s) => ({ ...s, ...v }));
   const prof = qualityProfiles[s.architecture] || qualityProfiles.flux;
   const archLabel = families.find((f) => f.id === s.architecture)?.label || s.architecture;
+  const video = isVideoFamily(s.architecture);
   const [tab, setTab] = useState('settings');
   useEffect(() => {
     if (open) setTab(initialTab);
@@ -1052,6 +1243,8 @@ function Advanced({
                         시간도 비례해서 길어져요.
                         {s.architecture === 'krea2' &&
                           ' 증류 모델이라 스텝을 높이면 오히려 얼룩이 생길 수 있어요.'}
+                        {video &&
+                          ' 8스텝은 증류 모델 전용 스케줄을, 다른 값은 LTX 스케줄러를 사용해요.'}
                         <br />
                         <b>{archLabel} 권장</b> {prof.steps}
                       </>
@@ -1066,8 +1259,8 @@ function Advanced({
                     label="CFG"
                     value={s.cfg}
                     onChange={(cfg) => patch({ cfg })}
-                    min={0}
-                    max={30}
+                    min={video ? 1 : 0}
+                    max={video ? 10 : 30}
                     step={0.1}
                     help={
                       <>
@@ -1075,6 +1268,7 @@ function Advanced({
                         과해져요.
                         {s.architecture === 'flux' &&
                           ' Flux1.d는 1.0으로 두고 디테일은 Flux Guidance로 조절해요.'}
+                        {video && ' 1보다 크면 네거티브 프롬프트를 적용해요.'}
                         <br />
                         <b>{archLabel} 권장</b> {prof.cfg}
                       </>
@@ -1113,7 +1307,7 @@ function Advanced({
                     }
                   />
                 )}
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className={`grid gap-2.5 ${video ? 'grid-cols-1' : 'grid-cols-2'}`}>
                   <Field
                     label="Sampler"
                     help={
@@ -1137,53 +1331,59 @@ function Advanced({
                       className={s.sampler !== prof.sampler ? modifiedField : ''}
                       onChange={(e) => patch({ sampler: e.target.value })}
                     >
-                      {options(info, 'KSampler', 'sampler_name').map((v) => (
-                        <option key={v}>{v}</option>
-                      ))}
+                      {options(info, video ? 'KSamplerSelect' : 'KSampler', 'sampler_name').map(
+                        (v) => (
+                          <option key={v}>{v}</option>
+                        ),
+                      )}
                     </SelectControl>
                   </Field>
-                  <Field
-                    label="Scheduler"
+                  {!video && (
+                    <Field
+                      label="Scheduler"
+                      help={
+                        <>
+                          스텝마다 노이즈를 얼마나 줄일지 정하는 곡선이에요. 초반 구도와 후반
+                          디테일에 쓰는 비중이 달라져요.
+                          <br />
+                          <b>{archLabel} 권장</b> {prof.scheduler}
+                        </>
+                      }
+                      recommend={{
+                        modified: s.scheduler !== prof.scheduler,
+                        value: prof.scheduler,
+                        onReset: () => patch({ scheduler: prof.scheduler }),
+                      }}
+                    >
+                      <SelectControl
+                        aria-label="Scheduler"
+                        value={s.scheduler}
+                        className={s.scheduler !== prof.scheduler ? modifiedField : ''}
+                        onChange={(e) => patch({ scheduler: e.target.value })}
+                      >
+                        {options(info, 'KSampler', 'scheduler').map((v) => (
+                          <option key={v}>{v}</option>
+                        ))}
+                      </SelectControl>
+                    </Field>
+                  )}
+                </div>
+                {!video && (
+                  <Numeric
+                    label="Denoise"
+                    value={s.denoise}
+                    onChange={(denoise) => patch({ denoise })}
+                    min={0}
+                    max={1}
+                    step={0.05}
                     help={
                       <>
-                        스텝마다 노이즈를 얼마나 줄일지 정하는 곡선이에요. 초반 구도와 후반 디테일에
-                        쓰는 비중이 달라져요.
-                        <br />
-                        <b>{archLabel} 권장</b> {prof.scheduler}
+                        시작 노이즈를 얼마나 지울지 정해요. 빈 화면에서 새로 그리는 이 화면에서는
+                        1.0을 유지하고, 낮추면 덜 그려진 흐릿한 이미지가 나와요.
                       </>
                     }
-                    recommend={{
-                      modified: s.scheduler !== prof.scheduler,
-                      value: prof.scheduler,
-                      onReset: () => patch({ scheduler: prof.scheduler }),
-                    }}
-                  >
-                    <SelectControl
-                      aria-label="Scheduler"
-                      value={s.scheduler}
-                      className={s.scheduler !== prof.scheduler ? modifiedField : ''}
-                      onChange={(e) => patch({ scheduler: e.target.value })}
-                    >
-                      {options(info, 'KSampler', 'scheduler').map((v) => (
-                        <option key={v}>{v}</option>
-                      ))}
-                    </SelectControl>
-                  </Field>
-                </div>
-                <Numeric
-                  label="Denoise"
-                  value={s.denoise}
-                  onChange={(denoise) => patch({ denoise })}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  help={
-                    <>
-                      시작 노이즈를 얼마나 지울지 정해요. 빈 화면에서 새로 그리는 이 화면에서는
-                      1.0을 유지하고, 낮추면 덜 그려진 흐릿한 이미지가 나와요.
-                    </>
-                  }
-                />
+                  />
+                )}
                 <div className="border-t border-line pt-3.5">
                   <label className="mb-3 flex min-h-7 items-center justify-between gap-2.5 text-xs font-medium">
                     매번 새로운 Seed

@@ -43,6 +43,18 @@ export default function ModelPanel() {
   const selected = selectedEntry(s, info, familyAssignments);
   const clips = compatibleAssets(info, 'clip', s.architecture, familyAssignments);
   const vaes = compatibleAssets(info, 'vae', s.architecture, familyAssignments);
+  const audios = compatibleAssets(info, 'audio', s.architecture, familyAssignments);
+  const ltx2 = s.architecture === 'ltx2';
+  const encodersReady =
+    Boolean(s.clip1) &&
+    Boolean(s.vae) &&
+    (s.architecture !== 'flux' || Boolean(s.clip2)) &&
+    (!ltx2 || Boolean(s.audioVae));
+  const familyOption = (f: (typeof families)[number]) => (
+    <option key={f.id} value={f.id}>
+      {f.label} ({entries.filter((e) => e.family === f.id).length})
+    </option>
+  );
   function chooseFamily(family: ModelFamily) {
     if (family === s.architecture) return;
     const list = entries.filter((e) => e.family === family);
@@ -59,6 +71,7 @@ export default function ModelPanel() {
             clip1: '',
             clip2: '',
             vae: '',
+            audioVae: '',
           },
     );
     if (s.loras.length) notify('계열을 바꾸며 LoRA와 인코더를 해당 계열에 맞게 초기화했어요');
@@ -94,11 +107,10 @@ export default function ModelPanel() {
               value={s.architecture}
               onChange={(e) => chooseFamily(e.target.value as ModelFamily)}
             >
-              {families.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label} ({entries.filter((e) => e.family === f.id).length})
-                </option>
-              ))}
+              <optgroup label="이미지">
+                {families.filter((f) => !f.video).map(familyOption)}
+              </optgroup>
+              <optgroup label="영상">{families.filter((f) => f.video).map(familyOption)}</optgroup>
             </SelectControl>
             {connectionState === 'connecting' ? (
               <div
@@ -140,16 +152,11 @@ export default function ModelPanel() {
               현재 계열에서 모델을 다시 선택해 주세요
             </p>
           )}
-          <details
-            className="rounded-lg bg-paper p-3"
-            open={!s.clip1 || !s.vae || (s.architecture === 'flux' && !s.clip2) || undefined}
-          >
+          <details className="rounded-lg bg-paper p-3" open={!encodersReady || undefined}>
             <summary className="cursor-pointer text-xs font-semibold">
               텍스트 인코더와 VAE{' '}
               <span className="ml-1 font-normal text-muted">
-                {s.clip1 && s.vae && (s.architecture !== 'flux' || s.clip2)
-                  ? '자동 선택됨'
-                  : '설치 확인 필요'}
+                {encodersReady ? '자동 선택됨' : '설치 확인 필요'}
               </span>
             </summary>
             <div className="mt-3 flex flex-col gap-2.5">
@@ -171,14 +178,24 @@ export default function ModelPanel() {
                   />
                 </Field>
               )}
-              <Field label="VAE">
+              <Field label={ltx2 ? '영상 VAE' : 'VAE'}>
                 <Picker
-                  label="VAE"
+                  label={ltx2 ? '영상 VAE' : 'VAE'}
                   value={s.vae}
                   items={vaes}
                   onChange={(vae) => setSettings((prev) => ({ ...prev, vae }))}
                 />
               </Field>
+              {ltx2 && (
+                <Field label="오디오 VAE">
+                  <Picker
+                    label="오디오 VAE"
+                    value={s.audioVae || ''}
+                    items={audios}
+                    onChange={(audioVae) => setSettings((prev) => ({ ...prev, audioVae }))}
+                  />
+                </Field>
+              )}
             </div>
           </details>
         </div>
