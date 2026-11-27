@@ -120,14 +120,16 @@ export function buildLtxWorkflow(
         latent_image: ['10', 0],
       },
     },
+    // Decoding in time chunks blends neighbouring chunks into double images on motion,
+    // so only space is tiled; 4096 frames covers every clip in one temporal pass.
     '15': {
       class_type: 'VAEDecodeTiled',
       inputs: {
         samples: ['14', 0],
         vae,
-        tile_size: 256,
+        tile_size: 512,
         overlap: 64,
-        temporal_size: 32,
+        temporal_size: 4096,
         temporal_overlap: 8,
       },
     },

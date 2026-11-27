@@ -188,6 +188,8 @@ describe('LTX 2.5 video family', () => {
     expect(graph['100'].inputs).toEqual({ model: ['1', 0], lora_name: lora, strength_model: 0.7 });
     expect(graph['13'].inputs).toMatchObject({ model: ['100', 0], noise_seed: 456 });
     expect(graph['18'].inputs.filename_prefix).toBe('video/ComfyMUI');
+    // No temporal chunks, so motion does not double at chunk seams.
+    expect(graph['15'].inputs).toMatchObject({ tile_size: 512, temporal_size: 4096 });
   });
 
   it('starts from a first frame with the selected sampling options', () => {

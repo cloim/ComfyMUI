@@ -603,6 +603,7 @@ function VideoSettings() {
   const { seconds, fps, audio, frameStrength } = videoOptions(s);
   const frames = ltxFrames(seconds, fps);
   const heavy = s.width * s.height * frames > 1280 * 720 * 145;
+  const distilledSteps = qualityProfiles[s.architecture].steps;
   return (
     <div className="mt-3.5 flex flex-col gap-3 border-t border-line pt-3.5">
       <div className="flex flex-col gap-1.5">
@@ -644,6 +645,23 @@ function VideoSettings() {
           </p>
         )}
       </div>
+      {s.steps !== distilledSteps && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#ece4c9] px-3 py-2 text-xs text-[#69521e]"
+        >
+          <span className="min-w-0 flex-1 leading-relaxed">
+            Steps {s.steps}은 증류 모델 전용 스케줄을 쓰지 않아 움직일 때 번질 수 있어요
+          </span>
+          <button
+            type="button"
+            className="btn-secondary shrink-0"
+            onClick={() => patch({ steps: distilledSteps })}
+          >
+            {distilledSteps}스텝으로 되돌리기
+          </button>
+        </div>
+      )}
       <label className="flex min-h-7 items-center justify-between gap-2.5 text-xs font-medium">
         MP4에 오디오 포함
         <input

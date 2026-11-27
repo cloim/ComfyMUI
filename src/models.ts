@@ -168,6 +168,15 @@ export function checkQualityIssues(s: Generation): QualityIssue[] {
     });
   }
 
+  if (s.architecture === 'ltx2' && s.steps !== 8) {
+    issues.push({
+      id: 'ltx-steps',
+      title: 'LTX 2.5 스텝 수 확인 (움직임 번짐)',
+      message: `증류 모델 전용 스케줄은 8스텝에서만 쓰여요. ${s.steps}스텝은 일반 LTX 스케줄러를 사용해 움직이는 부분이 번질 수 있어요.`,
+      fix: { steps: 8 },
+    });
+  }
+
   if (s.architecture === 'krea2' && s.steps > 10) {
     issues.push({
       id: 'krea-steps',

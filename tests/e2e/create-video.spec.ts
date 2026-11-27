@@ -40,7 +40,12 @@ test('만들기에서 영상 계열을 고르면 같은 화면이 영상 설정�
   await expect(page.getByLabel('Steps', { exact: true })).toHaveValue('8');
   await expect(page.getByRole('combobox', { name: 'Sampler' })).toHaveValue('euler_ancestral');
   await expect(page.getByRole('combobox', { name: 'Scheduler' })).toHaveCount(0);
+  // Other step counts leave the distilled schedule, so the create screen warns.
+  await page.getByLabel('Steps', { exact: true }).fill('11');
   await page.getByRole('button', { name: '설정 완료' }).click();
+  await expect(page.getByText(/Steps 11은 증류 모델 전용 스케줄을 쓰지 않아/)).toBeVisible();
+  await page.getByRole('button', { name: '8스텝으로 되돌리기' }).click();
+  await expect(page.getByText(/증류 모델 전용 스케줄을 쓰지 않아/)).toHaveCount(0);
 
   await page.locator('#positive').fill('waves roll toward the shore');
   const submitted = page.waitForRequest(
