@@ -103,6 +103,23 @@ test('이미지 결과의 영상으로 만들기는 첫 프레임과 영상 계�
   // Person lock pins the first frame again at the middle and the end.
   await page.getByLabel('인물 고정').check();
   await expect(page.getByRole('spinbutton', { name: '인물 고정 강도' })).toHaveValue('0.45');
+  // Closing a real file dialog focuses the window, which re-checks the server, right
+  // before the change event. The upload must not be refused as disconnected.
+  await page.evaluate(() => {
+    const input = document.querySelector<HTMLInputElement>(
+      'input[aria-label="인물 기준 이미지 선택"]',
+    )!;
+    const files = new DataTransfer();
+    files.items.add(
+      new File([new Uint8Array([137, 80, 78, 71])], 'ref.png', { type: 'image/png' }),
+    );
+    input.files = files.files;
+    window.dispatchEvent(new Event('focus'));
+    setTimeout(() => input.dispatchEvent(new Event('change', { bubbles: true })), 0);
+  });
+  await expect(page.getByAltText('인물 기준 이미지')).toBeVisible();
+  await expect(page.getByText('ComfyUI 서버 연결을 확인해 주세요')).toHaveCount(0);
+  await page.getByRole('button', { name: '인물 기준 이미지 해제' }).click();
   const submitted = page.waitForRequest(
     (r) => r.url().endsWith('/prompt') && r.method() === 'POST',
   );

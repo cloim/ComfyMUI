@@ -472,21 +472,30 @@ function useStudioState() {
       window.removeEventListener('offline', on);
     };
   }, []);
+  // Returning to the window (including closing a file dialog) checks the server again.
+  // A working connection to the same server stays usable meanwhile, so an upload or a
+  // generate started right then is not refused as disconnected.
+  const connectedBase = useRef<string | null>(null);
   useEffect(() => {
-    setInfo(null);
-    setConnectionState('connecting');
-    setConnectionError('');
+    if (connectedBase.current !== connection.base) {
+      setInfo(null);
+      setConnectionState('connecting');
+      setConnectionError('');
+    }
     const refresh = forceInfoRefresh.current;
     forceInfoRefresh.current = false;
     return startConnection(
       connection.base,
       {
         ready: (data) => {
+          connectedBase.current = connection.base;
           setInfo(data);
           setConnectionState('connected');
           setConnectionError('');
         },
         error: (error) => {
+          connectedBase.current = null;
+          setInfo(null);
           setConnectionState('error');
           setConnectionError(error.message);
         },
