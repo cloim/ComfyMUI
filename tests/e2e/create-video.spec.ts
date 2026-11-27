@@ -38,6 +38,7 @@ test('만들기에서 영상 계열을 고르면 같은 화면이 영상 설정�
 
   await page.getByRole('button', { name: '고급 설정', exact: true }).click();
   await expect(page.getByLabel('Steps', { exact: true })).toHaveValue('8');
+  await expect(page.getByRole('combobox', { name: 'Sampler' })).toHaveValue('euler_ancestral');
   await expect(page.getByRole('combobox', { name: 'Scheduler' })).toHaveCount(0);
   await page.getByRole('button', { name: '설정 완료' }).click();
 
@@ -51,6 +52,7 @@ test('만들기에서 영상 계열을 고르면 같은 화면이 영상 설정�
   expect(body.prompt['18'].inputs.filename_prefix).toMatch(/^video\/ComfyMUI_/);
   expect(body.prompt['8'].inputs).toMatchObject({ width: 1280, height: 736, length: 241 });
   expect(body.prompt['22'].inputs).toMatchObject({ width: 1280, height: 720 });
+  expect(body.prompt['11'].inputs.sampler_name).toBe('euler_ancestral');
   expect(body.prompt_id).toBeTruthy();
 
   await expect(page.getByText('생성 완료', { exact: true })).toBeVisible({ timeout: 15000 });

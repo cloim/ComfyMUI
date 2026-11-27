@@ -351,7 +351,7 @@ for (const node of [
   'CreateVideo',
 ])
   schema[node] = { input: { required: {} } };
-schema.KSamplerSelect = { input: { required: { sampler_name: choices(['euler', 'heun']) } } };
+schema.KSamplerSelect = { input: { required: { sampler_name: choices(['euler', 'euler_ancestral', 'heun']) } } };
 schema.SaveVideo = { input: { required: {} }, output_node: true };
 const mock = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');

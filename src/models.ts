@@ -136,13 +136,15 @@ export const qualityProfiles: Record<ModelFamily, QualityRecommendation> = {
     reason:
       'Qwen VL 인코더의 정밀한 묘사력을 극대화하여 미세 질감과 이목구비 선명도를 완벽하게 살려줘요.',
   },
+  // Lightricks' distilled pipeline samples LTX 2.5 and later with ancestral Euler.
   ltx2: {
-    sampler: 'euler',
+    sampler: 'euler_ancestral',
     scheduler: 'simple',
     steps: 8,
     cfg: 1.0,
     badge: 'LTX 2.5 증류 영상 모델',
-    reason: '증류 모델은 euler 8스텝과 CFG 1에서 전용 스케줄로 가장 안정적인 움직임을 만들어요.',
+    reason:
+      '증류 모델은 euler_ancestral 8스텝과 CFG 1, 전용 시그마 스케줄로 가장 안정적인 움직임을 만들어요.',
   },
 };
 
@@ -445,7 +447,7 @@ export function selectModel(
       ? {
           steps: profile.steps,
           cfg: profile.cfg,
-          sampler: 'euler',
+          sampler: qualityProfiles[entry.family].sampler,
           scheduler: 'simple',
           denoise: 1,
         }

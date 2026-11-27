@@ -138,6 +138,7 @@ describe('LTX 2.5 video family', () => {
       height: 1280,
       steps: 8,
       cfg: 1,
+      sampler: 'euler_ancestral',
     });
     expect(() => validateSelection(s, info)).not.toThrow();
     const image = selectModel(
