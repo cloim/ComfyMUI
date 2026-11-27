@@ -79,12 +79,15 @@ test('이미지 결과의 영상으로 만들기는 첫 프레임과 영상 계�
   await page.locator('#positive').fill('a quiet harbor at dawn');
   await page.getByTestId('generate').click();
   await expect(page.getByText('생성 완료', { exact: true })).toBeVisible({ timeout: 15000 });
+  await page.locator('#positive').fill('a different scene');
 
   await page.getByRole('link', { name: '영상으로 만들기' }).click();
   await expect(page).toHaveURL(/\/create$/);
   await expect(page.getByRole('combobox', { name: '모델 계열' })).toHaveValue('ltx2');
   await expect(page.getByRole('heading', { name: '영상 설정' })).toBeVisible();
   await expect(page.getByAltText('첫 프레임 이미지')).toBeVisible();
+  // The image prompt comes along, even after the prompt was changed.
+  await expect(page.locator('#positive')).toHaveValue('a quiet harbor at dawn');
   await expect(page.getByRole('spinbutton', { name: '첫 프레임 강도' })).toHaveValue('1');
   // The 768×1024 image starts a portrait clip.
   await expect(page.getByLabel('너비', { exact: true })).toHaveValue('720');
@@ -136,4 +139,36 @@ test('영상 생성본은 기록에 표시되고 상세 보기, 필터와 삭제
   await expect(page.getByRole('dialog', { name: '영상을 삭제할까요?' })).toBeVisible();
   await page.getByRole('button', { name: '파일 삭제' }).click();
   await expect(card).toHaveCount(0);
+});
+
+test('기록의 이미지에서 영상으로 만들기를 누르면 그 이미지의 프롬프트를 함께 넘긴다', async ({
+  page,
+}) => {
+  await connect(page);
+  await page
+    .getByRole('combobox', { name: '모델', exact: true })
+    .selectOption({ label: 'Flux1.D/test-model.safetensors' });
+  await page.locator('#positive').fill('a lighthouse in morning fog');
+  await page.getByTestId('generate').click();
+  await expect(page.getByText('생성 완료', { exact: true })).toBeVisible({ timeout: 15000 });
+  await page.locator('#positive').fill('an unrelated prompt');
+
+  await page
+    .getByRole('navigation', { name: '모바일 메뉴' })
+    .getByRole('link', { name: '기록', exact: true })
+    .click();
+  await page
+    .getByRole('article')
+    .filter({ has: page.getByAltText('a lighthouse in morning fog') })
+    .first()
+    .getByRole('button', { name: '완료 이미지 상세 보기' })
+    .click();
+  await page
+    .getByRole('dialog', { name: '생성 기록' })
+    .getByRole('link', { name: '영상으로 만들기' })
+    .click();
+  await expect(page).toHaveURL(/\/create$/);
+  await expect(page.getByRole('combobox', { name: '모델 계열' })).toHaveValue('ltx2');
+  await expect(page.locator('#positive')).toHaveValue('a lighthouse in morning fog');
+  await expect(page.getByAltText('첫 프레임 이미지')).toBeVisible();
 });

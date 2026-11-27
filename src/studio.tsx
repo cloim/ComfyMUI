@@ -899,12 +899,19 @@ function useStudioState() {
         : height > width
           ? { width: 720, height: 1280 }
           : { width: 1280, height: 720 };
+    // The clip starts from the image's own prompt; files without one keep the current prompt.
+    const { positive, negative } = job.settings;
     setSettings((prev) => ({
       ...selectModel(prev, entry, info, familyAssignments),
       ...size,
+      ...(positive.trim() && { positive, negative }),
       firstFrame: { base: job.base, image },
     }));
-    notify('이미지를 첫 프레임으로 영상 설정을 준비했어요');
+    notify(
+      positive.trim()
+        ? '이미지와 프롬프트로 영상 설정을 준비했어요'
+        : '이미지를 첫 프레임으로 영상 설정을 준비했어요',
+    );
     return true;
   }
 
