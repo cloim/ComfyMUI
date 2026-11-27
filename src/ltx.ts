@@ -21,6 +21,13 @@ export function videoOptions(s: Generation) {
   };
 }
 
+// A video size closest to an image size: same aspect ratio, 256~1920px, multiples of 8.
+export function fitVideoSize(width: number, height: number) {
+  const scale = Math.min(1, 1920 / Math.max(width, height));
+  const fit = (v: number) => Math.min(1920, Math.max(256, Math.round((v * scale) / 8) * 8));
+  return { width: fit(width), height: fit(height) };
+}
+
 export function ltxFrames(seconds: number, fps: number) {
   return Math.max(9, Math.round((seconds * fps - 1) / 8) * 8 + 1);
 }

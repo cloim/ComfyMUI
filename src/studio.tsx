@@ -48,6 +48,7 @@ import {
   type HistoryItem,
 } from './api';
 import { startConnection } from './connection';
+import { fitVideoSize } from './ltx';
 import {
   catalog,
   selectModel,
@@ -891,14 +892,9 @@ function useStudioState() {
       notify('영상 모델이 없어요. 모델 메뉴에서 LTX 영상 모델을 설치하거나 계열을 지정해 주세요');
       return false;
     }
-    const { width, height } = job.settings;
-    // The frame is center-cropped, so the clip follows the image orientation.
-    const size =
-      width === height
-        ? { width: 768, height: 768 }
-        : height > width
-          ? { width: 720, height: 1280 }
-          : { width: 1280, height: 720 };
+    // The clip keeps the image size; an upscaled image uses the size it was made at.
+    const source = baseSettings(job.settings);
+    const size = fitVideoSize(source.width, source.height);
     // The clip starts from the image's own prompt; files without one keep the current prompt.
     const { positive, negative } = job.settings;
     setSettings((prev) => ({

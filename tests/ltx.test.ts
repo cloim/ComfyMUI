@@ -11,6 +11,7 @@ import {
   withFamilyFolders,
 } from '../src/models';
 import { inferFamilyFromModelItem, resolveComfyModelEntry } from '../src/model-manager';
+import { fitVideoSize } from '../src/ltx';
 import { inferFamilyFromLoraItem } from '../src/lora-manager';
 
 // LTX 2.5 lives in its own family folder like the image families.
@@ -117,6 +118,14 @@ describe('LTX 2.5 video family', () => {
       loader: 'UNETLoader',
       family: 'ltx2',
     });
+  });
+
+  it('keeps an image size for its video within the LTX range', () => {
+    expect(fitVideoSize(768, 1024)).toEqual({ width: 768, height: 1024 });
+    expect(fitVideoSize(1024, 576)).toEqual({ width: 1024, height: 576 });
+    expect(fitVideoSize(2048, 1536)).toEqual({ width: 1920, height: 1440 });
+    expect(fitVideoSize(1080, 1920)).toEqual({ width: 1080, height: 1920 });
+    expect(fitVideoSize(4096, 512)).toEqual({ width: 1920, height: 256 });
   });
 
   it('saves downloads in the family folder with the spelling the server uses', () => {

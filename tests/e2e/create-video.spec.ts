@@ -91,8 +91,9 @@ test('이미지 결과의 영상으로 만들기는 첫 프레임과 영상 계�
   // The image prompt comes along, even after the prompt was changed.
   await expect(page.locator('#positive')).toHaveValue('a quiet harbor at dawn');
   await expect(page.getByRole('spinbutton', { name: '첫 프레임 강도' })).toHaveValue('1');
-  // The 768×1024 image starts a portrait clip.
-  await expect(page.getByLabel('너비', { exact: true })).toHaveValue('720');
+  // The clip keeps the 768×1024 image size.
+  await expect(page.getByLabel('너비', { exact: true })).toHaveValue('768');
+  await expect(page.getByLabel('높이', { exact: true })).toHaveValue('1024');
 
   const submitted = page.waitForRequest(
     (r) => r.url().endsWith('/prompt') && r.method() === 'POST',
@@ -173,4 +174,29 @@ test('기록의 이미지에서 영상으로 만들기를 누르면 그 이미�
   await expect(page.getByRole('combobox', { name: '모델 계열' })).toHaveValue('ltx2');
   await expect(page.locator('#positive')).toHaveValue('a lighthouse in morning fog');
   await expect(page.getByAltText('첫 프레임 이미지')).toBeVisible();
+});
+
+test('업스케일한 이미지로 영상을 만들면 업스케일 전 원본 크기를 쓴다', async ({ page }) => {
+  await connect(page);
+  await page
+    .getByRole('combobox', { name: '모델', exact: true })
+    .selectOption({ label: 'Flux1.D/test-model.safetensors' });
+  await page.getByRole('combobox', { name: '비율' }).selectOption({ label: '와이드 (16:9)' });
+  await page.locator('#positive').fill('a train crossing a bridge');
+  await page.getByTestId('generate').click();
+  await expect(page.getByText('생성 완료', { exact: true })).toBeVisible({ timeout: 15000 });
+
+  await page.getByRole('button', { name: '업스케일', exact: true }).click();
+  await page.getByLabel('업스케일 모델', { exact: true }).selectOption('4x-UltraSharp.pth');
+  await page.getByRole('radio', { name: '2x', exact: true }).click();
+  await page.getByRole('radio', { name: '끄기', exact: true }).click();
+  await page.getByRole('button', { name: '업스케일 시작', exact: true }).click();
+  await expect(page.getByText('업스케일 1024 × 576 → 2048 × 1152')).toBeVisible();
+  await expect(page.getByText('생성 완료', { exact: true })).toBeVisible({ timeout: 15000 });
+
+  await page.getByRole('link', { name: '영상으로 만들기' }).click();
+  await expect(page.getByRole('combobox', { name: '모델 계열' })).toHaveValue('ltx2');
+  await expect(page.getByLabel('너비', { exact: true })).toHaveValue('1024');
+  await expect(page.getByLabel('높이', { exact: true })).toHaveValue('576');
+  await expect(page.locator('#positive')).toHaveValue('a train crossing a bridge');
 });
