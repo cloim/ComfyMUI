@@ -1,7 +1,16 @@
 import type { Generation, Workflow } from './domain';
 
 // Video settings of the create screen. Values missing from older settings use these.
-export const videoDefaults = { seconds: 6, fps: 24, audio: true, frameStrength: 1 };
+export const videoDefaults = {
+  seconds: 6,
+  fps: 24,
+  audio: true,
+  frameStrength: 1,
+  identityLock: false,
+  // Measured on a 10 s clip: 0.3 keeps the motion but the face drifts late, 0.6 holds the
+  // face but cuts motion to a third, 1 freezes the clip.
+  identityStrength: 0.45,
+};
 export const ltxSizes = [
   { name: 'HD 가로', ratio: '16:9', w: 1280, h: 720 },
   { name: 'HD 세로', ratio: '9:16', w: 720, h: 1280 },
@@ -18,6 +27,8 @@ export function videoOptions(s: Generation) {
     fps: s.fps ?? videoDefaults.fps,
     audio: s.audio ?? videoDefaults.audio,
     frameStrength: s.frameStrength ?? videoDefaults.frameStrength,
+    identityLock: s.identityLock ?? videoDefaults.identityLock,
+    identityStrength: s.identityStrength ?? videoDefaults.identityStrength,
   };
 }
 
@@ -33,7 +44,7 @@ export function ltxFrames(seconds: number, fps: number) {
 }
 
 export function validateVideo(s: Generation) {
-  const { seconds, fps, frameStrength } = videoOptions(s);
+  const { seconds, fps, frameStrength, identityLock, identityStrength } = videoOptions(s);
   if (![s.width, s.height].every((size) => size >= 256 && size <= 1920))
     throw new Error('영상의 너비와 높이는 256~1920px로 입력해 주세요');
   if (!Number.isFinite(seconds) || seconds < 1 || seconds > 20)
@@ -42,16 +53,27 @@ export function validateVideo(s: Generation) {
   if (s.cfg < 1 || s.cfg > 10) throw new Error('영상 CFG는 1~10으로 입력해 주세요');
   if (!Number.isFinite(frameStrength) || frameStrength < 0 || frameStrength > 1)
     throw new Error('첫 프레임 강도는 0~1로 입력해 주세요');
+  if (identityLock && !(s.identityImage || s.firstFrame))
+    throw new Error('인물 고정에 쓸 첫 프레임이나 기준 이미지를 선택해 주세요');
+  if (!Number.isFinite(identityStrength) || identityStrength < 0.1 || identityStrength > 1)
+    throw new Error('인물 고정 강도는 0.1~1로 입력해 주세요');
 }
 
-// LTX 2.5 samples video and audio latents together; `source` is the first frame as a
-// LoadImage path and `modelNode` the loader of the selected model.
+// Middle and last frames where an identity guide holds the person's look. The middle
+// index sits on a latent frame boundary (8 pixel frames); -1 counts from the end.
+export function identityGuideFrames(frames: number) {
+  return [Math.floor((frames - 1) / 2 / 8) * 8, -1];
+}
+
+// LTX 2.5 samples video and audio latents together. `source` is the first frame and
+// `identity` the person reference, both as LoadImage paths; `modelNode` loads the model.
 export function buildLtxWorkflow(
   s: Generation,
   modelNode: Workflow[string],
   source?: string,
+  identity?: string,
 ): Workflow {
-  const { seconds, fps, audio, frameStrength } = videoOptions(s);
+  const { seconds, fps, audio, frameStrength, identityLock, identityStrength } = videoOptions(s);
   const { width, height, steps, cfg } = s;
   const latentWidth = Math.ceil(width / 32) * 32;
   const latentHeight = Math.ceil(height / 32) * 32;
@@ -188,5 +210,52 @@ export function buildLtxWorkflow(
     model = id;
   });
   w['13'].inputs.model = [model, 0];
+  // Person lock: the reference is pinned at the middle and last frames so the face does not
+  // drift as the clip moves away from the first frame. The guide frames are cropped off
+  // after sampling, before decoding.
+  if (identityLock && identity) {
+    let scaled = '20';
+    if (identity !== source) {
+      w['40'] = { class_type: 'LoadImage', inputs: { image: identity } };
+      w['41'] = {
+        class_type: 'ImageScale',
+        inputs: {
+          image: ['40', 0],
+          upscale_method: 'bicubic',
+          width: latentWidth,
+          height: latentHeight,
+          crop: 'center',
+        },
+      };
+      scaled = '41';
+    }
+    let conditioning = '7';
+    let latent: unknown[] = videoLatent;
+    identityGuideFrames(frames).forEach((frameIdx, i) => {
+      const id = String(42 + i);
+      w[id] = {
+        class_type: 'LTXVAddGuide',
+        inputs: {
+          positive: [conditioning, 0],
+          negative: [conditioning, 1],
+          vae,
+          latent,
+          image: [scaled, 0],
+          frame_idx: frameIdx,
+          strength: identityStrength,
+        },
+      };
+      conditioning = id;
+      latent = [id, 2];
+    });
+    w['10'].inputs.video_latent = latent;
+    w['13'].inputs.positive = [conditioning, 0];
+    w['13'].inputs.negative = [conditioning, 1];
+    w['45'] = {
+      class_type: 'LTXVCropGuides',
+      inputs: { positive: [conditioning, 0], negative: [conditioning, 1], latent: ['14', 0] },
+    };
+    w['15'].inputs.samples = ['45', 2];
+  }
   return w;
 }

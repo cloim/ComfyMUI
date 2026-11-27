@@ -55,6 +55,10 @@ export type Generation = {
   frameStrength?: number;
   // The first frame lives on the ComfyUI server that stored or received it.
   firstFrame?: { base: string; image: ImageRef } | null;
+  // Person lock pins a reference (the first frame unless identityImage is set) to later frames.
+  identityLock?: boolean;
+  identityStrength?: number;
+  identityImage?: { base: string; image: ImageRef } | null;
 };
 // Upscales an existing output image with an upscale model, then optionally re-samples it
 // at low denoise with the original model and prompt to restore fine detail.
@@ -108,7 +112,10 @@ export function reusableSettings(input: Generation): Generation {
   const settings = baseSettings(structuredClone(input));
   delete settings.editSource;
   delete settings.editReferences;
-  if (!isVideoFamily(settings.architecture)) delete settings.firstFrame;
+  if (!isVideoFamily(settings.architecture)) {
+    delete settings.firstFrame;
+    delete settings.identityImage;
+  }
   return settings;
 }
 // LoadImage resolves "path [output]" from ComfyUI's output folder without uploading.
@@ -520,6 +527,11 @@ export function buildWorkflow(s: Generation): Workflow {
       s,
       modelNode,
       s.firstFrame ? annotatedImage(s.firstFrame.image) : undefined,
+      s.identityImage
+        ? annotatedImage(s.identityImage.image)
+        : s.firstFrame
+          ? annotatedImage(s.firstFrame.image)
+          : undefined,
     );
   const w: Workflow = {
     '1': modelNode,

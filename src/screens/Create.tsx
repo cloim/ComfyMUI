@@ -600,7 +600,16 @@ function VideoSettings() {
   }));
   const [uploading, setUploading] = useState(false);
   const patch = (v: Partial<Generation>) => setSettings((prev) => ({ ...prev, ...v }));
-  const { seconds, fps, audio, frameStrength } = videoOptions(s);
+  const { seconds, fps, audio, frameStrength, identityLock, identityStrength } = videoOptions(s);
+  async function upload(file: File | undefined, target: 'firstFrame' | 'identityImage') {
+    if (!file) return;
+    setUploading(true);
+    try {
+      await uploadFirstFrame(file, target);
+    } finally {
+      setUploading(false);
+    }
+  }
   const frames = ltxFrames(seconds, fps);
   const heavy = s.width * s.height * frames > 1280 * 720 * 145;
   const distilledSteps = qualityProfiles[s.architecture].steps;
@@ -719,21 +728,91 @@ function VideoSettings() {
               accept="image/jpeg,image/png,image/webp"
               className="sr-only"
               disabled={uploading}
-              onChange={async (e) => {
+              onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = '';
-                if (!file) return;
-                setUploading(true);
-                try {
-                  await uploadFirstFrame(file);
-                } finally {
-                  setUploading(false);
-                }
+                void upload(file, 'firstFrame');
               }}
             />
           </label>
         )}
       </Field>
+      {s.firstFrame && (
+        <div className="flex flex-col gap-2.5 rounded-lg border border-line p-2.5">
+          <label className="flex min-h-7 items-center justify-between gap-2.5 text-xs font-medium">
+            <span>
+              인물 고정
+              <span className="mt-0.5 block text-2xs font-normal leading-relaxed text-muted">
+                기준 이미지를 영상 중간과 끝에도 걸어 얼굴이 바뀌지 않게 해요
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 accent-olive"
+              checked={identityLock}
+              onChange={(e) => patch({ identityLock: e.target.checked })}
+            />
+          </label>
+          {identityLock && (
+            <>
+              <Numeric
+                label="인물 고정 강도"
+                value={identityStrength}
+                onChange={(identityStrength) => patch({ identityStrength })}
+                min={0.1}
+                max={1}
+                step={0.05}
+                help="0.3은 움직임을 살리지만 뒤로 갈수록 얼굴이 바뀔 수 있고, 0.45는 균형, 0.6 이상은 얼굴을 지키는 대신 움직임이 줄고 중간과 끝에서 기준 이미지의 자세로 돌아가요. 1에 가까우면 거의 멈춘 영상이 돼요."
+              />
+              {s.identityImage ? (
+                <div className="flex min-w-0 items-center gap-2.5 rounded-lg bg-paper p-2">
+                  <img
+                    src={imageUrl(s.identityImage.base, s.identityImage.image)}
+                    alt="인물 기준 이미지"
+                    className="h-12 w-12 shrink-0 rounded-md bg-stone object-cover"
+                  />
+                  <span
+                    className="min-w-0 flex-1 truncate text-xs"
+                    title={s.identityImage.image.filename}
+                  >
+                    {s.identityImage.image.filename}
+                  </span>
+                  <IconButton
+                    icon={X}
+                    label="인물 기준 이미지 해제"
+                    className="shrink-0"
+                    onClick={() => patch({ identityImage: null })}
+                  />
+                </div>
+              ) : (
+                <label
+                  className={`flex min-h-10 w-full cursor-pointer items-center gap-2.5 rounded-lg border border-dashed border-line px-3 py-2 text-left ${uploading ? 'opacity-60' : ''}`}
+                >
+                  {uploading ? <Spinner /> : <Upload size={15} className="shrink-0 text-muted" />}
+                  <span>
+                    <span className="block text-xs font-medium">다른 각도 기준 이미지 (선택)</span>
+                    <span className="mt-0.5 block text-2xs text-muted">
+                      비우면 첫 프레임을 기준으로 써요. 같은 인물의 다른 각도 사진이 자연스러워요
+                    </span>
+                  </span>
+                  <input
+                    type="file"
+                    aria-label="인물 기준 이미지 선택"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    disabled={uploading}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      void upload(file, 'identityImage');
+                    }}
+                  />
+                </label>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

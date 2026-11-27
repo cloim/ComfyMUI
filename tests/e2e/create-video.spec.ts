@@ -100,6 +100,9 @@ test('이미지 결과의 영상으로 만들기는 첫 프레임과 영상 계�
   await expect(page.getByLabel('너비', { exact: true })).toHaveValue('768');
   await expect(page.getByLabel('높이', { exact: true })).toHaveValue('1024');
 
+  // Person lock pins the first frame again at the middle and the end.
+  await page.getByLabel('인물 고정').check();
+  await expect(page.getByRole('spinbutton', { name: '인물 고정 강도' })).toHaveValue('0.45');
   const submitted = page.waitForRequest(
     (r) => r.url().endsWith('/prompt') && r.method() === 'POST',
   );
@@ -107,6 +110,12 @@ test('이미지 결과의 영상으로 만들기는 첫 프레임과 영상 계�
   const body = (await submitted).postDataJSON();
   expect(body.prompt['19'].inputs.image).toMatch(/^mock-.*\.png \[output\]$/);
   expect(body.prompt['21'].inputs.strength).toBe(1);
+  expect(body.prompt['42']).toMatchObject({
+    class_type: 'LTXVAddGuide',
+    inputs: { strength: 0.45 },
+  });
+  expect(body.prompt['43'].inputs.frame_idx).toBe(-1);
+  expect(body.prompt['15'].inputs.samples).toEqual(['45', 2]);
 
   await page.getByRole('button', { name: '첫 프레임 해제' }).click();
   await expect(page.getByAltText('첫 프레임 이미지')).toHaveCount(0);

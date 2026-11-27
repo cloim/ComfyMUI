@@ -220,6 +220,56 @@ describe('LTX 2.5 video family', () => {
     expect(reusableSettings({ ...s, architecture: 'flux' }).firstFrame).toBeUndefined();
   });
 
+  it('pins the person reference at the middle and last frames and crops the guides', () => {
+    const frame = {
+      base: '/comfy',
+      image: { filename: 'face.png', subfolder: '', type: 'output' },
+    };
+    const s = {
+      ...selectModel(defaults, entry('ltx2'), info),
+      positive: 'she smiles',
+      width: 768,
+      height: 1024,
+      firstFrame: frame,
+      identityLock: true,
+      identityStrength: 0.6,
+    };
+    const graph = buildWorkflow(s);
+    // 6 seconds at 24fps is 145 frames; the middle guide sits on latent frame 72.
+    expect(graph['42'].inputs).toMatchObject({
+      image: ['20', 0],
+      latent: ['21', 0],
+      positive: ['7', 0],
+      frame_idx: 72,
+      strength: 0.6,
+    });
+    expect(graph['43'].inputs).toMatchObject({
+      latent: ['42', 2],
+      positive: ['42', 0],
+      frame_idx: -1,
+    });
+    expect(graph['10'].inputs.video_latent).toEqual(['43', 2]);
+    expect(graph['13'].inputs).toMatchObject({ positive: ['43', 0], negative: ['43', 1] });
+    expect(graph['45']).toMatchObject({
+      class_type: 'LTXVCropGuides',
+      inputs: { latent: ['14', 0] },
+    });
+    expect(graph['15'].inputs.samples).toEqual(['45', 2]);
+    // A separate reference of another angle is loaded on its own.
+    const other = buildWorkflow({
+      ...s,
+      identityImage: {
+        base: '/comfy',
+        image: { filename: 'side.png', subfolder: '', type: 'input' },
+      },
+    });
+    expect(other['40'].inputs.image).toBe('side.png [input]');
+    expect(other['42'].inputs.image).toEqual(['41', 0]);
+    // Without the lock the graph has no guides.
+    expect(buildWorkflow({ ...s, identityLock: false })['42']).toBeUndefined();
+    expect(() => buildWorkflow({ ...s, firstFrame: null })).toThrow('인물 고정');
+  });
+
   it('accepts FHD sizes and rejects video lengths and sizes LTX cannot render', () => {
     const s = { ...selectModel(defaults, entry('ltx2'), info), positive: 'waves' };
     expect(() => buildWorkflow({ ...s, width: 1920, height: 1080 })).not.toThrow();

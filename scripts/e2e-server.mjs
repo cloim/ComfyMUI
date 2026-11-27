@@ -349,9 +349,13 @@ for (const node of [
   'LTXVAudioVAEDecode',
   'LTXVImgToVideoInplace',
   'CreateVideo',
+  'LTXVAddGuide',
+  'LTXVCropGuides',
 ])
   schema[node] = { input: { required: {} } };
-schema.KSamplerSelect = { input: { required: { sampler_name: choices(['euler', 'euler_ancestral', 'heun']) } } };
+schema.KSamplerSelect = {
+  input: { required: { sampler_name: choices(['euler', 'euler_ancestral', 'heun']) } },
+};
 schema.SaveVideo = { input: { required: {} }, output_node: true };
 const mock = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');

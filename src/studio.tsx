@@ -786,7 +786,12 @@ function useStudioState() {
       }
     }
     const video = !snapshot.workflow && !snapshot.upscale && isVideoFamily(snapshot.architecture);
-    if (video && snapshot.firstFrame && snapshot.firstFrame.base !== connection.base) {
+    if (
+      video &&
+      [snapshot.firstFrame, snapshot.identityImage].some(
+        (ref) => ref && ref.base !== connection.base,
+      )
+    ) {
       notify('첫 프레임 이미지가 저장된 ComfyUI 서버에 연결하거나 다른 이미지를 선택해 주세요');
       return false;
     }
@@ -864,14 +869,17 @@ function useStudioState() {
   }
 
   // Uploads a first frame for video families to the connected server.
-  async function uploadFirstFrame(file: File) {
+  async function uploadFirstFrame(
+    file: File,
+    target: 'firstFrame' | 'identityImage' = 'firstFrame',
+  ) {
     if (connectionState !== 'connected') {
       notify('ComfyUI 서버 연결을 확인해 주세요');
       return false;
     }
     try {
       const image = await uploadImage(connection.base, file, 'video', newId());
-      setSettings((prev) => ({ ...prev, firstFrame: { base: connection.base, image } }));
+      setSettings((prev) => ({ ...prev, [target]: { base: connection.base, image } }));
       return true;
     } catch (error) {
       notify((error as Error).message);
