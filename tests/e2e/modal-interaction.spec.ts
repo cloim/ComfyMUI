@@ -23,47 +23,7 @@ test('Balance modal Enter and Esc interaction in real app', async ({ page }) => 
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  // 2. Preset Save modal: Enter triggers save
-  await page.getByRole('button', { name: '현재 설정을 프리셋으로 저장' }).click();
-  const presetModal = page.getByRole('dialog');
-  await expect(presetModal).toBeVisible();
-
-  // Pressing Escape should close preset modal without saving
-  await page.keyboard.press('Escape');
-  await expect(presetModal).toHaveCount(0);
-
-  // Re-open and type name, then press Enter
-  await page.getByRole('button', { name: '현재 설정을 프리셋으로 저장' }).click();
-  await expect(presetModal).toBeVisible();
-  const nameInput = page.getByLabel('프리셋 이름', { exact: true });
-  await nameInput.fill('엔터키 테스트 프리셋');
-  await nameInput.press('Enter');
-
-  // Modal should be closed automatically by Enter on positive button
-  await expect(presetModal).toHaveCount(0);
-
-  // Verify preset exists in Presets page
-  await page.goto('/presets');
-  await expect(page.getByRole('heading', { name: '엔터키 테스트 프리셋' })).toBeVisible();
-
-  // 3. Preset Delete modal: Escape cancels, Enter confirms deletion
-  await page.getByRole('button', { name: '엔터키 테스트 프리셋 삭제' }).click();
-  const deleteModal = page.getByRole('dialog');
-  await expect(deleteModal).toBeVisible();
-
-  // Escape cancels deletion
-  await page.keyboard.press('Escape');
-  await expect(deleteModal).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: '엔터키 테스트 프리셋' })).toBeVisible();
-
-  // Re-open delete modal and press Enter to confirm deletion
-  await page.getByRole('button', { name: '엔터키 테스트 프리셋 삭제' }).click();
-  await expect(deleteModal).toBeVisible();
-  await page.keyboard.press('Enter');
-  await expect(deleteModal).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: '엔터키 테스트 프리셋' })).toHaveCount(0);
-
-  // 4. Settings page: Textarea standalone Enter keeps newline, Ctrl+Enter submits
+  // 2. Settings page: Textarea standalone Enter keeps newline, Ctrl+Enter submits
   await page.goto('/settings');
   await page.getByRole('tab', { name: '기본 프롬프트 설정' }).click();
 

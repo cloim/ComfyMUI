@@ -49,6 +49,11 @@ import {
   parseWorkflow,
   downloadJson,
   buildWorkflow,
+  isPhotoEdit,
+  FINISH_SCALES,
+  finishDefaults,
+  preferredUpscaleModel,
+  upscaleSize,
   type Generation,
   type Job,
   type PromptAssembleElement,
@@ -71,6 +76,7 @@ import { Result } from '../components/Result';
 import { PromptHelper } from '../components/PromptHelper';
 import { DraftTextarea } from '../components/DraftField';
 import ModelPanel from '../components/ModelPanel';
+import { StartPanel } from '../components/StartPanel';
 import { LoraPicker } from '../components/LoraPicker';
 import { fetchLoraList, extractLoraTriggerWords, type LoraItem } from '../lora-manager';
 import {
@@ -308,6 +314,7 @@ export default function Create() {
           disabled={Boolean(s.workflow)}
           className="flex min-w-0 flex-col gap-3.5 disabled:opacity-45"
         >
+          <StartPanel />
           <ModelPanel />
           <Section
             title="프롬프트"
@@ -559,7 +566,7 @@ export default function Create() {
                 />
               </div>
             </div>
-            {video && <VideoSettings />}
+            {video ? <VideoSettings /> : <ImageExtras />}
           </Section>
         </fieldset>
         <button
@@ -584,6 +591,115 @@ export default function Create() {
       </aside>
       <Advanced open={advanced} initialTab={advancedTab} onClose={() => setAdvanced(false)} />
       <LoraPicker open={addLora} onClose={() => setAddLora(false)} />
+    </div>
+  );
+}
+const FINISH_REFINES = [
+  { value: 0.2, label: '약하게', hint: '얼굴과 형태를 거의 그대로 두고 질감만 다듬어요' },
+  { value: 0.35, label: '보통', hint: '피부결, 머리카락, 눈동자 같은 디테일을 새로 그려요' },
+];
+// Image families: the photo being edited, and the high-quality finish.
+function ImageExtras() {
+  const {
+    settings: s,
+    setSettings,
+    info,
+    connection,
+  } = useStudioSelector((state) => ({
+    settings: state.settings,
+    setSettings: state.setSettings,
+    info: state.info,
+    connection: state.connection,
+  }));
+  const patch = (v: Partial<Generation>) => setSettings((prev) => ({ ...prev, ...v }));
+  const models = options(info, 'UpscaleModelLoader', 'model_name');
+  const model = preferredUpscaleModel(models);
+  const finish = s.finish;
+  const target = finish ? upscaleSize(s.width, s.height, finish.scale) : null;
+  const editing = s.architecture === 'qwen21' && s.editSource;
+  return (
+    <div className="mt-3 flex flex-col gap-2.5">
+      {editing && s.editSource && (
+        <div className="flex min-w-0 items-center gap-2.5 rounded-lg bg-paper p-2">
+          <img
+            src={imageUrl(connection.base, s.editSource)}
+            alt="고칠 사진"
+            className="h-12 w-12 shrink-0 rounded-md bg-stone object-cover"
+          />
+          <span className="min-w-0 flex-1 text-xs">
+            <span className="block font-semibold">사진 고치기</span>
+            <span className="block truncate text-2xs text-muted">
+              프롬프트대로 이 사진을 바꿔요
+            </span>
+          </span>
+          <IconButton
+            icon={X}
+            label="사진 고치기 해제"
+            className="shrink-0"
+            onClick={() => patch({ editSource: undefined })}
+          />
+        </div>
+      )}
+      <div className="flex flex-col gap-2.5 rounded-lg border border-line p-2.5">
+        <label className="flex min-h-7 items-center justify-between gap-2.5 text-xs font-medium">
+          <span>
+            고화질 마무리
+            <span className="mt-0.5 block text-2xs font-normal leading-relaxed text-muted">
+              {!model
+                ? '업스케일 모델을 설치하면 쓸 수 있어요'
+                : isPhotoEdit(s)
+                  ? '사진 고치기에서는 원본 질감을 지키도록 건너뛰어요'
+                  : target
+                    ? `${target.width}×${target.height}로 키우고 디테일을 다시 그려요 · 768×1024 기준 약 12초 더 걸려요`
+                    : '결과를 키우고 피부와 머리카락 디테일을 다시 그려요'}
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            className="h-4 w-4 shrink-0 accent-olive"
+            disabled={!model}
+            checked={Boolean(finish && model)}
+            onChange={(e) =>
+              patch({
+                finish: e.target.checked
+                  ? { model, ...finishDefaults, ...(finish && { scale: finish.scale }) }
+                  : null,
+              })
+            }
+          />
+        </label>
+        {finish && model && (
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="배율">
+              <SelectControl
+                aria-label="고화질 마무리 배율"
+                value={finish.scale}
+                onChange={(e) => patch({ finish: { ...finish, scale: Number(e.target.value) } })}
+              >
+                {FINISH_SCALES.map((scale) => (
+                  <option key={scale} value={scale}>
+                    {scale}배
+                  </option>
+                ))}
+              </SelectControl>
+            </Field>
+            <Field label="디테일">
+              <SelectControl
+                aria-label="고화질 마무리 디테일"
+                value={finish.refine}
+                title={FINISH_REFINES.find((r) => r.value === finish.refine)?.hint}
+                onChange={(e) => patch({ finish: { ...finish, refine: Number(e.target.value) } })}
+              >
+                {FINISH_REFINES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </SelectControl>
+            </Field>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,23 +1,11 @@
 import { lazy, Suspense, useState, useEffect } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation, Link } from 'react-router-dom';
-import {
-  Sparkles,
-  Images,
-  Bookmark,
-  Settings2,
-  Save,
-  Plus,
-  WifiOff,
-  Check,
-  Box,
-  Clapperboard,
-} from 'lucide-react';
+import { Sparkles, Images, Settings2, WifiOff, Check, Box, Clapperboard } from 'lucide-react';
 import { StudioProvider, useStudio } from './studio';
 import { IconButton } from './components/ui';
 import { HeaderSlotProvider } from './components/HeaderActions';
 import Create, { GenerateControls } from './screens/Create';
 import Gallery from './screens/Gallery';
-import Presets, { PresetEditor } from './screens/Presets';
 import ModelLibrary from './screens/ModelLibrary';
 import Settings from './screens/Settings';
 import { usePwa } from './pwa';
@@ -28,7 +16,6 @@ const nav = [
   { path: '/scenario', label: '시나리오', icon: Clapperboard },
   { path: '/models', label: '모델', icon: Box },
   { path: '/gallery', label: '기록', icon: Images },
-  { path: '/presets', label: '프리셋', icon: Bookmark },
   { path: '/settings', label: '설정', icon: Settings2 },
 ];
 export default function App() {
@@ -82,7 +69,6 @@ function Shell() {
   const location = useLocation();
   const page = nav.find((n) => n.path === location.pathname);
   const { connectionState, online, notice, storageError, active } = useStudio();
-  const [saveOpen, setSaveOpen] = useState(false);
   const pwa = usePwa();
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
@@ -196,23 +182,7 @@ function Shell() {
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <ConnectionBadge state={connectionState} className="hidden sm:flex md:hidden" />
-            {location.pathname === '/create' && (
-              <>
-                <IconButton
-                  icon={Save}
-                  label="현재 설정을 프리셋으로 저장"
-                  onClick={() => setSaveOpen(true)}
-                />
-                <GenerateControls />
-              </>
-            )}
-            {location.pathname === '/presets' && (
-              <IconButton
-                icon={Plus}
-                label="현재 설정으로 프리셋 추가"
-                onClick={() => setSaveOpen(true)}
-              />
-            )}
+            {location.pathname === '/create' && <GenerateControls />}
             <div
               ref={setHeaderSlot}
               data-header-actions
@@ -229,7 +199,7 @@ function Shell() {
             {!online ? (
               <>
                 <WifiOff size={14} />
-                오프라인 | 저장한 설정과 프리셋을 사용할 수 있어요
+                오프라인 | 저장한 설정을 사용할 수 있어요
               </>
             ) : (
               '기기 저장 공간을 확인해 주세요. 변경 사항은 현재 화면에 유지됩니다'
@@ -239,9 +209,9 @@ function Shell() {
         <main
           id="main"
           tabIndex={-1}
-          className={`min-h-0 flex-1 outline-none ${['/gallery', '/presets', '/models'].includes(location.pathname) ? 'overflow-hidden' : 'overflow-y-auto'}`}
+          className={`min-h-0 flex-1 outline-none ${['/gallery', '/models'].includes(location.pathname) ? 'overflow-hidden' : 'overflow-y-auto'}`}
           data-ui-audit-scroll-root={
-            !['/gallery', '/presets', '/models'].includes(location.pathname) ? '' : undefined
+            !['/gallery', '/models'].includes(location.pathname) ? '' : undefined
           }
         >
           <HeaderSlotProvider value={headerSlot}>
@@ -266,7 +236,7 @@ function Shell() {
               <Route path="/models" element={<ModelLibrary />} />
               <Route path="/loras" element={<Navigate to="/models?tab=lora" replace />} />
               <Route path="/gallery" element={<Gallery />} />
-              <Route path="/presets" element={<Presets />} />
+              <Route path="/presets" element={<Navigate to="/create" replace />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<Navigate to="/create" replace />} />
             </Routes>
@@ -300,7 +270,6 @@ function Shell() {
           <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">{notice}</span>
         </div>
       )}
-      {saveOpen && <PresetEditor open onClose={() => setSaveOpen(false)} />}
     </div>
   );
 }

@@ -24,11 +24,12 @@ import {
   baseSettings,
   reusableSettings,
   upscaleSettings,
+  preferredUpscaleModel,
+  finishDefaults,
   type DefaultPrompts,
   type PromptAssembleElement,
   type Generation,
   type ImageRef,
-  type Preset,
   type Job,
   type QueueItem,
   reorderQueue,
@@ -48,7 +49,16 @@ import {
   type HistoryItem,
 } from './api';
 import { startConnection } from './connection';
-import { fitVideoSize } from './ltx';
+import { fitVideoSize, videoOptions } from './ltx';
+import {
+  assistEncoder,
+  assistInstruction,
+  buildAssistWorkflow,
+  fitImageSize,
+  runAssist,
+  type AssistMode,
+} from './assist';
+import { fetchLoraList, extractLoraTriggerWords } from './lora-manager';
 import {
   catalog,
   selectModel,
@@ -267,9 +277,9 @@ function useStudioState() {
     },
     { migrate: migrateGenerationSettings, shared: true },
   );
-  const [presets, setPresets, presetError] = usePersisted<Preset[]>('cm-presets', [], {
-    shared: true,
-  });
+  // Work that finishes later (the prompt helper) applies its result to the latest settings.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const [familyAssignments, setFamilyAssignments, familySaveError] =
     usePersisted<FamilyAssignments>('cm-asset-families', {}, { shared: true });
   // Which CivitAI example became each model's card preview, keyed by hash or path.
@@ -526,6 +536,15 @@ function useStudioState() {
       const entry = current || list.find((e) => e.family === s.architecture) || list[0];
       if (!entry) return s;
       const aligned = selectModel(s, entry, info, familyAssignments);
+      // The high-quality finish starts on once an upscale model is installed; turning it
+      // off stores null, which stays off.
+      const upscalers = options(info, 'UpscaleModelLoader', 'model_name');
+      const upscaler = preferredUpscaleModel(upscalers);
+      if (aligned.finish === undefined) {
+        if (upscaler) aligned.finish = { model: upscaler, ...finishDefaults };
+      } else if (aligned.finish && upscaler && !upscalers.includes(aligned.finish.model)) {
+        aligned.finish = { ...aligned.finish, model: upscaler };
+      }
       return JSON.stringify(aligned) === JSON.stringify(s) ? s : aligned;
     });
   }, [info, familyAssignments, modelOrder, settings.architecture, remoteHydrated]);
@@ -892,6 +911,121 @@ function useStudioState() {
       return true;
     } catch (error) {
       notify((error as Error).message);
+      return false;
+    }
+  }
+
+  // The prompt helper reads the idea, and the photo when there is one, with a Qwen3-VL
+  // text encoder in ComfyUI and writes the prompt. It also switches to the model the mode
+  // needs: Qwen 2.1 to edit a photo, the video model to animate it.
+  async function writeWithAssist({
+    mode,
+    idea,
+    photo,
+    andGenerate,
+    signal,
+  }: {
+    mode: AssistMode;
+    idea: string;
+    photo?: { file: File; width: number; height: number };
+    andGenerate: boolean;
+    signal?: AbortSignal;
+  }): Promise<boolean> {
+    if (connectionState !== 'connected') {
+      notify('ComfyUI 서버 연결을 확인해 주세요');
+      return false;
+    }
+    const encoder = assistEncoder(info);
+    if (!encoder) {
+      notify(
+        '프롬프트를 쓸 Qwen3-VL 텍스트 인코더가 없어요. Krea2용 qwen3vl 4b 또는 Qwen 2.1용 qwen3vl 8b를 설치해 주세요',
+      );
+      return false;
+    }
+    const start = settingsRef.current;
+    const list = catalog(info, familyAssignments, modelOrder);
+    const matches = (want: (family: string) => boolean) =>
+      want(start.architecture)
+        ? list.find((e) => e.name === start.model && e.family === start.architecture) ||
+          list.find((e) => want(e.family))
+        : list.find((e) => want(e.family));
+    const entry =
+      mode === 'edit'
+        ? matches((f) => f === 'qwen21')
+        : mode === 'motion'
+          ? matches(isVideoFamily)
+          : mode === 'remake'
+            ? matches((f) => !isVideoFamily(f))
+            : matches((f) => f === start.architecture);
+    if (!entry) {
+      notify(
+        mode === 'edit'
+          ? '사진을 고치려면 Qwen 2.1 모델이 필요해요'
+          : mode === 'motion'
+            ? '영상을 만들려면 LTX 영상 모델이 필요해요'
+            : '사용할 이미지 모델이 없어요',
+      );
+      return false;
+    }
+    const switching = entry.family !== start.architecture || entry.name !== start.model;
+    try {
+      const image = photo
+        ? await uploadImage(connection.base, photo.file, 'assist', newId())
+        : undefined;
+      // Character LoRAs keep their trigger words in the prompt.
+      let triggers: string[] = [];
+      if (mode !== 'edit' && start.loras.length && entry.family === start.architecture) {
+        try {
+          const { items } = await fetchLoraList(connection.base, { page: 1, pageSize: 100 });
+          const names = options(info, 'LoraLoaderModelOnly', 'lora_name').concat(
+            options(info, 'LoraLoader', 'lora_name'),
+          );
+          triggers = [
+            ...new Set(start.loras.flatMap((l) => extractLoraTriggerWords(l.name, items, names))),
+          ];
+        } catch {
+          /* LoRA Manager is optional; the prompt is written without trigger words. */
+        }
+      }
+      const instruction = assistInstruction({
+        mode,
+        idea,
+        family: entry.family,
+        triggers,
+        audio: isVideoFamily(entry.family) && videoOptions(start).audio,
+      });
+      const text = await runAssist(
+        connection.base,
+        buildAssistWorkflow(encoder, instruction, mode, image),
+        { signal },
+      );
+      const current = settingsRef.current;
+      const next: Generation = {
+        ...(switching ? selectModel(current, entry, info, familyAssignments) : current),
+        positive: text,
+      };
+      if (mode === 'edit' && image) next.editSource = image;
+      else delete next.editSource;
+      if (photo && (mode === 'remake' || mode === 'edit'))
+        Object.assign(next, fitImageSize(photo.width, photo.height));
+      if (mode === 'motion' && photo && image) {
+        // Long sides above 1280px take minutes on an 8GB GPU, so photos are scaled to that.
+        const k = Math.min(1, 1280 / Math.max(photo.width, photo.height));
+        Object.assign(next, fitVideoSize(photo.width * k, photo.height * k));
+        next.firstFrame = { base: connection.base, image };
+      }
+      setSettings(next);
+      if (andGenerate) return await generate(next);
+      notify(
+        mode === 'edit'
+          ? '사진을 고칠 지시문을 썼어요'
+          : mode === 'motion'
+            ? '영상 프롬프트를 썼어요'
+            : '프롬프트를 썼어요',
+      );
+      return true;
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') notify((error as Error).message);
       return false;
     }
   }
@@ -1424,8 +1558,6 @@ function useStudioState() {
     setModelOrder,
     exampleDefaults,
     setExampleDefaults,
-    presets,
-    setPresets,
     jobs,
     setJobs,
     scenarios,
@@ -1447,6 +1579,7 @@ function useStudioState() {
     socketState,
     generate,
     uploadFirstFrame,
+    writeWithAssist,
     startVideoFrom,
     checkSubmission,
     busy,
@@ -1480,7 +1613,6 @@ function useStudioState() {
     clearBadge,
     storageError:
       saveError ||
-      presetError ||
       historyError ||
       scenarioSaveError ||
       familySaveError ||

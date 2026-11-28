@@ -11,7 +11,6 @@ import {
 
 const names: Record<string, string> = {
   'cm-settings': '생성 설정',
-  'cm-presets': '프리셋',
   'cm-default-prompts': '기본 프롬프트',
   'cm-prompt-assemble': '프롬프트 조합',
   'cm-connection': '서버 연결',

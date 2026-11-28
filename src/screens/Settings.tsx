@@ -62,7 +62,6 @@ export default function Settings() {
     notify,
     socketState,
     online,
-    presets,
     jobCount,
     notificationsEnabled,
     toggleNotifications,
@@ -82,7 +81,6 @@ export default function Settings() {
     notify: s.notify,
     socketState: s.socketState,
     online: s.online,
-    presets: s.presets,
     jobCount: s.jobs.length,
     notificationsEnabled: s.notificationsEnabled,
     toggleNotifications: s.toggleNotifications,
@@ -1044,7 +1042,6 @@ export default function Settings() {
               <div className="flex flex-col gap-4">
                 <SyncConflicts recovery />
                 <div className="flex flex-wrap gap-2">
-                  <Status>프리셋 {presets.length}개</Status>
                   <Status>생성 기록 {jobCount}개</Status>
                   <Status>{online ? '온라인' : '오프라인'}</Status>
                 </div>
@@ -1053,8 +1050,6 @@ export default function Settings() {
                   <br />
                   이미지 원본은 ComfyUI 서버에서 불러옵니다
                   <br />
-                  <br />
-                  브라우저 데이터 삭제에 대비해 중요한 프리셋은 JSON으로 내보내 주세요
                   <br />
                   공유 기기에서는 프롬프트와 서버 주소가 남는 점을 확인해 주세요
                 </p>

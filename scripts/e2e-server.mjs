@@ -357,6 +357,9 @@ schema.KSamplerSelect = {
   input: { required: { sampler_name: choices(['euler', 'euler_ancestral', 'heun']) } },
 };
 schema.SaveVideo = { input: { required: {} }, output_node: true };
+// The create screen's prompt helper generates text with a Qwen3-VL encoder.
+schema.TextGenerate = { input: { required: {} } };
+schema.PreviewAny = { input: { required: { source: ['*'] } }, output_node: true };
 const mock = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const send = (body, status = 200) => {
@@ -678,6 +681,11 @@ const mock = createServer(async (req, res) => {
     if (url.pathname === '/userdata/comfymui-state.json') {
       globalThis.__legacyState = data && typeof data.entries === 'object' ? data : null;
       return send('comfymui-state.json');
+    }
+    if (url.pathname === '/prompt' && data.prompt?.['3']?.class_type === 'TextGenerate') {
+      const id = data.prompt_id || crypto.randomUUID();
+      jobs.set(id, { start: Date.now(), prompt: data.prompt, text: '', assist: true });
+      return send({ prompt_id: id, number: 0, node_errors: {} });
     }
     if (url.pathname === '/prompt') {
       const text =
@@ -1003,6 +1011,23 @@ const mock = createServer(async (req, res) => {
   if (url.pathname.startsWith('/history/')) {
     const id = url.pathname.slice('/history/'.length),
       j = jobs.get(id);
+    if (j?.assist) {
+      if (Date.now() - j.start < 300) return send({});
+      const instruction = String(j.prompt['3'].inputs.prompt);
+      const text = instruction.includes('image-editing')
+        ? '"Change the hair to platinum blonde; keep the face, pose and background."'
+        : instruction.includes('first frame of a video')
+          ? 'She slowly turns toward the camera as the light flickers.'
+          : instruction.includes('Recreate the photo')
+            ? 'Prompt: A woman by a rainy window, recreated in warm light.'
+            : 'A detailed mock prompt about a quiet harbor at dawn.';
+      return send({
+        [id]: {
+          outputs: { 4: { text: [text] } },
+          status: { completed: true, status_str: 'success' },
+        },
+      });
+    }
     if (
       !j ||
       j.cancelled ||

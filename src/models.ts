@@ -155,6 +155,18 @@ export type QualityIssue = {
   fix: Partial<Generation>;
 };
 
+// Distilled turbo builds of Qwen 2.1 need few steps without CFG; the family defaults suit
+// the full model. Measured on a photo edit: 28 steps at CFG 4 oversaturated the turbo
+// model and a finish pass on top turned skin into a crawling texture, while 8 steps at
+// CFG 1 stayed clean and took 12 seconds.
+export function isTurboModel(family: string, model: string) {
+  return family === 'qwen21' && /turbo|lightning/i.test(model);
+}
+export function modelDefaults(family: string, model: string) {
+  if (isTurboModel(family, model)) return { steps: 8, cfg: 1 };
+  const profile = families.find((f) => f.id === family) || families[0];
+  return { steps: profile.steps, cfg: profile.cfg };
+}
 export function checkQualityIssues(s: Generation): QualityIssue[] {
   const issues: QualityIssue[] = [];
   const prof = qualityProfiles[s.architecture] || qualityProfiles.flux;
@@ -174,6 +186,15 @@ export function checkQualityIssues(s: Generation): QualityIssue[] {
       title: 'LTX 2.5 스텝 수 확인 (움직임 번짐)',
       message: `증류 모델 전용 스케줄은 8스텝에서만 쓰여요. ${s.steps}스텝은 일반 LTX 스케줄러를 사용해 움직이는 부분이 번질 수 있어요.`,
       fix: { steps: 8 },
+    });
+  }
+
+  if (isTurboModel(s.architecture, s.model) && (s.steps > 12 || s.cfg > 1.5)) {
+    issues.push({
+      id: 'qwen-turbo',
+      title: 'Qwen 2.1 터보 모델 설정 확인 (과포화)',
+      message: `터보 모델은 8스텝, CFG 1에 맞춰져 있어요. ${s.steps}스텝, CFG ${s.cfg}에서는 색이 과포화되고 피부와 옷에 거친 무늬가 생길 수 있어요.`,
+      fix: { steps: 8, cfg: 1 },
     });
   }
 
@@ -405,6 +426,9 @@ export function selectModel(
     vaes = compatibleAssets(info, 'vae', entry.family, assignments),
     audios = compatibleAssets(info, 'audio', entry.family, assignments);
   const same = s.architecture === entry.family;
+  // Moving between a full and a turbo build of the same family changes the right steps.
+  const retune =
+    !same || isTurboModel(s.architecture, s.model) !== isTurboModel(entry.family, entry.name);
   const video = isVideoFamily(entry.family);
   // Crossing between images and video keeps the orientation with a size that suits the medium.
   const size =
@@ -452,10 +476,9 @@ export function selectModel(
           ? s.audioVae
           : audios[0] || ''
         : '',
-    ...(!same || isArtifactProneSampler(s.sampler)
+    ...(retune || isArtifactProneSampler(s.sampler)
       ? {
-          steps: profile.steps,
-          cfg: profile.cfg,
+          ...modelDefaults(entry.family, entry.name),
           sampler: qualityProfiles[entry.family].sampler,
           scheduler: 'simple',
           denoise: 1,

@@ -55,7 +55,7 @@ describe('versioned shared-state sync', () => {
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
-  it('merges disjoint preset edits against the current server version', async () => {
+  it('merges disjoint scenario edits against the current server version', async () => {
     const a = { id: 'a', name: 'A' },
       b = { id: 'b', name: 'B' };
     const local = [{ ...a, name: 'local A' }, b];
@@ -66,23 +66,23 @@ describe('versioned shared-state sync', () => {
     ];
     const fetch = vi
       .fn()
-      .mockResolvedValueOnce(response({ entries: { 'cm-presets': entry([a, b], 1) } }))
+      .mockResolvedValueOnce(response({ entries: { 'cm-scenarios': entry([a, b], 1) } }))
       .mockResolvedValueOnce(
-        response({ entries: {}, conflicts: { 'cm-presets': entry(remote, 2) } }, 409),
+        response({ entries: {}, conflicts: { 'cm-scenarios': entry(remote, 2) } }, 409),
       )
       .mockResolvedValueOnce(
-        response({ entries: { 'cm-presets': entry(merged, 3) }, conflicts: {} }),
+        response({ entries: { 'cm-scenarios': entry(merged, 3) }, conflicts: {} }),
       );
     vi.stubGlobal('fetch', fetch);
     const storage = await import('../src/storage');
     await storage.fetchServerState();
-    storage.queueServerWrite('cm-presets', local);
+    storage.queueServerWrite('cm-scenarios', local);
     await storage.flushServerWrites();
     expect(storage.getSyncConflicts()).toEqual([]);
     await storage.flushServerWrites();
     expect(JSON.parse(fetch.mock.calls[2][1].body)).toEqual({
-      values: { 'cm-presets': merged },
-      revisions: { 'cm-presets': 2 },
+      values: { 'cm-scenarios': merged },
+      revisions: { 'cm-scenarios': 2 },
     });
     expect(storage.unsentKeys().size).toBe(0);
   });
@@ -126,7 +126,7 @@ describe('versioned shared-state sync', () => {
         response({
           entries: {
             'cm-settings': entry({ steps: 20 }, 4),
-            'cm-presets': entry([], 3),
+            'cm-scenarios': entry([], 3),
           },
         }),
       )
@@ -134,7 +134,7 @@ describe('versioned shared-state sync', () => {
       .mockResolvedValueOnce(
         response(
           {
-            entries: { 'cm-presets': entry([], 1) },
+            entries: { 'cm-scenarios': entry([], 1) },
             conflicts: { 'cm-settings': entry(null, 0) },
           },
           409,
@@ -145,11 +145,11 @@ describe('versioned shared-state sync', () => {
     await storage.fetchServerState();
     storage.queueServerWrite('cm-settings', { steps: 25 });
     await storage.fetchServerState();
-    storage.queueServerWrite('cm-presets', []);
+    storage.queueServerWrite('cm-scenarios', []);
     await storage.flushServerWrites();
     expect(JSON.parse(fetch.mock.calls[2][1].body).revisions).toEqual({
       'cm-settings': 4,
-      'cm-presets': 0,
+      'cm-scenarios': 0,
     });
     expect(storage.getSyncConflicts()[0]).toMatchObject({
       local: { steps: 25 },
@@ -230,17 +230,5 @@ describe('versioned shared-state sync', () => {
     await storage.flushServerWrites();
     expect(JSON.parse(fetch.mock.calls[2][1].body).revisions['cm-settings']).toBe(2);
     expect(storage.unsentKeys().size).toBe(0);
-  });
-});
-
-describe('three-way preset merging', () => {
-  it('preserves deletions and new IDs but rejects overlapping edits and delete/edit conflicts', async () => {
-    const { mergePresets } = await import('../src/storage');
-    const a = { id: 'a', name: 'A' },
-      b = { id: 'b', name: 'B' };
-    expect(mergePresets([a, b], [a], [a, b, { id: 'c' }])).toEqual([a, { id: 'c' }]);
-    expect(mergePresets([a], [{ ...a, name: 'local' }], [{ ...a, name: 'server' }])).toBeNull();
-    expect(mergePresets([a], [], [{ ...a, name: 'server' }])).toBeNull();
-    expect(mergePresets([], [a], [b])).toEqual([a, b]);
   });
 });

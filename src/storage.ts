@@ -89,15 +89,6 @@ export async function migrateLocalStorageToIDB(): Promise<void> {
       }
     }
 
-    // Migrate cm-presets
-    const rawPresets = localStorage.getItem('cm-presets');
-    if (rawPresets) {
-      const parsedPresets = JSON.parse(rawPresets);
-      if (Array.isArray(parsedPresets)) {
-        await idbSet('cm-presets', parsedPresets);
-      }
-    }
-
     localStorage.setItem('cm-migrated-idb', 'true');
   } catch {
     /* If migration fails, keep localStorage intact */
@@ -165,11 +156,6 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 // A three-way merge preserves changes to different item IDs, including deletes.
 // An overlapping edit stays a visible conflict rather than guessing a winner.
-export function mergePresets(base: unknown, local: unknown, server: unknown): unknown[] | null {
-  // Preserve the application's existing preset limit; never silently discard items.
-  return mergeById(base, local, server, 100);
-}
-
 export function mergeById(
   base: unknown,
   local: unknown,
@@ -340,12 +326,7 @@ export async function flushServerWrites(keepalive = false): Promise<void> {
           continue;
         }
         const base = baseline.get(key)?.value;
-        const merged =
-          key === 'cm-presets'
-            ? mergePresets(base, local, entry.value)
-            : key === 'cm-scenarios'
-              ? mergeById(base, local, entry.value)
-              : null;
+        const merged = key === 'cm-scenarios' ? mergeById(base, local, entry.value) : null;
         if (merged !== null) {
           bases[key] = entry;
           pending.set(key, merged);

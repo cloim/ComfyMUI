@@ -13,7 +13,7 @@ async function connect(page: Page) {
     .getByRole('combobox', { name: '모델', exact: true })
     .selectOption({ label: 'Flux1.D/test-model.safetensors' });
 }
-test('mobile layout, advanced values, presets CRUD and persistence', async ({ page }) => {
+test('mobile layout, advanced values and persistence', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await connect(page);
@@ -22,26 +22,13 @@ test('mobile layout, advanced values, presets CRUD and persistence', async ({ pa
   await page.getByLabel('Steps', { exact: true }).fill('32');
   await page.getByLabel('CFG', { exact: true }).fill('6.5');
   await page.getByRole('button', { name: '설정 완료' }).click();
-  await page.getByRole('button', { name: '현재 설정을 프리셋으로 저장' }).click();
-  await page.getByLabel('프리셋 이름', { exact: true }).fill('숲의 아침');
-  await page.getByRole('button', { name: '저장', exact: true }).click();
-  await page
-    .getByRole('navigation', { name: '모바일 메뉴' })
-    .getByRole('link', { name: '프리셋', exact: true })
-    .click();
-  await expect(page.getByRole('heading', { name: '숲의 아침' })).toBeVisible();
+  // The preset menu is gone; its old address opens the create screen.
+  await expect(
+    page.getByRole('navigation', { name: '모바일 메뉴' }).getByRole('link', { name: '프리셋' }),
+  ).toHaveCount(0);
+  await page.goto('/presets');
+  await expect(page).toHaveURL(/create$/);
   await page.reload();
-  await expect(page.getByRole('heading', { name: '숲의 아침' })).toBeVisible();
-  await page.getByRole('button', { name: '숲의 아침 복제' }).click();
-  await expect(page.getByRole('heading', { name: '숲의 아침 복사본' })).toBeVisible();
-  await page.getByRole('button', { name: '숲의 아침 수정' }).click();
-  await page.getByLabel('프리셋 이름', { exact: true }).fill('나만의 숲');
-  await page.getByRole('button', { name: '저장', exact: true }).click();
-  await page.getByRole('button', { name: '숲의 아침 복사본 삭제' }).click();
-  await page.getByRole('button', { name: '삭제', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '숲의 아침 복사본' })).toHaveCount(0);
-  await page.getByRole('link', { name: '적용하기' }).click();
-  await expect(page).toHaveURL(/create/);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('cm-settings')!).steps)).toBe(
     32,
   );
@@ -187,20 +174,18 @@ test('API workflow import, linked input preservation and export', async ({ page 
     ),
   ).toBe(768);
 });
-test('PWA offline shell and presets remain available without caching API images', async ({
+test('PWA offline shell and saved settings remain available without caching API images', async ({
   page,
   context,
 }) => {
   await page.goto('/create');
-  await page.getByRole('button', { name: '현재 설정을 프리셋으로 저장' }).click();
-  await page.getByLabel('프리셋 이름', { exact: true }).fill('오프라인 설정');
-  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await page.locator('#positive').fill('오프라인 설정');
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
   await page.reload();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   await context.setOffline(true);
-  await page.goto('/presets');
-  await expect(page.getByRole('heading', { name: '오프라인 설정' })).toBeVisible();
+  await page.goto('/create');
+  await expect(page.locator('#positive')).toHaveValue('오프라인 설정');
   await expect(page.getByText(/오프라인 \|/)).toBeVisible();
   const cached = await page.evaluate(async () => {
     const cache = await caches.open((await caches.keys()).find((k) => k.startsWith('comfymui-'))!);
@@ -265,25 +250,14 @@ test('invalid fields show anchored errors without shifting the form', async ({ p
   await page.goto('/settings');
   const address = page.getByLabel('ComfyUI 서버 주소', { exact: true });
   const button = page.getByRole('button', { name: '저장하고 연결 확인' });
+  // The first connection check shows a spinner in the button; measure after it settles.
+  await expect(button).toBeEnabled();
   await address.fill('file:///invalid');
   const before = await button.boundingBox();
   await button.click();
   await expect(address).toHaveAttribute('aria-invalid', 'true');
   await expect(page.getByRole('alert')).toBeVisible();
   expect(await button.boundingBox()).toEqual(before);
-  await page.goto('/create');
-  await page.getByRole('button', { name: '현재 설정을 프리셋으로 저장' }).click();
-  const save = page.getByRole('button', { name: '저장', exact: true });
-  const savedBox = await save.boundingBox();
-  await save.click();
-  await expect(page.getByLabel('프리셋 이름', { exact: true })).toHaveAttribute(
-    'aria-invalid',
-    'true',
-  );
-  await expect(page.getByRole('alert')).toHaveText('프리셋 이름을 입력해 주세요');
-  expect(await save.boundingBox()).toEqual(savedBox);
-  await page.getByLabel('프리셋 이름', { exact: true }).fill('수정한 이름');
-  await expect(page.getByRole('alert')).toHaveCount(0);
 });
 test('family-first model selection, GGUF submission and manual LoRA classification', async ({
   page,
@@ -906,14 +880,17 @@ test('gallery lists the ComfyUI output folder and deleting removes the file', as
   const baseline = new Set((await gallery()).map((f) => f.filename));
   const prompt = page.getByLabel('그리고 싶은 장면', { exact: true });
   await prompt.fill('갤러리 동기화 확인용 장면');
+  // Each file appears when the app reads the finished job, so waiting for it per run keeps
+  // the second job from being left running (the first run's 완료 text is still visible).
   for (let i = 0; i < 2; i++) {
     await page.getByTestId('generate').click();
+    await expect
+      .poll(async () => (await gallery()).filter((f) => !baseline.has(f.filename)).length, {
+        timeout: 15000,
+      })
+      .toBe(i + 1);
     await expect(page.getByText('생성 완료', { exact: true })).toBeVisible({ timeout: 15000 });
-    await page.waitForTimeout(300);
   }
-  await expect
-    .poll(async () => (await gallery()).filter((f) => !baseline.has(f.filename)).length)
-    .toBe(2);
   const created = (await gallery()).filter((f) => !baseline.has(f.filename));
   // 앱 설정이 PNG에 저장되고 워크플로 요약도 읽힌다
   expect(created[0].settings?.positive).toBe('갤러리 동기화 확인용 장면');

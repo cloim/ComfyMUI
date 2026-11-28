@@ -44,6 +44,9 @@ export type Generation = {
   denoise: number;
   workflow: Workflow | null;
   upscale?: UpscaleSpec | null;
+  // High-quality finish of image families: the fresh image is enlarged with an upscale
+  // model and re-sampled at low denoise in the same run, so one job saves the final image.
+  finish?: FinishSpec | null;
   editSource?: ImageRef;
   // Further Qwen2.1 edit references after editSource, seen as <image2>, <image3>, ...
   editReferences?: ImageRef[];
@@ -69,6 +72,19 @@ export type UpscaleSpec = {
   sourceHeight: number;
   refine: number;
 };
+export type FinishSpec = { model: string; scale: number; refine: number };
+export const FINISH_SCALES = [1.5, 2];
+export const finishDefaults = { scale: 1.5, refine: 0.35 };
+// Photo-like upscalers first; any installed model works.
+export function preferredUpscaleModel(models: string[]) {
+  return (
+    [/ClearReality.*Soft\.pth$/i, /ClearReality.*\.pth$/i, /UltraSharp/i, /Siax/i, /RealESRGAN/i]
+      .map((test) => models.find((m) => test.test(m) && !/BROKEN|NCNN|\.bin$/i.test(m)))
+      .find(Boolean) ||
+    models.find((m) => !/BROKEN|NCNN|\.bin$/i.test(m)) ||
+    ''
+  );
+}
 export const UPSCALE_SCALES = [1.5, 2, 3, 4];
 export const UPSCALE_REFINES = [
   { value: 0, label: '끄기', hint: '확대만 해서 가장 빠르고 원본과 똑같아요' },
@@ -110,7 +126,9 @@ export function baseSettings(s: Generation): Generation {
 }
 export function reusableSettings(input: Generation): Generation {
   const settings = baseSettings(structuredClone(input));
-  delete settings.editSource;
+  // The create screen shows the photo being edited and can clear it, so a Qwen 2.1 edit
+  // keeps its photo. Scenario character references have no place there.
+  if (settings.architecture !== 'qwen21') delete settings.editSource;
   delete settings.editReferences;
   if (!isVideoFamily(settings.architecture)) {
     delete settings.firstFrame;
@@ -138,14 +156,6 @@ export function reorderQueue<T>(list: T[], from: number, to: number): T[] {
   copy.splice(to, 0, item);
   return copy;
 }
-export type Preset = {
-  id: string;
-  name: string;
-  description: string;
-  color: string;
-  updatedAt: number;
-  settings: Generation;
-};
 // v is a content version (file modified time or completion time). ComfyUI reuses file
 // names after deletions, so URLs carry it to keep caches from showing an older image.
 export type ImageRef = { filename: string; subfolder: string; type: string; v?: number };
@@ -394,6 +404,14 @@ export function validateGeneration(s: Generation) {
     throw new Error(`이 계열의 해상도는 ${multiple}의 배수로 입력해 주세요`);
   if (!s.workflow && (!s.model || !s.positive.trim()))
     throw new Error('모델과 프롬프트를 입력해 주세요');
+  if (!s.workflow && !video && !s.upscale && s.finish && !isPhotoEdit(s)) {
+    const { model, scale, refine } = s.finish;
+    if (!model) throw new Error('고화질 마무리에 쓸 업스케일 모델을 설치해 주세요');
+    if (!FINISH_SCALES.includes(scale) || !Number.isFinite(refine) || refine < 0 || refine > 1)
+      throw new Error('고화질 마무리 설정을 확인해 주세요');
+    if (s.width * scale > 4096 || s.height * scale > 4096)
+      throw new Error('고화질 마무리 결과가 4096px을 넘지 않게 크기를 줄여 주세요');
+  }
   if (
     !families.some((f) => f.id === s.architecture) ||
     !Number.isFinite(s.guidance) ||
@@ -661,7 +679,39 @@ export function buildWorkflow(s: Generation): Workflow {
       }
     }
   }
-  return s.upscale ? withUpscale(w, s, s.upscale) : w;
+  if (s.upscale) return withUpscale(w, s, s.upscale);
+  return s.finish && !isPhotoEdit(s) ? withFinish(w, s, s.finish) : w;
+}
+// A photo edit keeps the photo's own texture; enlarging and re-sampling it added grain
+// that the original did not have, so the finish pass is skipped for edits.
+export function isPhotoEdit(s: Generation) {
+  return s.architecture === 'qwen21' && Boolean(s.editSource);
+}
+// The finish pass keeps the first sampler as node 5, which the history reads as the
+// image's settings, and adds its own sampler after it.
+function withFinish(w: Workflow, s: Generation, f: FinishSpec): Workflow {
+  const target = upscaleSize(s.width, s.height, f.scale);
+  w['70'] = { class_type: 'UpscaleModelLoader', inputs: { model_name: f.model } };
+  w['71'] = {
+    class_type: 'ImageUpscaleWithModel',
+    inputs: { upscale_model: ['70', 0], image: ['6', 0] },
+  };
+  w['72'] = {
+    class_type: 'ImageScale',
+    inputs: { image: ['71', 0], upscale_method: 'lanczos', ...target, crop: 'disabled' },
+  };
+  if (f.refine <= 0) {
+    w['7'].inputs.images = ['72', 0];
+    return w;
+  }
+  w['73'] = { class_type: 'VAEEncode', inputs: { pixels: ['72', 0], vae: ['9', 0] } };
+  w['74'] = {
+    class_type: 'KSampler',
+    inputs: { ...w['5'].inputs, latent_image: ['73', 0], denoise: f.refine },
+  };
+  w['75'] = { class_type: 'VAEDecode', inputs: { samples: ['74', 0], vae: ['9', 0] } };
+  w['7'].inputs.images = ['75', 0];
+  return w;
 }
 function withUpscale(w: Workflow, s: Generation, up: UpscaleSpec): Workflow {
   if (!up.model) throw new Error('업스케일 모델을 선택해 주세요');
@@ -726,29 +776,6 @@ export function parseSettings(value: unknown): Generation {
   if (s.workflow !== null) parseWorkflow(s.workflow);
   validateGeneration(s);
   return structuredClone(s);
-}
-export function importPresets(text: string): Preset[] {
-  const data = JSON.parse(text);
-  if (data.version !== 1 || !Array.isArray(data.presets) || data.presets.length > 100)
-    throw new Error('버전 1 프리셋 파일을 선택해 주세요 (최대 100개)');
-  return data.presets.map((p: Preset) => {
-    if (
-      !p ||
-      typeof p.name !== 'string' ||
-      !p.name.trim() ||
-      p.name.length > 80 ||
-      typeof p.description !== 'string'
-    )
-      throw new Error('프리셋 이름과 설명을 확인해 주세요');
-    return {
-      id: newId(),
-      name: p.name,
-      description: p.description,
-      color: ['sage', 'sand', 'rose'].includes(p.color) ? p.color : 'sage',
-      updatedAt: Date.now(),
-      settings: parseSettings(p.settings),
-    };
-  });
 }
 export function readStored<T>(key: string, fallback: T): T {
   try {

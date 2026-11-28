@@ -1,12 +1,4 @@
-import { test, expect, type Page, type Route } from '@playwright/test';
-import { defaults } from '../../src/domain';
-const presetSettings = {
-  ...defaults,
-  model: 'Flux1.D/test-model.safetensors',
-  clip1: 'clip_l.safetensors',
-  clip2: 't5xxl.safetensors',
-  vae: 'ae.safetensors',
-};
+import { test, expect, type APIRequestContext, type Page, type Route } from '@playwright/test';
 
 test.beforeEach(async ({ request }) => {
   expect((await request.post('/api/state/reset')).ok()).toBe(true);
@@ -18,12 +10,8 @@ async function reconnect(page: Page) {
   await page.unroute('**/api/state', blockWrites);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
 }
-async function renamePreset(page: Page, from: string, to: string) {
-  await page.getByRole('button', { name: `${from} 수정`, exact: true }).click();
-  await page.getByLabel('프리셋 이름', { exact: true }).fill(to);
-  await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.getByRole('heading', { name: to, exact: true })).toBeVisible();
-}
+const serverPrompt = async (request: APIRequestContext) =>
+  (await (await request.get('/api/state')).json()).entries['cm-settings']?.value.positive;
 
 test('two devices preserve conflicting settings and recover an archived device draft', async ({
   browser,
@@ -90,125 +78,44 @@ test('two devices preserve conflicting settings and recover an archived device d
   }
 });
 
-test('two devices merge edits to different preset IDs without losing either edit', async ({
+test('two devices editing the same setting can keep this device draft', async ({
   browser,
   request,
   baseURL,
 }) => {
-  const presets = [
-    {
-      id: 'preset-a',
-      name: '프리셋 A',
-      description: '',
-      color: 'olive',
-      updatedAt: 1,
-      settings: presetSettings,
-    },
-    {
-      id: 'preset-b',
-      name: '프리셋 B',
-      description: '',
-      color: 'olive',
-      updatedAt: 1,
-      settings: presetSettings,
-    },
-  ];
-  expect(
-    (
-      await request.post('/api/state', {
-        data: { values: { 'cm-presets': presets }, revisions: { 'cm-presets': 0 } },
-      })
-    ).ok(),
-  ).toBe(true);
   const a = await browser.newContext({ baseURL });
   const b = await browser.newContext({ baseURL });
   try {
-    const first = await a.newPage(),
-      second = await b.newPage();
-    await first.goto('/presets');
-    await second.goto('/presets');
-    await expect(second.getByRole('heading', { name: '프리셋 A', exact: true })).toBeVisible();
+    const first = await a.newPage();
+    await first.goto('/create');
+    const firstPrompt = first.getByLabel('그리고 싶은 장면', { exact: true });
+    await firstPrompt.fill('같은 설정');
+    await expect.poll(() => serverPrompt(request)).toBe('같은 설정');
+    const second = await b.newPage();
+    await second.goto('/create');
+    const secondPrompt = second.getByLabel('그리고 싶은 장면', { exact: true });
+    await expect(secondPrompt).toHaveValue('같은 설정');
     await second.route('**/api/state', blockWrites);
-    await renamePreset(second, '프리셋 A', '휴대폰의 A');
-    await renamePreset(first, '프리셋 B', 'PC의 B');
+    await secondPrompt.fill('휴대폰 버전');
     await expect
-      .poll(async () =>
-        (await (await request.get('/api/state')).json()).entries['cm-presets']?.value.map(
-          (p: any) => p.name,
+      .poll(() =>
+        second.evaluate(() =>
+          JSON.parse(localStorage.getItem('cm-unsent-keys') || '[]').includes('cm-settings'),
         ),
       )
-      .toEqual(['프리셋 A', 'PC의 B']);
-    await reconnect(second);
-    await expect
-      .poll(async () =>
-        (await (await request.get('/api/state')).json()).entries['cm-presets']?.value.map(
-          (p: any) => p.name,
-        ),
-      )
-      .toEqual(['휴대폰의 A', 'PC의 B']);
-    await expect(second.getByRole('heading', { name: '휴대폰의 A', exact: true })).toBeVisible();
-    await expect(second.getByRole('heading', { name: 'PC의 B', exact: true })).toBeVisible();
-    expect(
-      await second.evaluate(() =>
-        JSON.parse(localStorage.getItem('cm-sync-conflicts') || '[]').some(
-          (c: any) => c.key === 'cm-presets',
-        ),
-      ),
-    ).toBe(false);
-  } finally {
-    await a.close();
-    await b.close();
-  }
-});
-
-test('two devices editing the same preset require an explicit choice', async ({
-  browser,
-  request,
-  baseURL,
-}) => {
-  const preset = {
-    id: 'shared',
-    name: '같은 프리셋',
-    description: '',
-    color: 'olive',
-    updatedAt: 1,
-    settings: presetSettings,
-  };
-  await request.post('/api/state', {
-    data: { values: { 'cm-presets': [preset] }, revisions: { 'cm-presets': 0 } },
-  });
-  const a = await browser.newContext({ baseURL });
-  const b = await browser.newContext({ baseURL });
-  try {
-    const first = await a.newPage(),
-      second = await b.newPage();
-    await first.goto('/presets');
-    await second.goto('/presets');
-    await expect(second.getByRole('heading', { name: '같은 프리셋', exact: true })).toBeVisible();
-    await second.route('**/api/state', blockWrites);
-    await renamePreset(second, '같은 프리셋', '휴대폰 버전');
-    await renamePreset(first, '같은 프리셋', 'PC 버전');
-    await expect
-      .poll(
-        async () =>
-          (await (await request.get('/api/state')).json()).entries['cm-presets']?.value[0].name,
-      )
-      .toBe('PC 버전');
+      .toBe(true);
+    await firstPrompt.fill('PC 버전');
+    await expect.poll(() => serverPrompt(request)).toBe('PC 버전');
     await reconnect(second);
     await second.getByRole('button', { name: '변경 비교', exact: true }).click();
     await second
       .getByRole('dialog')
       .getByRole('button', { name: '이 기기 초안 사용', exact: true })
       .click();
-    await expect
-      .poll(
-        async () =>
-          (await (await request.get('/api/state')).json()).entries['cm-presets']?.value[0].name,
-      )
-      .toBe('휴대폰 버전');
+    await expect.poll(() => serverPrompt(request)).toBe('휴대폰 버전');
     expect(
       await second.evaluate(
-        () => JSON.parse(localStorage.getItem('cm-sync-archive') || '[]')[0].server[0].name,
+        () => JSON.parse(localStorage.getItem('cm-sync-archive') || '[]')[0].server.positive,
       ),
     ).toBe('PC 버전');
   } finally {

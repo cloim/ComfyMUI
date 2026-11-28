@@ -8,7 +8,6 @@ import {
   parseAttributeList,
   buildWorkflow,
   parseWorkflow,
-  importPresets,
   validateAgainstServer,
   parseSettings,
   isLegacyDefaultPrompt,
@@ -148,22 +147,9 @@ describe('API workflows and server schema', () => {
     ).not.toThrow();
   });
 });
-describe('portable presets', () => {
-  it('imports new IDs and deep snapshots without overwriting originals', () => {
-    const original = { id: 'old', name: '숲', description: '아침', settings, color: 'sage' };
-    const [p] = importPresets(JSON.stringify({ version: 1, presets: [original] }));
-    expect(p.id).not.toBe('old');
-    expect(p.settings).toEqual(settings);
-    p.settings.positive = 'new';
-    expect(original.settings.positive).toBe(defaults.positive);
-  });
-  it('rejects malformed imports and bad advanced values', () => {
-    expect(() => importPresets('{')).toThrow();
-    expect(() => importPresets(JSON.stringify({ version: 2, presets: [] }))).toThrow();
+describe('stored settings', () => {
+  it('rejects bad advanced values', () => {
     expect(() => parseSettings({ ...settings, cfg: NaN })).toThrow();
-    expect(() =>
-      importPresets(JSON.stringify({ version: 1, presets: [{ name: '', settings }] })),
-    ).toThrow();
   });
   it('detects legacy alpine landscape prompt and migrates to adult portrait prompt', () => {
     const legacyText =
